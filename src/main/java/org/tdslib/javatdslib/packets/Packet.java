@@ -4,227 +4,201 @@
 package org.tdslib.javatdslib.packets;
 
 import java.nio.ByteBuffer;
-import org.tdslib.javatdslib.buffer.ByteBufferUtil;
+import java.nio.ByteOrder;
+import java.util.Objects;
 
 /**
  * Represents a Packet in the TDS protocol.
  */
 public class Packet {
+
     // Constants
+    public static final int HEADER_LENGTH = 8;
+    public static final int DEFAULT_SPID = 0;
+    public static final int DEFAULT_PACKET_ID = 1;
+    public static final int DEFAULT_WINDOW = 0;
 
-    /**
-     * Header length.
-     */
-    public static final byte HEADER_LENGTH = 8;
+    // Offsets for absolute access
+    private static final int OFFSET_TYPE = 0;
+    private static final int OFFSET_STATUS = 1;
+    private static final int OFFSET_LENGTH = 2;
+    private static final int OFFSET_SPID = 4;
+    private static final int OFFSET_PACKET_ID = 6;
+    private static final int OFFSET_WINDOW = 7;
 
-    /**
-     * Default SPID value.
-     */
-    public static final short DEFAULT_SPID = 0;
-
-    /**
-     * Default Packet Id.
-     */
-    public static final byte DEFAULT_PACKET_ID = 1;
-
-    /**
-     * Default Window.
-     */
-    public static final byte DEFAULT_WINDOW = 0;
-
-    /**
-     * Buffer containing the packet (header + data).
-     */
     private ByteBuffer buffer;
 
-    /**
-     * Type of the packet.
-     */
+    // --- Absolute Accessors ---
+
     public PacketType getType() {
-        buffer.position(PacketOffset.TYPE);
-        return PacketType.values()[ByteBufferUtil.readUInt8(buffer)];
+        int typeVal = Byte.toUnsignedInt(buffer.get(OFFSET_TYPE));
+        try {
+            return PacketType.valueOf(typeVal);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        }
     }
 
-    /**
-     * Status of the packet.
-     */
-    public byte getStatus() {
-        buffer.position(PacketOffset.STATUS);
-        return (byte) ByteBufferUtil.readUInt8(buffer);
+    public int getStatus() {
+        return Byte.toUnsignedInt(buffer.get(OFFSET_STATUS));
     }
 
-    /**
-     * Server Process Id.
-     */
     public int getSPId() {
-        buffer.position(PacketOffset.SPID);
-        return ByteBufferUtil.readUInt16BE(buffer);
+        return Short.toUnsignedInt(buffer.getShort(OFFSET_SPID));
     }
 
-    /**
-     * Packet Id.
-     */
-    public byte getId() {
-        buffer.position(PacketOffset.PACKET_ID);
-        return (byte) ByteBufferUtil.readUInt8(buffer);
+    public int getId() {
+        return Byte.toUnsignedInt(buffer.get(OFFSET_PACKET_ID));
     }
 
-    public void setId(byte id) {
-        buffer.position(PacketOffset.PACKET_ID);
-        ByteBufferUtil.writeUInt8(buffer, id);
+    public void setId(int id) {
+        buffer.put(OFFSET_PACKET_ID, (byte) id);
     }
 
-    /**
-     * Window value.
-     */
-    public byte getWindow() {
-        buffer.position(PacketOffset.WINDOW);
-        return (byte) ByteBufferUtil.readUInt8(buffer);
+    public int getWindow() {
+        return Byte.toUnsignedInt(buffer.get(OFFSET_WINDOW));
     }
 
-    /**
-     * Total length of the packet (header + data).
-     */
     public int getLength() {
-        buffer.position(PacketOffset.LENGTH);
-        return ByteBufferUtil.readUInt16BE(buffer);
+        return Short.toUnsignedInt(buffer.getShort(OFFSET_LENGTH));
     }
 
-    /**
-     * Indicates if this packet is the last packet for a Message.
-     */
+    // --- Status Flags ---
+
     public boolean isLast() {
         return (getStatus() & PacketStatus.EOM) == PacketStatus.EOM;
     }
 
     public void setLast(boolean last) {
-        buffer.position(PacketOffset.STATUS);
-        byte status = (byte) ByteBufferUtil.readUInt8(buffer);
+        int status = getStatus();
         if (last) {
             status |= PacketStatus.EOM;
         } else {
-            status &= (byte) ~PacketStatus.EOM;
+            status &= ~PacketStatus.EOM;
         }
-        buffer.position(PacketOffset.STATUS);
-        ByteBufferUtil.writeUInt8(buffer, status);
+        buffer.put(OFFSET_STATUS, (byte) status);
     }
 
-    /**
-     * Indicates if the packet (and message) should be ignored.
-     */
     public boolean isIgnore() {
         return (getStatus() & PacketStatus.IGNORE) == PacketStatus.IGNORE;
     }
 
     public void setIgnore(boolean ignore) {
-        buffer.position(PacketOffset.STATUS);
-        byte status = (byte) ByteBufferUtil.readUInt8(buffer);
+        int status = getStatus();
         if (ignore) {
             status |= PacketStatus.IGNORE;
         } else {
-            status &= (byte) ~PacketStatus.IGNORE;
+            status &= ~PacketStatus.IGNORE;
         }
-        buffer.position(PacketOffset.STATUS);
-        ByteBufferUtil.writeUInt8(buffer, status);
+        buffer.put(OFFSET_STATUS, (byte) status);
     }
 
-    /**
-     * Indicates if the connection should be reset.
-     */
     public boolean isResetConnection() {
         return (getStatus() & PacketStatus.RESET_CONNECTION) == PacketStatus.RESET_CONNECTION;
     }
 
     public void setResetConnection(boolean resetConnection) {
-        buffer.position(PacketOffset.STATUS);
-        byte status = (byte) ByteBufferUtil.readUInt8(buffer);
+        int status = getStatus();
         if (resetConnection) {
             status |= PacketStatus.RESET_CONNECTION;
         } else {
-            status &= (byte) ~PacketStatus.RESET_CONNECTION;
+            status &= ~PacketStatus.RESET_CONNECTION;
         }
-        buffer.position(PacketOffset.STATUS);
-        ByteBufferUtil.writeUInt8(buffer, status);
+        buffer.put(OFFSET_STATUS, (byte) status);
     }
 
     /**
-     * Gets a copy of the data of this packet.
-     * May be empty if there is no data in the packet.
+     * Returns a slice of the data portion.
+     * CRITICAL: Forces Little Endian order for the payload.
      */
     public ByteBuffer getData() {
-        if (buffer.capacity() == HEADER_LENGTH) {
-            return ByteBufferUtil.allocate(0);
+        if (buffer.capacity() <= HEADER_LENGTH) {
+            return ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN);
         }
-        buffer.position(HEADER_LENGTH);
-        ByteBuffer data = buffer.slice();
-        data.order(buffer.order());
-        return data;
+        // slice() resets to Big Endian. We must force Little Endian for TDS payloads.
+        return buffer.slice(HEADER_LENGTH, buffer.capacity() - HEADER_LENGTH)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .asReadOnlyBuffer();
     }
 
     /**
-     * Creates a new packet with the specified type.
+     * Returns the full backing buffer (Header + Data).
+     * Used when writing the packet to the network.
      */
-    public Packet(PacketType type) {
-        buffer = ByteBufferUtil.allocate(HEADER_LENGTH);
+    public ByteBuffer getBuffer() {
+        // Return a duplicate so the caller cannot mess up the position/limit
+        // of the internal buffer logic.
+        return buffer.duplicate().rewind();
+    }
 
-        buffer.position(PacketOffset.TYPE);
-        ByteBufferUtil.writeUInt8(buffer, type.getValue());
-        buffer.position(PacketOffset.STATUS);
-        ByteBufferUtil.writeUInt8(buffer, PacketStatus.NORMAL);
-        buffer.position(PacketOffset.SPID);
-        ByteBufferUtil.writeUInt16BE(buffer, DEFAULT_SPID);
-        buffer.position(PacketOffset.PACKET_ID);
-        ByteBufferUtil.writeUInt8(buffer, DEFAULT_PACKET_ID);
-        buffer.position(PacketOffset.WINDOW);
-        ByteBufferUtil.writeUInt8(buffer, DEFAULT_WINDOW);
+    // --- Constructors ---
+
+    public Packet(PacketType type) {
+        // Headers are always Big Endian
+        this.buffer = ByteBuffer.allocate(HEADER_LENGTH).order(ByteOrder.BIG_ENDIAN);
+
+        buffer.put(OFFSET_TYPE, (byte) type.getValue());
+        buffer.put(OFFSET_STATUS, PacketStatus.NORMAL);
+        buffer.putShort(OFFSET_SPID, (short) DEFAULT_SPID);
+        buffer.put(OFFSET_PACKET_ID, (byte) DEFAULT_PACKET_ID);
+        buffer.put(OFFSET_WINDOW, (byte) DEFAULT_WINDOW);
         updateLength();
     }
 
-    /**
-     * Creates a packet from a buffer.
-     */
     public Packet(ByteBuffer buffer) {
-        if (buffer == null) {
-            throw new IllegalArgumentException("Buffer cannot be null");
+        Objects.requireNonNull(buffer, "Buffer cannot be null");
+
+        // Ensure we treat headers as Big Endian
+        if (buffer.order() != ByteOrder.BIG_ENDIAN) {
+            buffer.order(ByteOrder.BIG_ENDIAN);
         }
+
         if (buffer.capacity() < HEADER_LENGTH) {
-            throw new IllegalArgumentException("Buffer length must be greater than the packet header length");
+            throw new IllegalArgumentException("Buffer length must be at least " + HEADER_LENGTH);
         }
-        buffer.position(PacketOffset.TYPE);
-        byte typeValue = (byte) ByteBufferUtil.readUInt8(buffer);
-        if (typeValue > PacketType.PRE_LOGIN.getValue()) {
-            throw new IllegalArgumentException("Invalid packet type: 0x" + String.format("%02X", typeValue));
+
+        int typeValue = Byte.toUnsignedInt(buffer.get(OFFSET_TYPE));
+        try {
+            PacketType.valueOf(typeValue);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(String.format("Invalid packet type: 0x%02X", typeValue), e);
         }
+
         this.buffer = buffer;
     }
 
     private void updateLength() {
-        buffer.position(PacketOffset.LENGTH);
-        ByteBufferUtil.writeUInt16BE(buffer, buffer.capacity());
+        buffer.putShort(OFFSET_LENGTH, (short) buffer.capacity());
     }
 
-    /**
-     * Sets the Packet Id of this packet with an integer. The value will be truncated to byte.
-     */
     public void setPacketId(int packetId) {
-        setId((byte) (packetId % 256));
+        setId(packetId % 256);
     }
 
-    /**
-     * Adds data to this packet.
-     */
     public void addData(ByteBuffer data) {
-        ByteBuffer newBuffer = ByteBufferUtil.allocate(buffer.capacity() + data.capacity());
-        buffer.rewind();
-        newBuffer.put(buffer);
-        newBuffer.put(data);
+        if (data == null || !data.hasRemaining()) {
+            return;
+        }
+
+        int newCapacity = this.buffer.capacity() + data.remaining();
+        ByteBuffer newBuffer = ByteBuffer.allocate(newCapacity).order(ByteOrder.BIG_ENDIAN);
+
+        // Copy existing packet content without moving source position
+        ByteBuffer src = this.buffer.duplicate();
+        src.rewind();
+        newBuffer.put(src);
+
+        // Copy new data
+        ByteBuffer dataSrc = data.duplicate();
+        newBuffer.put(dataSrc);
+
+        // CRITICAL FIX: Reset position to 0 so the buffer is ready for use/checks
+        newBuffer.rewind();
+
         this.buffer = newBuffer;
         updateLength();
     }
 
-    /**
-     * Returns a human readable string representation of this object.
-     */
     @Override
     public String toString() {
         return String.format("Packet[Type=0x%02X(%s), Status=0x%02X, Length=%d, SPID=0x%04X, PacketId=%d, Window=0x%02X]",
