@@ -1,0 +1,54 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+package com.microsoft.data.tools.tdslib.payloads.login7;
+
+import com.microsoft.data.tools.tdslib.TdsConstants;
+import com.microsoft.data.tools.tdslib.TdsVersion;
+
+public class Login7Options {
+    private TdsVersion tdsVersion;
+    private int packetSize;
+    private long clientProgVer;
+    private long clientPid;
+    private long connectionId;
+    private int clientTimeZone;
+    private long clientLcid;
+
+    public Login7Options() {
+        this.tdsVersion = TdsVersion.V7_4;
+        this.packetSize = TdsConstants.DEFAULT_PACKET_SIZE;
+        this.clientProgVer = 0;
+        this.clientPid = ProcessHandle.current().pid();
+        this.connectionId = 0;
+        this.clientTimeZone = java.time.ZoneId.systemDefault().getRules().getOffset(java.time.Instant.now()).getTotalSeconds() / 60;
+        this.clientLcid = java.util.Locale.getDefault().getLanguage().isEmpty() ? 0 : java.util.Locale.getDefault().hashCode();
+    }
+
+    public TdsVersion getTdsVersion() { return tdsVersion; }
+    public void setTdsVersion(TdsVersion v) { this.tdsVersion = v; }
+
+    public int getPacketSize() { return packetSize; }
+    public void setPacketSize(int s) { this.packetSize = s; }
+
+    public long getClientProgVer() { return clientProgVer; }
+    public void setClientProgVer(long v) { this.clientProgVer = v; }
+
+    public long getClientPid() { return clientPid; }
+    public void setClientPid(long p) { this.clientPid = p; }
+
+    public long getConnectionId() { return connectionId; }
+    public void setConnectionId(long id) { this.connectionId = id; }
+
+    public int getClientTimeZone() { return clientTimeZone; }
+    public void setClientTimeZone(int tz) { this.clientTimeZone = tz; }
+
+    public long getClientLcid() { return clientLcid; }
+    public void setClientLcid(long lcid) { this.clientLcid = lcid; }
+
+    @Override
+    public String toString() {
+        return String.format("Options[TdsVersion=%s, PacketSize=%d, ClientProgVer=%d, ClientPid=%d, ConnectionId=%d, ClientTimeZone=%d, ClientLcid=%d]",
+            tdsVersion, packetSize, clientProgVer, clientPid, connectionId, clientTimeZone, clientLcid);
+    }
+}
