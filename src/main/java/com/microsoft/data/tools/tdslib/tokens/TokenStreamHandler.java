@@ -8,10 +8,16 @@ import com.microsoft.data.tools.tdslib.io.connection.ConnectionOptions;
 import com.microsoft.data.tools.tdslib.messages.Message;
 import com.microsoft.data.tools.tdslib.messages.MessageHandler;
 import com.microsoft.data.tools.tdslib.tokens.done.DoneTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.done.DoneProcTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.done.DoneInProcTokenParser;
 import com.microsoft.data.tools.tdslib.tokens.envchange.EnvChangeTokenParser;
 import com.microsoft.data.tools.tdslib.tokens.error.ErrorTokenParser;
 import com.microsoft.data.tools.tdslib.tokens.info.InfoTokenParser;
 import com.microsoft.data.tools.tdslib.tokens.loginack.LoginAckTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.returnstatus.ReturnStatusTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.returnvalue.ReturnValueTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.featureextack.FeatureExtAckTokenParser;
+import com.microsoft.data.tools.tdslib.tokens.fedauth.FedAuthInfoTokenParser;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -35,8 +41,14 @@ public class TokenStreamHandler {
         parsers.put(TokenType.ERROR, new ErrorTokenParser());
         parsers.put(TokenType.INFO, new InfoTokenParser());
         parsers.put(TokenType.DONE, new DoneTokenParser());
+        parsers.put(TokenType.DONE_PROC, new DoneProcTokenParser());
+        parsers.put(TokenType.DONE_IN_PROC, new DoneInProcTokenParser());
         parsers.put(TokenType.LOGIN_ACK, new LoginAckTokenParser());
         parsers.put(TokenType.ENV_CHANGE, new EnvChangeTokenParser());
+        parsers.put(TokenType.RETURN_STATUS, new ReturnStatusTokenParser());
+        parsers.put(TokenType.RETURN_VALUE, new ReturnValueTokenParser());
+        parsers.put(TokenType.FEATURE_EXT_ACK, new FeatureExtAckTokenParser());
+        parsers.put(TokenType.FED_AUTH_INFO, new FedAuthInfoTokenParser());
     }
 
     /**
@@ -229,6 +241,19 @@ public class TokenStreamHandler {
                         offset += length * 2;
                         return new String(bytes, java.nio.charset.StandardCharsets.UTF_16LE);
                     });
+            });
+    }
+
+    public CompletableFuture<byte[]> readBytes(int length) {
+        if (length == 0) {
+            return CompletableFuture.completedFuture(new byte[0]);
+        }
+        return waitForData(length)
+            .thenApply(v -> {
+                byte[] bytes = new byte[length];
+                incomingTokenBuffer.get(bytes);
+                offset += length;
+                return bytes;
             });
     }
 }

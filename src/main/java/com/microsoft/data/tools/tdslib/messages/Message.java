@@ -6,6 +6,11 @@ package com.microsoft.data.tools.tdslib.messages;
 import com.microsoft.data.tools.tdslib.packets.Packet;
 import com.microsoft.data.tools.tdslib.packets.PacketType;
 import com.microsoft.data.tools.tdslib.payloads.Payload;
+import com.microsoft.data.tools.tdslib.buffer.ByteBufferUtil;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.util.List;
 
@@ -78,8 +83,45 @@ public class Message {
      * Get the packets of this message.
      */
     public List<Packet> getPackets(int packetSize) {
-        // TODO: Implement
-        return null;
+        List<Packet> packets = new ArrayList<>();
+
+        int maxDataPerPacket = packetSize - Packet.HEADER_LENGTH;
+
+        ByteBuffer payloadBuffer = (payload == null) ? ByteBufferUtil.EMPTY : payload.buildBuffer();
+        payloadBuffer.rewind();
+
+        int packetId = 1;
+
+        if (payloadBuffer.remaining() == 0) {
+            Packet p = new Packet(packetType);
+            p.setPacketId(packetId);
+            p.setLast(true);
+            if (ignore) p.setIgnore(true);
+            if (resetConnection) p.setResetConnection(true);
+            packets.add(p);
+            return packets;
+        }
+
+        while (payloadBuffer.remaining() > 0) {
+            int chunk = Math.min(maxDataPerPacket, payloadBuffer.remaining());
+            ByteBuffer data = ByteBufferUtil.allocate(chunk);
+            byte[] tmp = new byte[chunk];
+            payloadBuffer.get(tmp);
+            data.put(tmp);
+            data.rewind();
+
+            Packet p = new Packet(packetType);
+            p.setPacketId(packetId++);
+            p.addData(data);
+            if (payloadBuffer.remaining() == 0) {
+                p.setLast(true);
+            }
+            if (ignore) p.setIgnore(true);
+            if (resetConnection) p.setResetConnection(true);
+            packets.add(p);
+        }
+
+        return packets;
     }
 
     @Override

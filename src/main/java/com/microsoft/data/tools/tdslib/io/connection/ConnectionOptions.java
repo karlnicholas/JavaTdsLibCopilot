@@ -12,6 +12,10 @@ import com.microsoft.data.tools.tdslib.TdsVersion;
 public class ConnectionOptions {
     private int packetSize;
     private TdsVersion tdsVersion;
+    /**
+     * Optional routing hint supplied by server via ENVCHANGE ROUTING.
+     */
+    private String routingHint;
 
     /**
      * Packet size in bytes.
@@ -47,5 +51,13 @@ public class ConnectionOptions {
     public ConnectionOptions() {
         this.packetSize = TdsConstants.DEFAULT_PACKET_SIZE;
         this.tdsVersion = TdsVersion.V7_4;
+    }
+
+    public String getRoutingHint() {
+        return routingHint;
+    }
+
+    public void setRoutingHint(String routingHint) {
+        this.routingHint = routingHint;
     }
 }

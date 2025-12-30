@@ -4,7 +4,7 @@
 package com.microsoft.data.tools.tdslib.messages;
 
 import com.microsoft.data.tools.tdslib.TdsClient;
-import com.microsoft.data.tools.tdslib.packets.PacketType;
+import com.microsoft.data.tools.tdslib.packets.Packet;
 import com.microsoft.data.tools.tdslib.payloads.RawPayload;
 
 import java.util.concurrent.CompletableFuture;
@@ -25,8 +25,11 @@ public class MessageHandler {
     public CompletableFuture<Message> receiveMessage() {
         return client.getConnection().receiveData()
             .thenApply(buffer -> {
-                Message message = new Message(PacketType.TABULAR_RESULT); // TODO: Determine packet type
-                message.setPayload(new RawPayload(buffer));
+                Packet packet = new Packet(buffer);
+                Message message = new Message(packet.getType());
+                message.setResetConnection(packet.isResetConnection());
+                message.setIgnore(packet.isIgnore());
+                message.setPayload(new RawPayload(packet.getData()));
                 return message;
             });
     }
