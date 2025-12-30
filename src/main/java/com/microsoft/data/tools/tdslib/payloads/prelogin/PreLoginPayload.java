@@ -1,12 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.payloads.prelogin;
+
+import com.microsoft.data.tools.tdslib.payloads.Payload;
+import com.microsoft.data.tools.tdslib.payloads.prelogin.EncryptionType;
+import com.microsoft.data.tools.tdslib.payloads.prelogin.SqlVersion;
 
 /**
  * PreLogin payload.
  */
-public class PreLoginPayload extends com.microsoft.data.tools.tdslib.payloads.Payload {
+public class PreLoginPayload extends Payload {
     private EncryptionType encryption;
     private SqlVersion version;
     private byte instance;

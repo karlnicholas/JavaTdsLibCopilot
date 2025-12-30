@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.done;
+
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 /**
  * Statement in a procedure done.
@@ -12,7 +15,7 @@ public final class DoneProcToken extends DoneToken {
     }
 
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.DONE_PROC;
+    public TokenType getType() {
+        return TokenType.DONE_PROC;
     }
 }

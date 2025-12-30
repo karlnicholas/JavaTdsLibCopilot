@@ -1,14 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.loginack;
+
+import com.microsoft.data.tools.tdslib.tokens.Token;
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 import com.microsoft.data.tools.tdslib.TdsVersion;
 
 /**
  * Login7 response.
  */
-public class LoginAckToken extends com.microsoft.data.tools.tdslib.tokens.Token {
+public class LoginAckToken extends Token {
     private final SqlInterfaceType interfaceType;
     private final TdsVersion tdsVersion;
     private final String progName;
@@ -18,8 +22,8 @@ public class LoginAckToken extends com.microsoft.data.tools.tdslib.tokens.Token 
      * Token type.
      */
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.LOGIN_ACK;
+    public TokenType getType() {
+        return TokenType.LOGIN_ACK;
     }
 
     /**

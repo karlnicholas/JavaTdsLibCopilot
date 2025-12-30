@@ -1,12 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.done;
+
+import com.microsoft.data.tools.tdslib.tokens.Token;
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 /**
  * Indicates the completion status of a SQL statement.
  */
-public class DoneToken extends com.microsoft.data.tools.tdslib.tokens.Token {
+public class DoneToken extends Token {
     private final DoneStatus status;
     private final int currentCommand;
     private final long rowCount;
@@ -15,8 +19,8 @@ public class DoneToken extends com.microsoft.data.tools.tdslib.tokens.Token {
      * Token type.
      */
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.DONE;
+    public TokenType getType() {
+        return TokenType.DONE;
     }
 
     /**

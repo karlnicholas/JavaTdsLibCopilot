@@ -1,12 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.error;
+
+import com.microsoft.data.tools.tdslib.tokens.Token;
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 /**
  * Error message.
  */
-public class ErrorToken extends com.microsoft.data.tools.tdslib.tokens.Token {
+public class ErrorToken extends Token {
     private final long number;
     private final byte state;
     private final byte severity;
@@ -19,8 +23,8 @@ public class ErrorToken extends com.microsoft.data.tools.tdslib.tokens.Token {
      * Token type.
      */
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.ERROR;
+    public TokenType getType() {
+        return TokenType.ERROR;
     }
 
     /**

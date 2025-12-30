@@ -1,12 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.envchange;
+
+import com.microsoft.data.tools.tdslib.tokens.Token;
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 /**
  * Environment change token.
  */
-public class EnvChangeToken extends com.microsoft.data.tools.tdslib.tokens.Token {
+public class EnvChangeToken extends Token {
     private final EnvChangeTokenSubType subType;
     private final String oldValue;
     private final String newValue;
@@ -15,8 +19,8 @@ public class EnvChangeToken extends com.microsoft.data.tools.tdslib.tokens.Token
      * Token type.
      */
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.ENV_CHANGE;
+    public TokenType getType() {
+        return TokenType.ENV_CHANGE;
     }
 
     /**

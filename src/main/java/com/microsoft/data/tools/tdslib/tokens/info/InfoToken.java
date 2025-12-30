@@ -1,12 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 package com.microsoft.data.tools.tdslib.tokens.info;
+
+import com.microsoft.data.tools.tdslib.tokens.Token;
+import com.microsoft.data.tools.tdslib.tokens.TokenType;
 
 /**
  * Info token.
  */
-public class InfoToken extends com.microsoft.data.tools.tdslib.tokens.Token {
+public class InfoToken extends Token {
     private final long number;
     private final byte state;
     private final byte severity;
@@ -19,8 +23,8 @@ public class InfoToken extends com.microsoft.data.tools.tdslib.tokens.Token {
      * Token type.
      */
     @Override
-    public com.microsoft.data.tools.tdslib.tokens.TokenType getType() {
-        return com.microsoft.data.tools.tdslib.tokens.TokenType.INFO;
+    public TokenType getType() {
+        return TokenType.INFO;
     }
 
     /**

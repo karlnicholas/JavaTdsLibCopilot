@@ -3,10 +3,12 @@
 
 package com.microsoft.data.tools.tdslib.tokens.fedauth;
 
+
 import com.microsoft.data.tools.tdslib.tokens.Token;
 import com.microsoft.data.tools.tdslib.tokens.TokenParser;
 import com.microsoft.data.tools.tdslib.tokens.TokenStreamHandler;
 import com.microsoft.data.tools.tdslib.tokens.TokenType;
+import com.microsoft.data.tools.tdslib.tokens.fedauth.FedAuthInfoToken;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -18,6 +20,6 @@ public class FedAuthInfoTokenParser extends TokenParser {
     public CompletableFuture<Token> parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
         return tokenStreamHandler.readUInt16LE()
             .thenCompose(length -> tokenStreamHandler.readBytes((int) (long) length)
-                .thenApply(bytes -> new com.microsoft.data.tools.tdslib.tokens.fedauth.FedAuthInfoToken(bytes)));
+                .thenApply(bytes -> new FedAuthInfoToken(bytes)));
     }
 }

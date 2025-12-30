@@ -3,10 +3,12 @@
 
 package com.microsoft.data.tools.tdslib.tokens.returnvalue;
 
+
 import com.microsoft.data.tools.tdslib.tokens.Token;
 import com.microsoft.data.tools.tdslib.tokens.TokenParser;
 import com.microsoft.data.tools.tdslib.tokens.TokenStreamHandler;
 import com.microsoft.data.tools.tdslib.tokens.TokenType;
+import com.microsoft.data.tools.tdslib.tokens.returnvalue.ReturnValueToken;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -19,6 +21,6 @@ public class ReturnValueTokenParser extends TokenParser {
         return tokenStreamHandler.readUsVarChar()
             .thenCompose(name -> tokenStreamHandler.readUInt32LE()
                 .thenCompose(length -> tokenStreamHandler.readBytes(((Long) length).intValue())
-                    .thenApply(bytes -> new com.microsoft.data.tools.tdslib.tokens.returnvalue.ReturnValueToken(name, bytes))));
+                    .thenApply(bytes -> new ReturnValueToken(name, bytes))));
     }
 }
