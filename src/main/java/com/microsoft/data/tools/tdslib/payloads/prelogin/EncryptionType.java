@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package com.microsoft.data.tools.tdslib.payloads.prelogin;
 
 /**
@@ -35,5 +32,11 @@ public enum EncryptionType {
 
     public byte getValue() {
         return value;
+    }
+    public static EncryptionType fromValue(byte value) {
+        for (EncryptionType t : values()) {
+            if (t.value == value) return t;
+        }
+        return OFF;
     }
 }
