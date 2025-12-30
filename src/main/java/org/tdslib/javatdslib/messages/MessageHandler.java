@@ -33,4 +33,18 @@ public class MessageHandler {
                 return message;
             });
     }
+
+    /**
+     * Sends a message to the SQL Server.
+     */
+    public CompletableFuture<Void> sendMessage(Message message) {
+        // Use default packet size
+        int packetSize = org.tdslib.javatdslib.TdsConstants.DEFAULT_PACKET_SIZE;
+        java.util.List<Packet> packets = message.getPackets(packetSize);
+        CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
+        for (Packet packet : packets) {
+            future = future.thenCompose(v -> client.getConnection().sendData(packet.getData()));
+        }
+        return future;
+    }
 }
