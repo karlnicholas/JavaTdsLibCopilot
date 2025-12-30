@@ -1,0 +1,5 @@
+target/
+csharp_source/
+.github/
+.vscode/
+.DS_Store

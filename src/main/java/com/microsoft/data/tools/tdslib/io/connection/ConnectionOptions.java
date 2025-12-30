@@ -1,0 +1,51 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+package com.microsoft.data.tools.tdslib.io.connection;
+
+import com.microsoft.data.tools.tdslib.TdsConstants;
+import com.microsoft.data.tools.tdslib.TdsVersion;
+
+/**
+ * Tds client connection options.
+ */
+public class ConnectionOptions {
+    private int packetSize;
+    private TdsVersion tdsVersion;
+
+    /**
+     * Packet size in bytes.
+     * Greater than {@link TdsConstants#PACKET_HEADER_LENGTH}.
+     */
+    public int getPacketSize() {
+        return packetSize;
+    }
+
+    public void setPacketSize(int packetSize) {
+        if (packetSize <= TdsConstants.PACKET_HEADER_LENGTH) {
+            throw new IllegalArgumentException("Invalid packet size, must be greater than Packet header length.");
+        }
+        this.packetSize = packetSize;
+    }
+
+    /**
+     * TDS Protocol version.
+     */
+    public TdsVersion getTdsVersion() {
+        return tdsVersion;
+    }
+
+    public void setTdsVersion(TdsVersion tdsVersion) {
+        this.tdsVersion = tdsVersion;
+    }
+
+    /**
+     * Creates a new connection options with default values.
+     * {@link #getPacketSize()} = {@link TdsConstants#DEFAULT_PACKET_SIZE},
+     * {@link #getTdsVersion()} = {@link TdsVersion#V7_4}.
+     */
+    public ConnectionOptions() {
+        this.packetSize = TdsConstants.DEFAULT_PACKET_SIZE;
+        this.tdsVersion = TdsVersion.V7_4;
+    }
+}
