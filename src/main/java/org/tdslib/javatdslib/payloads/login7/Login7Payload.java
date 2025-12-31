@@ -4,16 +4,19 @@
 package org.tdslib.javatdslib.payloads.login7;
 
 import org.tdslib.javatdslib.payloads.Payload;
+import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
+
 import java.nio.ByteBuffer;
-import java.util.Random;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
+import java.util.Random;
 
 public final class Login7Payload extends Payload {
     private static final byte FeatureExtensionTerminator = (byte) 0xFF;
     private static final int ClientIdSize = 6;
+    private static final int FIXED_HEADER_SIZE = 94; // TDS 7.x fixed header size
 
     public Login7Options options;
     public OptionFlags1 optionFlags1;
@@ -44,129 +47,154 @@ public final class Login7Payload extends Payload {
         this.typeFlags = new TypeFlags();
         this.libraryName = "TdsLib";
 
+        // Generate random ClientID if null
+        if (this.clientId == null) {
+            this.clientId = new byte[ClientIdSize];
+            new Random().nextBytes(this.clientId);
+        }
+
         buildBufferInternal();
+    }
+
+    /**
+     * Helper class to track Offset, Length, and Data for variable fields.
+     */
+    private static class FieldRef {
+        final int offset;
+        final int len; // Length in characters (or bytes for binary)
+        final byte[] data;
+
+        FieldRef(byte[] data, boolean isChar, int currentOffset) {
+            this.data = data;
+            if (data == null || data.length == 0) {
+                this.offset = 0;
+                this.len = 0;
+            } else {
+                this.offset = currentOffset;
+                this.len = isChar ? data.length / 2 : data.length;
+            }
+        }
     }
 
     @Override
     protected void buildBufferInternal() {
-        // Implements TDS Login7 payload serialization.
-        // See: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/ 
-        // This implementation covers the main fields and offsets.
+        // 1. Prepare all Variable Length Data (Converted to byte arrays)
+        byte[] hostBytes = toBytes(hostname);
+        byte[] userBytes = toBytes(username);
+        byte[] passBytes = scramblePassword(toBytes(password));
+        byte[] appBytes = toBytes(appName);
+        byte[] serverBytes = toBytes(serverName);
+        byte[] extBytes = getExtensionsBytes(); // Extensions
+        byte[] libBytes = toBytes(libraryName);
+        byte[] langBytes = toBytes(language);
+        byte[] dbBytes = toBytes(database);
 
-        // Collect variable-length fields
-        String[] varFields = new String[] {
-            hostname != null ? hostname : "",
-            username != null ? username : "",
-            password != null ? password : "",
-            appName != null ? appName : "",
-            serverName != null ? serverName : "",
-            libraryName != null ? libraryName : "",
-            language != null ? language : "",
-            database != null ? database : ""
-        };
+        byte[] attachBytes = toBytes(attachDbFile);
+        byte[] changePassBytes = scramblePassword(toBytes(changePassword));
+        byte[] sspiBytes = (sspi != null && sspi.hasRemaining()) ? toBytes(sspi) : new byte[0];
 
-        // Password scrambling (TDS style)
-        byte[] scrambledPassword = password != null ? scramblePassword(password.getBytes(java.nio.charset.StandardCharsets.UTF_16LE)) : new byte[0];
+        // 2. Calculate Offsets (Strict TDS Order)
+        int currentOffset = FIXED_HEADER_SIZE;
 
-        // Calculate offsets (header is 94 bytes)
-        int headerSize = 94;
-        int[] offsets = new int[varFields.length];
-        int[] lengths = new int[varFields.length];
-        int curOffset = headerSize;
-        for (int i = 0; i < varFields.length; i++) {
-            byte[] bytes = (i == 2) ? scrambledPassword : varFields[i].getBytes(java.nio.charset.StandardCharsets.UTF_16LE);
-            lengths[i] = bytes.length / 2; // length in WCHARs
-            offsets[i] = bytes.length > 0 ? curOffset : 0;
-            curOffset += bytes.length;
-        }
+        FieldRef refHost = new FieldRef(hostBytes, true, currentOffset);      currentOffset += hostBytes.length;
+        FieldRef refUser = new FieldRef(userBytes, true, currentOffset);      currentOffset += userBytes.length;
+        FieldRef refPass = new FieldRef(passBytes, true, currentOffset);      currentOffset += passBytes.length;
+        FieldRef refApp = new FieldRef(appBytes, true, currentOffset);        currentOffset += appBytes.length;
+        FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);  currentOffset += serverBytes.length;
+        FieldRef refExt = new FieldRef(extBytes, false, currentOffset);       currentOffset += extBytes.length; // Binary
+        FieldRef refLib = new FieldRef(libBytes, true, currentOffset);        currentOffset += libBytes.length;
+        FieldRef refLang = new FieldRef(langBytes, true, currentOffset);      currentOffset += langBytes.length;
+        FieldRef refDb = new FieldRef(dbBytes, true, currentOffset);          currentOffset += dbBytes.length;
 
-        // AttachDbFile, ChangePassword, SSPI, Extensions
-        byte[] attachDbFileBytes = attachDbFile != null ? attachDbFile.getBytes(java.nio.charset.StandardCharsets.UTF_16LE) : new byte[0];
-        int attachDbFileOffset = attachDbFileBytes.length > 0 ? curOffset : 0;
-        int attachDbFileLen = attachDbFileBytes.length / 2;
-        curOffset += attachDbFileBytes.length;
+        // Note: ClientID is inside fixed header, no offset needed.
 
-        byte[] changePasswordBytes = changePassword != null ? changePassword.getBytes(java.nio.charset.StandardCharsets.UTF_16LE) : new byte[0];
-        int changePasswordOffset = changePasswordBytes.length > 0 ? curOffset : 0;
-        int changePasswordLen = changePasswordBytes.length / 2;
-        curOffset += changePasswordBytes.length;
+        FieldRef refSSPI = new FieldRef(sspiBytes, false, currentOffset);     currentOffset += sspiBytes.length;
+        FieldRef refAttach = new FieldRef(attachBytes, true, currentOffset);  currentOffset += attachBytes.length;
+        FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset); currentOffset += changePassBytes.length;
 
-        byte[] sspiBytes = sspi != null ? new byte[sspi.remaining()] : new byte[0];
-        if (sspi != null) {
-            sspi.slice().get(sspiBytes);
-        }
-        int sspiOffset = sspiBytes.length > 0 ? curOffset : 0;
-        int sspiLen = sspiBytes.length;
-        curOffset += sspiBytes.length;
+        // 3. Allocate Buffer
+        // Total Size = currentOffset (Head + Data)
+        this.buffer = ByteBuffer.allocate(currentOffset).order(ByteOrder.LITTLE_ENDIAN);
 
-        ByteBuffer extensionsBuffer = getExtensionsBuffer();
-        byte[] extensionsBytes = new byte[extensionsBuffer.remaining()];
-        extensionsBuffer.slice().get(extensionsBytes);
-        int extensionsOffset = extensionsBytes.length > 0 ? curOffset : 0;
-        int extensionsLen = extensionsBytes.length;
-        curOffset += extensionsBytes.length;
+        // 4. Write Fixed Header (94 bytes)
 
-        // Allocate buffer
-        buffer = java.nio.ByteBuffer.allocate(curOffset).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        // [0-3] Total Length (CRITICAL: Must include this length field itself)
+        buffer.putInt(currentOffset);
 
-        // Write header fields
-        buffer.putInt(options.getTdsVersion().getValue()); // TDS version
-        buffer.putInt(options.getPacketSize()); // Packet size
-        buffer.putInt((int) options.getClientProgVer()); // ClientProgVer
-        buffer.putInt((int) options.getClientPid()); // ClientPID
-        buffer.putInt((int) options.getConnectionId()); // ConnectionID
-        buffer.put(optionFlags1 != null ? optionFlags1.toByte() : 0); // OptionFlags1
-        buffer.put(optionFlags2 != null ? optionFlags2.toByte() : 0); // OptionFlags2
-        buffer.put(optionFlags3 != null ? optionFlags3.toByte() : 0); // OptionFlags3
-        buffer.put(typeFlags != null ? typeFlags.toByte() : 0); // TypeFlags
-        buffer.putShort((short) 0); // Reserved (2 bytes)
-
-        // Offsets and lengths for variable fields (in WCHARs, except SSPI/Extensions)
-        for (int i = 0; i < varFields.length; i++) {
-            buffer.putShort((short) offsets[i]);
-            buffer.putShort((short) lengths[i]);
-        }
-        buffer.putShort((short) attachDbFileOffset);
-        buffer.putShort((short) attachDbFileLen);
-        buffer.putShort((short) changePasswordOffset);
-        buffer.putShort((short) changePasswordLen);
-        buffer.putShort((short) sspiOffset);
-        buffer.putShort((short) sspiLen);
-        buffer.putShort((short) extensionsOffset);
-        buffer.putShort((short) extensionsLen);
-
+        // [4-35] Standard Options
+        buffer.putInt(options.getTdsVersion().getValue());
+        buffer.putInt(options.getPacketSize());
+        buffer.putInt((int) options.getClientProgVer());
+        buffer.putInt((int) options.getClientPid());
+        buffer.putInt((int) options.getConnectionId());
+        buffer.put(optionFlags1.toByte());
+        buffer.put(optionFlags2.toByte());
+        buffer.put(typeFlags.toByte());
+        buffer.put(optionFlags3.toByte());
         buffer.putInt(options.getClientTimeZone());
         buffer.putInt((int) options.getClientLcid());
 
-        // Write variable-length fields in order
-        for (int i = 0; i < varFields.length; i++) {
-            byte[] bytes = (i == 2) ? scrambledPassword : varFields[i].getBytes(java.nio.charset.StandardCharsets.UTF_16LE);
-            buffer.put(bytes);
+        // [36-86] Offsets/Lengths (Order is Strict)
+        writeOffLen(buffer, refHost);
+        writeOffLen(buffer, refUser);
+        writeOffLen(buffer, refPass);
+        writeOffLen(buffer, refApp);
+        writeOffLen(buffer, refServer);
+        writeOffLen(buffer, refExt); // Extensions
+        writeOffLen(buffer, refLib);
+        writeOffLen(buffer, refLang);
+        writeOffLen(buffer, refDb);
+
+        // [80-85] Client ID (6 bytes)
+        if (clientId.length == 6) {
+            buffer.put(clientId);
+        } else {
+            buffer.put(new byte[6]);
         }
-        buffer.put(attachDbFileBytes);
-        buffer.put(changePasswordBytes);
+
+        writeOffLen(buffer, refSSPI);
+        writeOffLen(buffer, refAttach);
+        writeOffLen(buffer, refChange);
+
+        // [90-93] SSPI Long Length (4 bytes)
+        buffer.putInt(0);
+
+        // 5. Write Variable Data (Order matches offset calculations)
+        buffer.put(hostBytes);
+        buffer.put(userBytes);
+        buffer.put(passBytes);
+        buffer.put(appBytes);
+        buffer.put(serverBytes);
+        buffer.put(extBytes);
+        buffer.put(libBytes);
+        buffer.put(langBytes);
+        buffer.put(dbBytes);
         buffer.put(sspiBytes);
-        buffer.put(extensionsBytes);
+        buffer.put(attachBytes);
+        buffer.put(changePassBytes);
+
         buffer.flip();
     }
 
-    private byte[] scramblePassword(byte[] data) {
-        for (int i = 0; i < data.length; i++) {
-            byte b = data[i];
-            b = (byte) ((b >> 4) | (b << 4));
-            b ^= (byte) 0xA5;
-            data[i] = b;
-        }
-        return data;
+    // --- Helpers ---
+
+    private void writeOffLen(ByteBuffer buf, FieldRef field) {
+        buf.putShort((short) field.offset);
+        buf.putShort((short) field.len);
     }
 
-    private byte[] generateRandomPhysicalAddress() {
-        byte[] addr = new byte[ClientIdSize];
-        new Random().nextBytes(addr);
-        return addr;
+    private byte[] toBytes(String s) {
+        if (s == null) return new byte[0];
+        return s.getBytes(StandardCharsets.UTF_16LE);
     }
 
-    private ByteBuffer getExtensionsBuffer() {
+    private byte[] toBytes(ByteBuffer b) {
+        byte[] arr = new byte[b.remaining()];
+        b.slice().get(arr);
+        return arr;
+    }
+
+    private byte[] getExtensionsBytes() {
         List<ByteBuffer> buffers = new ArrayList<>();
         if (fedAuth != null) {
             ByteBuffer b = fedAuth.getBuffer();
@@ -174,13 +202,24 @@ public final class Login7Payload extends Payload {
         }
         buffers.add(ByteBuffer.wrap(new byte[] { FeatureExtensionTerminator }));
 
-        // concatenate into single buffer
         int len = 0;
         for (ByteBuffer b : buffers) len += b.remaining();
+
         ByteBuffer out = ByteBuffer.allocate(len);
         for (ByteBuffer b : buffers) out.put(b.slice());
         out.flip();
-        return out;
+        return toBytes(out);
+    }
+
+    private byte[] scramblePassword(byte[] data) {
+        if (data.length == 0) return data;
+        for (int i = 0; i < data.length; i++) {
+            byte b = data[i];
+            b = (byte) ((b >> 4) | (b << 4));
+            b ^= (byte) 0xA5;
+            data[i] = b;
+        }
+        return data;
     }
 
     @Override

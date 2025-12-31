@@ -45,7 +45,7 @@ public class PreLoginPayload extends Payload {
         this.encryption = encrypt ? EncryptionType.ON : EncryptionType.OFF;
         this.version = new SqlVersion(16, 0, 0, 0);
         this.instance = 0;
-        this.threadId = 1; // Thread.currentThread().getId();
+        this.threadId = Thread.currentThread().getId();
         this.mars = 0;
         this.fedAuth = 1;
         buildBufferInternal();
