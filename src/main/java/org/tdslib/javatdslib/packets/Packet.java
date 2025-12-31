@@ -15,7 +15,7 @@ public class Packet {
     // Constants
     public static final int HEADER_LENGTH = 8;
     public static final int DEFAULT_SPID = 0;
-    public static final int DEFAULT_PACKET_ID = 1;
+    public static final int DEFAULT_PACKET_ID = 0;
     public static final int DEFAULT_WINDOW = 0;
 
     // Offsets for absolute access

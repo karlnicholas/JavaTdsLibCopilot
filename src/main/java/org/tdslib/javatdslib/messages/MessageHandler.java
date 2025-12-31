@@ -33,7 +33,8 @@ public class MessageHandler {
 
         return client.getConnection().receiveData()
                 .thenApply(buffer -> {
-                    Packet packet = new Packet(buffer);
+//                    Packet packet = new Packet(buffer);
+                    Packet packet = new Packet(buffer.slice().order(java.nio.ByteOrder.BIG_ENDIAN));
                     logger.trace("Packet received: type={}, size={}", packet.getType(), buffer.remaining());
 
                     Message message = new Message(packet.getType());
