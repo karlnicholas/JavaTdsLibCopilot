@@ -23,6 +23,7 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 
 public class TcpConnection implements IConnection {
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TcpConnection.class);
     private final SocketChannel channel;
     private final TcpServerEndpoint endpoint;
     private final TcpConnectionOptions options;
@@ -56,7 +57,7 @@ public class TcpConnection implements IConnection {
     @Override
     public void startTLS() {
         try {
-            // 1. Trust All Certs
+            // 1. Trust All Certs (Explicitly requested)
             TrustManager[] trustAllCerts = new TrustManager[]{
                     new X509TrustManager() {
                         public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
@@ -65,7 +66,7 @@ public class TcpConnection implements IConnection {
                     }
             };
 
-            // 2. Init SSLContext (Use TLSv1.2 explicitly for compatibility)
+            // 2. Init SSLContext (TLSv1.2)
             SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
             sslContext.init(null, trustAllCerts, new SecureRandom());
 
@@ -73,15 +74,15 @@ public class TcpConnection implements IConnection {
             this.sslEngine.setUseClientMode(true);
 
             SSLSession session = sslEngine.getSession();
-            int netSize = session.getPacketBufferSize();
-            int appSize = session.getApplicationBufferSize();
+            // Allocate buffers.
+            // peerNetData needs to be large enough to hold TDS packets + TLS records.
+            int bufferSize = Math.max(session.getPacketBufferSize(), 32768);
 
-            // Allocate buffers (Extra space for TDS header)
-            myNetData = ByteBuffer.allocate(netSize + TDS_HEADER_LENGTH);
-            peerNetData = ByteBuffer.allocate(netSize + TDS_HEADER_LENGTH);
-            peerAppData = ByteBuffer.allocate(appSize);
+            myNetData = ByteBuffer.allocate(bufferSize);
+            peerNetData = ByteBuffer.allocate(bufferSize);
+            peerAppData = ByteBuffer.allocate(session.getApplicationBufferSize());
 
-            // Start with peerNetData "empty" for reading
+            // Prepare for reading
             peerNetData.flip();
 
             sslEngine.beginHandshake();
@@ -97,7 +98,7 @@ public class TcpConnection implements IConnection {
         SSLEngineResult.HandshakeStatus handshakeStatus = sslEngine.getHandshakeStatus();
         ByteBuffer dummy = ByteBuffer.allocate(0);
 
-        // Helper buffer for reading just the 8-byte header
+        // Helper buffer for reading the TDS Header during handshake
         ByteBuffer headerBuf = ByteBuffer.allocate(TDS_HEADER_LENGTH);
 
         while (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED &&
@@ -105,21 +106,23 @@ public class TcpConnection implements IConnection {
 
             switch (handshakeStatus) {
                 case NEED_UNWRAP:
-                    // CRITICAL FIX: Only read from network if the buffer is empty.
-                    // If we processed a ChangeCipherSpec, the Finished message might already be in peerNetData.
+                    // HANDSHAKE PHASE: TLS Records are WRAPPED in TDS 0x12 Packets.
+
+                    // Only read from network if we don't have remaining data in the buffer.
+                    // (This prevents overwriting a 'Finished' message if it came with the previous packet)
                     if (!peerNetData.hasRemaining()) {
                         peerNetData.clear();
+                        headerBuf.clear();
 
                         // 1. Read TDS Header
-                        headerBuf.clear();
                         readFully(headerBuf);
                         headerBuf.flip();
 
-                        // 2. Parse Length
+                        // 2. Parse Length (Bytes 2-3 Big Endian)
                         int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
                         int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
 
-                        // 3. Read TLS Payload
+                        // 3. Read the TLS Payload inside the TDS packet
                         peerNetData.limit(tlsDataLength);
                         readFully(peerNetData);
                         peerNetData.flip();
@@ -128,11 +131,11 @@ public class TcpConnection implements IConnection {
                     try {
                         result = sslEngine.unwrap(peerNetData, peerAppData);
 
-                        // Handle Underflow (Fragmentation): If a TLS record spans two TDS packets
+                        // Handle Buffer Underflow (TLS Record split across TDS packets)
                         if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-                            peerNetData.compact(); // Move remaining bytes to front, set position to end
+                            peerNetData.compact();
 
-                            // Read next TDS packet header
+                            // Read NEXT TDS Header
                             headerBuf.clear();
                             readFully(headerBuf);
                             headerBuf.flip();
@@ -140,19 +143,14 @@ public class TcpConnection implements IConnection {
                             int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
                             int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
 
-                            // Ensure buffer has space
-                            if (peerNetData.remaining() < tlsDataLength) {
-                                throw new IOException("Buffer overflow during fragmentation reassembly");
-                            }
-
-                            // Read next chunk
+                            // Read NEXT Payload and append
                             int limit = peerNetData.position() + tlsDataLength;
+                            if (limit > peerNetData.capacity()) throw new IOException("Buffer overflow");
                             peerNetData.limit(limit);
                             readFully(peerNetData);
 
-                            peerNetData.flip(); // Prepare for next unwrap attempt
+                            peerNetData.flip(); // Retry unwrap
                         }
-
                     } catch (SSLException e) {
                         throw new IOException("TLS Handshake unwrap failed", e);
                     }
@@ -161,7 +159,7 @@ public class TcpConnection implements IConnection {
 
                 case NEED_WRAP:
                     myNetData.clear();
-                    // Reserve 8 bytes for TDS Header
+                    // HANDSHAKE PHASE: Reserve 8 bytes for TDS Header
                     myNetData.position(TDS_HEADER_LENGTH);
 
                     try {
@@ -174,12 +172,12 @@ public class TcpConnection implements IConnection {
                     myNetData.flip();
                     int totalLength = myNetData.limit();
 
-                    // Construct TDS Header
+                    // Add TDS Header (0x12 Pre-Login)
                     myNetData.put(0, (byte) PRELOGIN_PACKET_TYPE);
                     myNetData.put(1, (byte) 0x01);
                     myNetData.putShort(2, (short) totalLength);
                     myNetData.putShort(4, (short) 0x0000);
-                    myNetData.put(6, (byte) 0x01);                 // PacketID 1
+                    myNetData.put(6, (byte) 0x01);
                     myNetData.put(7, (byte) 0x00);
 
                     while (myNetData.hasRemaining()) {
@@ -224,14 +222,35 @@ public class TcpConnection implements IConnection {
             throw new RuntimeException("Failed to write data", e);
         }
     }
+// ... inside TcpConnection class ...
+
+    // Helper for hex dumping
+    private void logHex(String label, ByteBuffer buffer) {
+        if (!logger.isDebugEnabled()) return;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(label).append(" (Length: ").append(buffer.remaining()).append(")\n");
+
+        int pos = buffer.position();
+        int i = 0;
+        while (buffer.hasRemaining()) {
+            byte b = buffer.get();
+            sb.append(String.format("%02X ", b));
+            if (++i % 16 == 0) sb.append("\n");
+        }
+        sb.append("\n");
+
+        // Rewind so the actual write operation can read it again
+        buffer.position(pos);
+        logger.debug(sb.toString());
+    }
 
     private void sendEncrypted(ByteBuffer appData) throws IOException {
+        // DEBUG: Log the PLAINTEXT TDS packet before encryption
+        logHex("OUTGOING TDS PACKET (Decrypted View)", appData);
+
         while (appData.hasRemaining()) {
             myNetData.clear();
-            // Note: For pure encrypted tunnel (post-login), you typically keep the wrapper
-            // if you are encrypting the entire stream.
-            myNetData.position(TDS_HEADER_LENGTH);
-
             SSLEngineResult result = sslEngine.wrap(appData, myNetData);
 
             if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
@@ -240,16 +259,6 @@ public class TcpConnection implements IConnection {
             }
 
             myNetData.flip();
-            int totalLength = myNetData.limit();
-
-            // Header for encrypted data packets
-            myNetData.put(0, (byte) PRELOGIN_PACKET_TYPE);
-            myNetData.put(1, (byte) 0x01);
-            myNetData.putShort(2, (short) totalLength);
-            myNetData.putShort(4, (short) 0x0000);
-            myNetData.put(6, (byte) 0x01);
-            myNetData.put(7, (byte) 0x00);
-
             while (myNetData.hasRemaining()) {
                 channel.write(myNetData);
             }
@@ -276,32 +285,22 @@ public class TcpConnection implements IConnection {
     private ByteBuffer receiveDecrypted() throws IOException {
         peerAppData.clear();
 
-        // Loop until we have at least some application data
         while (peerAppData.position() == 0) {
-            // Check if we need to read more from network
+            // POST-HANDSHAKE: Read RAW TLS Records. DO NOT parse TDS Headers.
             if (!peerNetData.hasRemaining()) {
                 peerNetData.clear();
-                ByteBuffer header = ByteBuffer.allocate(TDS_HEADER_LENGTH);
-                readFully(header);
-                header.flip();
-                int len = Short.toUnsignedInt(header.getShort(2)) - TDS_HEADER_LENGTH;
-                peerNetData.limit(len);
-                readFully(peerNetData);
+                int count = channel.read(peerNetData);
+                if (count == -1) throw new IOException("Connection closed during TLS read");
                 peerNetData.flip();
             }
 
             SSLEngineResult result = sslEngine.unwrap(peerNetData, peerAppData);
 
             if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-                // Handle fragmentation (same logic as handshake)
+                // Not enough data for a full TLS record
                 peerNetData.compact();
-                ByteBuffer header = ByteBuffer.allocate(TDS_HEADER_LENGTH);
-                readFully(header);
-                header.flip();
-                int len = Short.toUnsignedInt(header.getShort(2)) - TDS_HEADER_LENGTH;
-                int limit = peerNetData.position() + len;
-                peerNetData.limit(limit);
-                readFully(peerNetData);
+                int count = channel.read(peerNetData);
+                if (count == -1) throw new IOException("Connection closed during TLS read");
                 peerNetData.flip();
             }
         }
