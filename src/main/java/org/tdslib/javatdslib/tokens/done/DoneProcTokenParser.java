@@ -9,27 +9,28 @@ import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.util.concurrent.CompletableFuture;
-
 /**
  * DoneProc token parser.
  */
 public class DoneProcTokenParser extends TokenParser {
+
     @Override
-    public CompletableFuture<Token> parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
-        return tokenStreamHandler.readUInt16LE()
-            .thenCompose(statusValue -> {
-                DoneStatus doneStatus = DoneStatus.fromValue(statusValue);
-                return tokenStreamHandler.readUInt16LE()
-                    .thenCompose(currentCommand -> {
-                        if (tokenStreamHandler.getOptions().getTdsVersion().ordinal() > TdsVersion.V7_2.ordinal()) {
-                            return tokenStreamHandler.readUInt64LE()
-                                .thenApply(rowCount -> new DoneProcToken(doneStatus, currentCommand, rowCount));
-                        } else {
-                            return tokenStreamHandler.readUInt32LE()
-                                .thenApply(rowCount -> new DoneProcToken(doneStatus, currentCommand, rowCount));
-                        }
-                    });
-            });
+    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
+        // Read Status (2 bytes)
+        int statusValue = handler.readUInt16LE();
+        DoneStatus doneStatus = DoneStatus.fromValue(statusValue);
+
+        // Read Current Command (2 bytes)
+        int currentCommand = handler.readUInt16LE();
+
+        // Read Row Count (size depends on TDS version)
+        long rowCount;
+        if (handler.getOptions().getTdsVersion().ordinal() > TdsVersion.V7_2.ordinal()) {
+            rowCount = handler.readUInt64LE();
+        } else {
+            rowCount = handler.readUInt32LE();
+        }
+
+        return new DoneProcToken(doneStatus, currentCommand, rowCount);
     }
 }

@@ -6,7 +6,7 @@ import org.tdslib.javatdslib.tokens.TokenType;
 import java.util.concurrent.CompletableFuture;
 public class AltRowTokenParser extends TokenParser {
     @Override
-    public CompletableFuture<Token> parse(TokenType tokenType, TokenStreamHandler handler) {
-        return CompletableFuture.completedFuture(new AltRowToken());
+    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
+        return new AltRowToken();
     }
 }

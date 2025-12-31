@@ -9,29 +9,39 @@ import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.util.concurrent.CompletableFuture;
-
 /**
  * Info token parser.
  */
 public class InfoTokenParser extends TokenParser {
+
     @Override
-    public CompletableFuture<Token> parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
-        return tokenStreamHandler.readUInt16LE()
-            .thenCompose(length -> tokenStreamHandler.readUInt32LE())
-            .thenCompose(number -> tokenStreamHandler.readUInt8()
-                .thenCompose(state -> tokenStreamHandler.readUInt8()
-                    .thenCompose(severity -> tokenStreamHandler.readUsVarChar()
-                        .thenCompose(message -> tokenStreamHandler.readBVarChar()
-                            .thenCompose(serverName -> tokenStreamHandler.readBVarChar()
-                                .thenCompose(procName -> {
-                                    if (tokenStreamHandler.getOptions().getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
-                                        return tokenStreamHandler.readUInt16LE()
-                                            .thenApply(lineNumber -> new InfoToken(number, (byte) (int) state, (byte) (int) severity, message, serverName, procName, lineNumber));
-                                    } else {
-                                        return tokenStreamHandler.readUInt32LE()
-                                            .thenApply(lineNumber -> new InfoToken(number, (byte) (int) state, (byte) (int) severity, message, serverName, procName, lineNumber));
-                                    }
-                                }))))));
+    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
+        // Read token length (2 bytes)
+        // Note: The length covers the rest of the token, but we parse field-by-field.
+        int length = handler.readUInt16LE();
+
+        long number = handler.readUInt32LE();
+        int state = handler.readUInt8();
+        int severity = handler.readUInt8();
+        String message = handler.readUsVarChar();
+        String serverName = handler.readBVarChar();
+        String procName = handler.readBVarChar();
+
+        long lineNumber;
+        if (handler.getOptions().getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
+            lineNumber = handler.readUInt16LE();
+        } else {
+            lineNumber = handler.readUInt32LE();
+        }
+
+        return new InfoToken(
+                number,
+                (byte) state,
+                (byte) severity,
+                message,
+                serverName,
+                procName,
+                lineNumber
+        );
     }
 }

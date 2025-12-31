@@ -3,23 +3,26 @@
 
 package org.tdslib.javatdslib.tokens.returnvalue;
 
-
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.util.concurrent.CompletableFuture;
-
 /**
  * Parser for RETURN_VALUE token (not yet implemented).
  */
 public class ReturnValueTokenParser extends TokenParser {
+
     @Override
-    public CompletableFuture<Token> parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
-        return tokenStreamHandler.readUsVarChar()
-            .thenCompose(name -> tokenStreamHandler.readUInt32LE()
-                .thenCompose(length -> tokenStreamHandler.readBytes(((Long) length).intValue())
-                    .thenApply(bytes -> new ReturnValueToken(name, bytes))));
+    public Token parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
+        String name = tokenStreamHandler.readUsVarChar();
+
+        // Note: This logic assumes the next 4 bytes are the length of the data.
+        // In a full TDS implementation, you would typically parse Status, UserType, and TypeInfo here.
+        long length = tokenStreamHandler.readUInt32LE();
+
+        byte[] bytes = tokenStreamHandler.readBytes((int) length);
+
+        return new ReturnValueToken(name, bytes);
     }
 }

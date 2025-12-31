@@ -15,8 +15,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
 /**
@@ -26,7 +24,7 @@ public class MessageHandler {
     private static final Logger logger = LoggerFactory.getLogger(MessageHandler.class);
     private final TdsClient client;
 
-    // Stateful buffer to hold partial data between network reads (Simulates C# incomingMessageBuffer)
+    // Stateful buffer to hold partial data between network reads
     private ByteBuffer incomingBuffer = ByteBuffer.allocate(0);
 
     public MessageHandler(TdsClient client) {
@@ -34,67 +32,40 @@ public class MessageHandler {
     }
 
     /**
-     * Receives a message from the SQL Server.
-     * Corresponds to C#: public async Task<Message> ReceiveMessage(...)
+     * Receives a message from the SQL Server using a custom payload factory.
      */
-    public CompletableFuture<Message> receiveMessage(Function<ByteBuffer, Payload> payloadFunction) {
+    public Message receiveMessage(Function<ByteBuffer, Payload> payloadFunction) {
         logger.debug("Attempting to receive message...");
 
-        // Start the recursive packet accumulation loop
-        return receiveMessageRaw()
-                .thenApply(result -> {
-                    PacketType type = result.type;
-                    ByteBuffer payloadBuffer = result.payload;
+        try {
+            RawResult result = receiveMessageRaw();
 
-                    Message message = new Message(type);
-                    // Flags are technically per-packet, but usually consistent for the message.
-                    // We take them from the last packet context or defaults.
-                    // (Simplification: Assuming standard message behavior)
-//                    message.setPayload(new RawPayload(payloadBuffer));
-                    message.setPayload(payloadFunction.apply(payloadBuffer));
+            PacketType type = result.type;
+            ByteBuffer payloadBuffer = result.payload;
 
-                    logger.debug("Message received completely. Type={}, PayloadSize={}", type, payloadBuffer.remaining());
-                    return message;
-                })
-                .exceptionally(ex -> {
-                    // Reset buffer on error (simulating C# catch block logic)
-                    incomingBuffer = ByteBuffer.allocate(0);
-                    logger.error("Error receiving message from SQL Server", ex);
-                    throw new CompletionException(ex);
-                });
-    }
-    /**
-     * Receives a message from the SQL Server.
-     * Corresponds to C#: public async Task<Message> ReceiveMessage(...)
-     */
-    public CompletableFuture<Message> receiveMessage() {
-        logger.debug("Attempting to receive message...");
+            Message message = new Message(type);
+            message.setPayload(payloadFunction.apply(payloadBuffer));
 
-        // Start the recursive packet accumulation loop
-        return receiveMessageRaw()
-                .thenApply(result -> {
-                    PacketType type = result.type;
-                    ByteBuffer payloadBuffer = result.payload;
+            logger.debug("Message received completely. Type={}, PayloadSize={}", type, payloadBuffer.remaining());
+            return message;
 
-                    Message message = new Message(type);
-                    // Flags are technically per-packet, but usually consistent for the message.
-                    // We take them from the last packet context or defaults.
-                    // (Simplification: Assuming standard message behavior)
-                    message.setPayload(new RawPayload(payloadBuffer));
-
-                    logger.debug("Message received completely. Type={}, PayloadSize={}", type, payloadBuffer.remaining());
-                    return message;
-                })
-                .exceptionally(ex -> {
-                    // Reset buffer on error (simulating C# catch block logic)
-                    incomingBuffer = ByteBuffer.allocate(0);
-                    logger.error("Error receiving message from SQL Server", ex);
-                    throw new CompletionException(ex);
-                });
+        } catch (Exception ex) {
+            // Reset buffer on error to prevent corrupted state
+            incomingBuffer = ByteBuffer.allocate(0);
+            logger.error("Error receiving message from SQL Server", ex);
+            throw new RuntimeException(ex);
+        }
     }
 
     /**
-     * Internal result container for the raw loop.
+     * Receives a message from the SQL Server using the default RawPayload.
+     */
+    public Message receiveMessage() {
+        return receiveMessage(RawPayload::new);
+    }
+
+    /**
+     * Internal result container.
      */
     private static class RawResult {
         final PacketType type;
@@ -107,148 +78,115 @@ public class MessageHandler {
     }
 
     /**
-     * Corresponds to C#: private async Task<(PacketType, ByteBuffer)> ReceiveMessageRaw(...)
+     * Loops to accumulate packets until the last packet is received.
      */
-    private CompletableFuture<RawResult> receiveMessageRaw() {
-        // List to hold fragments
+    private RawResult receiveMessageRaw() {
         List<Packet> packetList = new ArrayList<>();
+        boolean isLast = false;
 
-        // Start the recursive loop
-        return processNextPacket(packetList)
-                .thenApply(v -> {
-                    if (packetList.isEmpty()) {
-                        return new RawResult(PacketType.UNKNOWN, ByteBuffer.allocate(0));
-                    }
+        while (!isLast) {
+            // 1. Wait for Header (8 bytes) to determine packet length
+            waitForData(Packet.HEADER_LENGTH);
 
-                    // 1. Determine Packet Type (from first packet)
-                    PacketType type = packetList.get(0).getType();
+            // 2. Read Length from Header (Bytes 2-3, Big Endian)
+            // Peek without moving position to get the full packet size
+            int packetLength = Short.toUnsignedInt(incomingBuffer.getShort(incomingBuffer.position() + 2));
 
-                    // 2. Concatenate Payloads
-                    // C#: new ByteBuffer(packetList.Select(p => p.Data))
-                    int totalSize = packetList.stream().mapToInt(p -> p.getData().remaining()).sum();
-                    ByteBuffer fullPayload = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN);
+            // 3. Wait for the full packet data (Header + Body)
+            waitForData(packetLength);
 
-                    for (Packet p : packetList) {
-                        fullPayload.put(p.getData());
-                    }
-                    fullPayload.flip(); // Prepare for reading
+            // 4. Extract Packet
+            // Create a slice for just this packet
+            ByteBuffer packetBuffer = incomingBuffer.slice();
+            packetBuffer.limit(packetLength);
+            packetBuffer.order(ByteOrder.BIG_ENDIAN); // TDS Headers are BE
 
-                    return new RawResult(type, fullPayload);
-                });
-    }
+            Packet packet = new Packet(packetBuffer);
+            packetList.add(packet);
 
-    /**
-     * Recursive loop logic.
-     * Corresponds to C# while(true) loop inside ReceiveMessageRaw.
-     */
-    private CompletableFuture<Void> processNextPacket(List<Packet> packetList) {
-        // 1. Wait for Header (8 bytes)
-        return waitForData(Packet.HEADER_LENGTH)
-                .thenCompose(v -> {
-                    // 2. Read Length from Header (Bytes 2-3, Big Endian)
-                    // Peek without moving position
-                    int packetLength = Short.toUnsignedInt(incomingBuffer.getShort(incomingBuffer.position() + 2));
+            logger.trace("Packet received: Type={}, Length={}, Last={}", packet.getType(), packet.getLength(), packet.isLast());
 
-                    // 3. Wait for the full packet data
-                    return waitForData(packetLength)
-                            .thenApply(v2 -> packetLength); // Pass length down chain
-                })
-                .thenCompose(packetLength -> {
-                    // 4. Extract Packet
-                    // C#: Packet packet = new Packet(incomingMessageBuffer.Slice(0, packetLength));
+            // 5. Update incomingBuffer: Move past the consumed packet
+            int pPos = incomingBuffer.position();
+            incomingBuffer.position(pPos + packetLength);
 
-                    // Create view for the packet
-                    ByteBuffer packetBuffer = incomingBuffer.slice();
-                    packetBuffer.limit(packetLength);
-                    packetBuffer.order(ByteOrder.BIG_ENDIAN); // Headers are BE
+            // Compact or slice the tail to retain remaining bytes
+            if (incomingBuffer.hasRemaining()) {
+                ByteBuffer tail = incomingBuffer.slice();
+                // Copy to new buffer to release reference to the old large buffer
+                ByteBuffer newBuf = ByteBuffer.allocate(tail.remaining());
+                newBuf.put(tail);
+                newBuf.flip();
+                incomingBuffer = newBuf;
+            } else {
+                incomingBuffer = ByteBuffer.allocate(0);
+            }
 
-                    Packet packet = new Packet(packetBuffer);
-                    packetList.add(packet);
-
-                    logger.trace("Packet received: Type={}, Length={}, Last={}", packet.getType(), packet.getLength(), packet.isLast());
-
-                    // 5. Slice off the consumed packet from incomingBuffer
-                    // C#: incomingMessageBuffer = incomingMessageBuffer.Slice(packetLength);
-                    int pPos = incomingBuffer.position();
-                    incomingBuffer.position(pPos + packetLength);
-
-                    // Compact or slice the tail
-                    if (incomingBuffer.hasRemaining()) {
-                        ByteBuffer tail = incomingBuffer.slice();
-                        // Copy to new buffer to release reference to old large buffer
-                        ByteBuffer newBuf = ByteBuffer.allocate(tail.remaining());
-                        newBuf.put(tail);
-                        newBuf.flip();
-                        incomingBuffer = newBuf;
-                    } else {
-                        incomingBuffer = ByteBuffer.allocate(0);
-                    }
-
-                    // 6. Check for Last packet or Recurse
-                    if (packet.isLast()) {
-                        return CompletableFuture.completedFuture(null);
-                    } else {
-                        return processNextPacket(packetList); // Loop
-                    }
-                });
-    }
-
-    /**
-     * Corresponds to C#: private async Task WaitForData(int size, ...)
-     */
-    private CompletableFuture<Void> waitForData(int neededSize) {
-        if (incomingBuffer.remaining() >= neededSize) {
-            return CompletableFuture.completedFuture(null);
+            // 6. Check if this was the last packet
+            isLast = packet.isLast();
         }
 
-        // Need more data
-        return client.getConnection().receiveData()
-                .thenCompose(newChunk -> {
-                    // C#: incomingMessageBuffer = incomingMessageBuffer.Concat(...)
-                    // Java: Allocate new, put old, put new
-                    int total = incomingBuffer.remaining() + newChunk.remaining();
-                    ByteBuffer grown = ByteBuffer.allocate(total);
+        if (packetList.isEmpty()) {
+            return new RawResult(PacketType.UNKNOWN, ByteBuffer.allocate(0));
+        }
 
-                    grown.put(incomingBuffer);
-                    grown.put(newChunk);
-                    grown.flip(); // Prepare for reading
+        // 7. Aggregate Results
+        PacketType type = packetList.get(0).getType();
 
-                    incomingBuffer = grown;
+        // Calculate total payload size
+        int totalSize = packetList.stream().mapToInt(p -> p.getData().remaining()).sum();
+        ByteBuffer fullPayload = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN);
 
-                    // Recurse to check if we have enough now
-                    return waitForData(neededSize);
-                });
+        for (Packet p : packetList) {
+            fullPayload.put(p.getData());
+        }
+        fullPayload.flip(); // Prepare for reading
+
+        return new RawResult(type, fullPayload);
+    }
+
+    /**
+     * Blocks until incomingBuffer contains at least neededSize bytes.
+     * Fetches more data from the connection if necessary.
+     */
+    private void waitForData(int neededSize) {
+        while (incomingBuffer.remaining() < neededSize) {
+            // This call blocks until data arrives
+            ByteBuffer newChunk = client.getConnection().receiveData();
+
+            // Merge old buffer with new chunk
+            int total = incomingBuffer.remaining() + newChunk.remaining();
+            ByteBuffer grown = ByteBuffer.allocate(total);
+
+            grown.put(incomingBuffer);
+            grown.put(newChunk);
+            grown.flip(); // Prepare for reading
+
+            incomingBuffer = grown;
+        }
     }
 
     /**
      * Sends a message to the SQL Server by fragmenting it into packets.
      */
-    public CompletableFuture<Void> sendMessage(Message message) {
+    public void sendMessage(Message message) {
         int packetSize = org.tdslib.javatdslib.TdsConstants.DEFAULT_PACKET_SIZE;
         var packets = message.getPackets(packetSize);
 
         logger.debug("Sending message: type={}, packetCount={}", message.getPacketType(), packets.size());
 
-        CompletableFuture<Void> pipeline = CompletableFuture.completedFuture(null);
+        try {
+            for (int i = 0; i < packets.size(); i++) {
+                Packet packet = packets.get(i);
+                logger.trace("Sending packet {}/{} (Size: {})", i + 1, packets.size(), packet.getLength());
 
-        for (int i = 0; i < packets.size(); i++) {
-            final var packet = packets.get(i);
-            final int index = i + 1;
-
-            pipeline = pipeline.thenCompose(v -> {
-                logger.trace("Sending packet {}/{} (Size: {})", index, packets.size(), packet.getLength());
-                // Use getBuffer() to send the full Header + Data
-                return client.getConnection().sendData(packet.getBuffer());
-            });
-        }
-
-        return pipeline.handle((result, ex) -> {
-            if (ex != null) {
-                logger.error("Failed to send TDS message.", ex);
-                throw new CompletionException(ex);
+                // Blocks until written
+                client.getConnection().sendData(packet.getBuffer());
             }
             logger.debug("Message sent successfully.");
-            return result;
-        });
+        } catch (Exception ex) {
+            logger.error("Failed to send TDS message.", ex);
+            throw new RuntimeException("Failed to send TDS message", ex);
+        }
     }
 }

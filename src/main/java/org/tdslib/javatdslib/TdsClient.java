@@ -11,7 +11,6 @@ import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 
 import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * TDS Client.
@@ -68,8 +67,8 @@ public class TdsClient implements AutoCloseable {
     /**
      * Performs the TLS handshake between the client and the database server.
      */
-    public CompletableFuture<Void> performTlsHandshake() {
-        return connection.startTLS();
+    public void performTlsHandshake() {
+        connection.startTLS();
     }
 
     /**

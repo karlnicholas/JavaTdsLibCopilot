@@ -19,17 +19,17 @@ public interface IConnection extends AutoCloseable {
     /**
      * Starts the SSL/TLS by performing a handshake with the SQL Server.
      */
-    CompletableFuture<Void> startTLS();
+    void startTLS();
 
     /**
      * Sends data.
      */
-    CompletableFuture<Void> sendData(ByteBuffer byteBuffer);
+    void sendData(ByteBuffer byteBuffer);
 
     /**
      * Receives data.
      */
-    CompletableFuture<ByteBuffer> receiveData();
+    ByteBuffer receiveData();
 
     /**
      * Clear all incoming data.

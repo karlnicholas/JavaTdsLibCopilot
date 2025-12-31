@@ -8,14 +8,13 @@ import org.tdslib.javatdslib.io.connection.IConnection;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousSocketChannel;
-import java.util.concurrent.CompletableFuture;
+import java.nio.channels.SocketChannel;
 
 /**
  * Connection used by the TDS Client to communicate with the SQL Server.
  */
 public class TcpConnection implements IConnection {
-    private final AsynchronousSocketChannel channel;
+    private final SocketChannel channel;
     private final TcpServerEndpoint endpoint;
     private final TcpConnectionOptions options;
 
@@ -39,13 +38,15 @@ public class TcpConnection implements IConnection {
     public TcpConnection(TcpConnectionOptions options, TcpServerEndpoint endpoint) throws IOException {
         this.options = options;
         this.endpoint = endpoint;
-        this.channel = AsynchronousSocketChannel.open();
-        // Connect synchronously for simplicity, or make async
-        try {
-            channel.connect(new InetSocketAddress(endpoint.getHostname(), endpoint.getPort())).get();
-        } catch (Exception e) {
-            throw new IOException(e);
-        }
+
+        // Open a standard SocketChannel
+        this.channel = SocketChannel.open();
+
+        // Explicitly enable blocking mode
+        this.channel.configureBlocking(true);
+
+        // Connect synchronously
+        this.channel.connect(new InetSocketAddress(endpoint.getHostname(), endpoint.getPort()));
     }
 
     @Override
@@ -54,44 +55,49 @@ public class TcpConnection implements IConnection {
     }
 
     @Override
-    public CompletableFuture<Void> startTLS() {
-        // Implement TLS handshake
-        return CompletableFuture.completedFuture(null);
+    public void startTLS() {
+        // TODO: Implement blocking TLS handshake (e.g., using SSLEngine or wrapping the Socket)
     }
 
     @Override
-    public CompletableFuture<Void> sendData(ByteBuffer byteBuffer) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                while (byteBuffer.hasRemaining()) {
-                    channel.write(byteBuffer).get();
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+    public void sendData(ByteBuffer byteBuffer) {
+        try {
+            // In blocking mode, write() blocks until bytes are written.
+            // However, it might not write the *full* buffer in one go if the OS buffer is full.
+            while (byteBuffer.hasRemaining()) {
+                channel.write(byteBuffer);
             }
-        });
+        } catch (IOException e) {
+            // Interface does not throw checked exceptions for sendData
+            throw new RuntimeException("Failed to write data to SocketChannel", e);
+        }
     }
 
     @Override
-    public CompletableFuture<ByteBuffer> receiveData() {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ByteBuffer buffer = ByteBuffer.allocate(4096); // or options.getPacketSize()
-                int bytesRead = channel.read(buffer).get();
-                if (bytesRead == -1) {
-                    throw new IOException("Connection closed");
-                }
-                buffer.flip();
-                return buffer;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+    public ByteBuffer receiveData() {
+        try {
+            // Allocate buffer (size could be dynamic based on TDS packet size in options)
+            ByteBuffer buffer = ByteBuffer.allocate(4096);
+
+            // Blocks until at least one byte is read or EOF
+            int bytesRead = channel.read(buffer);
+
+            if (bytesRead == -1) {
+                throw new RuntimeException(new IOException("Connection closed by remote host"));
             }
-        });
+
+            // Flip the buffer to prepare it for reading by the caller
+            buffer.flip();
+            return buffer;
+        } catch (IOException e) {
+            // Interface does not throw checked exceptions for receiveData
+            throw new RuntimeException("Failed to read data from SocketChannel", e);
+        }
     }
 
     @Override
     public void clearIncomingData() {
-        // Implement if needed
+        // Optional: Implement logic to discard pending bytes if necessary
     }
 
     @Override
