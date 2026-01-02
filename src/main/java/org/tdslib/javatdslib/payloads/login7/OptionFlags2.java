@@ -33,8 +33,8 @@ public final class OptionFlags2 {
     }
 
     public void setInitLang(OptionInitLang v) {
-        if (v == OptionInitLang.Warn) value &= (byte) (0xFF - OptionInitLangBitIndex);
-        else value |= OptionInitLangBitIndex;
+        if (v == OptionInitLang.Fatal) value |= OptionInitLangBitIndex;
+        else value &= (byte) (0xFF - OptionInitLangBitIndex);
     }
 
     public OptionOdbc getOdbc() {
@@ -43,8 +43,9 @@ public final class OptionFlags2 {
     }
 
     public void setOdbc(OptionOdbc v) {
-        if (v == OptionOdbc.Off) value &= (byte) (0xFF - OptionOdbcBitIndex);
-        else value |= OptionOdbcBitIndex;
+        // FIXED: On = Set Bit
+        if (v == OptionOdbc.On) value |= OptionOdbcBitIndex;
+        else value &= (byte) (0xFF - OptionOdbcBitIndex);
     }
 
     public OptionUser getUser() {
@@ -55,23 +56,11 @@ public final class OptionFlags2 {
     }
 
     public void setUser(OptionUser u) {
-        if (u == OptionUser.Normal) {
-            value &= (byte) (0xFF - OptionUserBitIndexServer);
-            value &= (byte) (0xFF - OptionUserBitIndexRemUser);
-            value &= (byte) (0xFF - OptionUserBitIndexSqlRepl);
-        } else if (u == OptionUser.Server) {
-            value |= OptionUserBitIndexServer;
-            value &= (byte) (0xFF - OptionUserBitIndexRemUser);
-            value &= (byte) (0xFF - OptionUserBitIndexSqlRepl);
-        } else if (u == OptionUser.RemUser) {
-            value &= (byte) (0xFF - OptionUserBitIndexServer);
-            value |= OptionUserBitIndexRemUser;
-            value &= (byte) (0xFF - OptionUserBitIndexSqlRepl);
-        } else {
-            value &= (byte) (0xFF - OptionUserBitIndexServer);
-            value &= (byte) (0xFF - OptionUserBitIndexRemUser);
-            value |= OptionUserBitIndexSqlRepl;
-        }
+        value &= (byte) (0xFF - (OptionUserBitIndexServer | OptionUserBitIndexRemUser | OptionUserBitIndexSqlRepl));
+
+        if (u == OptionUser.Server) value |= OptionUserBitIndexServer;
+        else if (u == OptionUser.RemUser) value |= OptionUserBitIndexRemUser;
+        else if (u == OptionUser.SqlRepl) value |= OptionUserBitIndexSqlRepl;
     }
 
     public OptionIntegratedSecurity getIntegratedSecurity() {
@@ -80,8 +69,9 @@ public final class OptionFlags2 {
     }
 
     public void setIntegratedSecurity(OptionIntegratedSecurity v) {
-        if (v == OptionIntegratedSecurity.Off) value &= (byte) (0xFF - OptionIntegratedSecurityBitIndex);
-        else value |= OptionIntegratedSecurityBitIndex;
+        // FIXED: On = Set Bit
+        if (v == OptionIntegratedSecurity.On) value |= OptionIntegratedSecurityBitIndex;
+        else value &= (byte) (0xFF - OptionIntegratedSecurityBitIndex);
     }
 
     public byte toByte() { return value; }
@@ -89,7 +79,6 @@ public final class OptionFlags2 {
 
     @Override
     public String toString() {
-        return String.format("OptionFlags2[value=0x%02X, InitLang=%s, ODBC=%s, User=%s, IntegratedSecurity=%s]",
-            Byte.toUnsignedInt(value), getInitLang(), getOdbc(), getUser(), getIntegratedSecurity());
+        return String.format("OptionFlags2[value=0x%02X]", Byte.toUnsignedInt(value));
     }
 }

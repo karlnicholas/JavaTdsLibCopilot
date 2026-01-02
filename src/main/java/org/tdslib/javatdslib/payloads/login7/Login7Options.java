@@ -22,33 +22,24 @@ public class Login7Options {
         this.clientPid = ProcessHandle.current().pid();
         this.connectionId = 0;
         this.clientTimeZone = java.time.ZoneId.systemDefault().getRules().getOffset(java.time.Instant.now()).getTotalSeconds() / 60;
-        this.clientLcid = java.util.Locale.getDefault().getLanguage().isEmpty() ? 0 : java.util.Locale.getDefault().hashCode();
+
+        // FIXED: Use a valid LCID (0x0409 = en-US) instead of hashCode()
+        this.clientLcid = 0x0409;
     }
 
+    // ... (Getters/Setters unchanged) ...
     public TdsVersion getTdsVersion() { return tdsVersion; }
     public void setTdsVersion(TdsVersion v) { this.tdsVersion = v; }
-
     public int getPacketSize() { return packetSize; }
     public void setPacketSize(int s) { this.packetSize = s; }
-
     public long getClientProgVer() { return clientProgVer; }
     public void setClientProgVer(long v) { this.clientProgVer = v; }
-
     public long getClientPid() { return clientPid; }
     public void setClientPid(long p) { this.clientPid = p; }
-
     public long getConnectionId() { return connectionId; }
     public void setConnectionId(long id) { this.connectionId = id; }
-
     public int getClientTimeZone() { return clientTimeZone; }
     public void setClientTimeZone(int tz) { this.clientTimeZone = tz; }
-
     public long getClientLcid() { return clientLcid; }
     public void setClientLcid(long lcid) { this.clientLcid = lcid; }
-
-    @Override
-    public String toString() {
-        return String.format("Options[TdsVersion=%s, PacketSize=%d, ClientProgVer=%d, ClientPid=%d, ConnectionId=%d, ClientTimeZone=%d, ClientLcid=%d]",
-            tdsVersion, packetSize, clientProgVer, clientPid, connectionId, clientTimeZone, clientLcid);
-    }
 }

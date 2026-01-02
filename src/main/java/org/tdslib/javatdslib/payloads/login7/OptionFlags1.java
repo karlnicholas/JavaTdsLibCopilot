@@ -36,13 +36,13 @@ public final class OptionFlags1 {
     public OptionFlags1(byte value) { this.value = value; }
 
     public OptionEndian getEndian() {
-        if ((value & OptionEndianBitIndex) == OptionEndianBitIndex) return OptionEndian.BigEndian;
-        return OptionEndian.LittleEndian;
+        if ((value & OptionEndianBitIndex) == OptionEndianBitIndex) return OptionEndian.LittleEndian;
+        return OptionEndian.BigEndian;
     }
 
     public void setEndian(OptionEndian e) {
-        if (e == OptionEndian.LittleEndian) value &= (byte) (0xFF - OptionEndianBitIndex);
-        else value |= OptionEndianBitIndex;
+        if (e == OptionEndian.LittleEndian) value |= OptionEndianBitIndex;
+        else value &= (byte) (0xFF - OptionEndianBitIndex);
     }
 
     public OptionCharset getCharset() {
@@ -51,8 +51,8 @@ public final class OptionFlags1 {
     }
 
     public void setCharset(OptionCharset c) {
-        if (c == OptionCharset.Ascii) value &= (byte) (0xFF - OptionCharsetBitIndex);
-        else value |= OptionCharsetBitIndex;
+        if (c == OptionCharset.Ebcdic) value |= OptionCharsetBitIndex;
+        else value &= (byte) (0xFF - OptionCharsetBitIndex);
     }
 
     public OptionFloat getFloat() {
@@ -62,36 +62,33 @@ public final class OptionFlags1 {
     }
 
     public void setFloat(OptionFloat f) {
-        if (f == OptionFloat.IEEE) {
-            value &= (byte) (0xFF - OptionFloatBitIndexVax);
-            value &= (byte) (0xFF - OptionFloatBitIndexND5000);
-        } else if (f == OptionFloat.VAX) {
-            value |= OptionFloatBitIndexVax;
-            value &= (byte) (0xFF - OptionFloatBitIndexND5000);
-        } else {
-            value &= (byte) (0xFF - OptionFloatBitIndexVax);
-            value |= OptionFloatBitIndexND5000;
-        }
+        value &= (byte) (0xFF - OptionFloatBitIndexVax);
+        value &= (byte) (0xFF - OptionFloatBitIndexND5000);
+
+        if (f == OptionFloat.VAX) value |= OptionFloatBitIndexVax;
+        else if (f == OptionFloat.ND5000) value |= OptionFloatBitIndexND5000;
     }
 
     public OptionBcpDumpload getBcpDumpload() {
-        if ((value & OptionBcpDumploadBitIndex) == OptionBcpDumploadBitIndex) return OptionBcpDumpload.Off;
-        return OptionBcpDumpload.On;
+        if ((value & OptionBcpDumploadBitIndex) == OptionBcpDumploadBitIndex) return OptionBcpDumpload.On;
+        return OptionBcpDumpload.Off;
     }
 
     public void setBcpDumpload(OptionBcpDumpload v) {
-        if (v == OptionBcpDumpload.On) value &= (byte) (0xFF - OptionBcpDumploadBitIndex);
-        else value |= OptionBcpDumploadBitIndex;
+        // FIXED: On = Set Bit (|=), Off = Clear Bit (&=)
+        if (v == OptionBcpDumpload.On) value |= OptionBcpDumploadBitIndex;
+        else value &= (byte) (0xFF - OptionBcpDumploadBitIndex);
     }
 
     public OptionUseDb getUseDb() {
-        if ((value & OptionUseDbBitIndex) == OptionUseDbBitIndex) return OptionUseDb.Off;
-        return OptionUseDb.On;
+        if ((value & OptionUseDbBitIndex) == OptionUseDbBitIndex) return OptionUseDb.On;
+        return OptionUseDb.Off;
     }
 
     public void setUseDb(OptionUseDb v) {
-        if (v == OptionUseDb.On) value &= (byte) (0xFF - OptionUseDbBitIndex);
-        else value |= OptionUseDbBitIndex;
+        // FIXED: On = Set Bit (|=), Off = Clear Bit (&=)
+        if (v == OptionUseDb.On) value |= OptionUseDbBitIndex;
+        else value &= (byte) (0xFF - OptionUseDbBitIndex);
     }
 
     public OptionInitDb getInitDb() {
@@ -100,8 +97,9 @@ public final class OptionFlags1 {
     }
 
     public void setInitDb(OptionInitDb v) {
-        if (v == OptionInitDb.Warn) value &= (byte) (0xFF - OptionIndexDbBitIndex);
-        else value |= OptionIndexDbBitIndex;
+        // Typically 0=Warn, 1=Fatal
+        if (v == OptionInitDb.Fatal) value |= OptionIndexDbBitIndex;
+        else value &= (byte) (0xFF - OptionIndexDbBitIndex);
     }
 
     public OptionLangWarn getLangWarn() {
@@ -110,8 +108,8 @@ public final class OptionFlags1 {
     }
 
     public void setLangWarn(OptionLangWarn v) {
-        if (v == OptionLangWarn.Off) value &= (byte) (0xFF - OptionLangWarnBitIndex);
-        else value |= OptionLangWarnBitIndex;
+        if (v == OptionLangWarn.On) value |= OptionLangWarnBitIndex;
+        else value &= (byte) (0xFF - OptionLangWarnBitIndex);
     }
 
     public byte toByte() { return value; }
@@ -120,7 +118,6 @@ public final class OptionFlags1 {
 
     @Override
     public String toString() {
-        return String.format("OptionFlags1[value=0x%02X, Endian=%s, Charset=%s, Float=%s, BcpDumpload=%s, UseDb=%s, InitDb=%s, LangWarn=%s]",
-            Byte.toUnsignedInt(value), getEndian(), getCharset(), getFloat(), getBcpDumpload(), getUseDb(), getInitDb(), getLangWarn());
+        return String.format("OptionFlags1[value=0x%02X]", Byte.toUnsignedInt(value));
     }
 }

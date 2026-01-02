@@ -54,7 +54,7 @@ public class Message {
 
         payloadBuffer.rewind();
 
-        int packetId = 0;
+        int packetId = 1;
         int totalRemaining = payloadBuffer.remaining();
 
         if (totalRemaining == 0) {

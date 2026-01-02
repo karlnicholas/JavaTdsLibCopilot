@@ -19,9 +19,11 @@ public final class OptionFlags3 {
         setBinaryXml(false);
         setSpawnUserInstance(false);
         setUnknownCollationHandling(true);
-        setExtensionUsed(true);
+        // FIXED: Default to FALSE. Only enable if we actually have extensions.
+        setExtensionUsed(false);
     }
 
+    // ... (Keep existing getters/setters and bit logic) ...
     public OptionFlags3(byte value) { this.value = value; }
 
     public OptionChangePassword getChangePassword() {
@@ -51,7 +53,6 @@ public final class OptionFlags3 {
 
     @Override
     public String toString() {
-        return String.format("OptionFlags3[value=0x%02X, ChangePassword=%s, BinaryXml=%s, SpawnUserInstance=%s, UnknownCollationHandling=%s, ExtensionUsed=%s]",
-            Byte.toUnsignedInt(value), getChangePassword(), isBinaryXml(), isSpawnUserInstance(), isUnknownCollationHandling(), isExtensionUsed());
+        return String.format("OptionFlags3[value=0x%02X]", Byte.toUnsignedInt(value));
     }
 }

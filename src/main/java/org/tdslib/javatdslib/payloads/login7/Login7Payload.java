@@ -84,7 +84,7 @@ public final class Login7Payload extends Payload {
         byte[] passBytes = scramblePassword(toBytes(password));
         byte[] appBytes = toBytes(appName);
         byte[] serverBytes = toBytes(serverName);
-        byte[] extBytes = getExtensionsBytes(); // Extensions
+        byte[] extBytes = getExtensionsBytes(); // Extensions (might be empty)
         byte[] libBytes = toBytes(libraryName);
         byte[] langBytes = toBytes(language);
         byte[] dbBytes = toBytes(database);
@@ -92,6 +92,13 @@ public final class Login7Payload extends Payload {
         byte[] attachBytes = toBytes(attachDbFile);
         byte[] changePassBytes = scramblePassword(toBytes(changePassword));
         byte[] sspiBytes = (sspi != null && sspi.hasRemaining()) ? toBytes(sspi) : new byte[0];
+
+        // CRITICAL FIX: Update OptionFlags3 based on whether extensions exist
+        if (extBytes.length > 0) {
+            optionFlags3.setExtensionUsed(true);
+        } else {
+            optionFlags3.setExtensionUsed(false);
+        }
 
         // 2. Calculate Offsets (Strict TDS Order)
         int currentOffset = FIXED_HEADER_SIZE;
@@ -196,30 +203,79 @@ public final class Login7Payload extends Payload {
 
     private byte[] getExtensionsBytes() {
         List<ByteBuffer> buffers = new ArrayList<>();
+        boolean hasExtensions = false;
+
         if (fedAuth != null) {
             ByteBuffer b = fedAuth.getBuffer();
-            if (b != null) buffers.add(b);
+            if (b != null) {
+                buffers.add(b);
+                hasExtensions = true;
+            }
         }
-        buffers.add(ByteBuffer.wrap(new byte[] { FeatureExtensionTerminator }));
 
-        int len = 0;
-        for (ByteBuffer b : buffers) len += b.remaining();
+        // Only write extensions block if we actually have extensions
+        if (hasExtensions) {
+            buffers.add(ByteBuffer.wrap(new byte[] { FeatureExtensionTerminator }));
 
-        ByteBuffer out = ByteBuffer.allocate(len);
-        for (ByteBuffer b : buffers) out.put(b.slice());
-        out.flip();
-        return toBytes(out);
+            int len = 0;
+            for (ByteBuffer b : buffers) len += b.remaining();
+
+            ByteBuffer out = ByteBuffer.allocate(len);
+            for (ByteBuffer b : buffers) out.put(b.slice());
+            out.flip();
+            return toBytes(out);
+        } else {
+            return new byte[0];
+        }
     }
 
+//    private byte[] scramblePassword(byte[] data) {
+//        if (data.length == 0) return data;
+//
+//        for (int i = 0; i < data.length; i++) {
+//            // 1. Mask to unsigned int (0-255) to prevent sign extension
+//            int b = data[i] & 0xFF;
+//
+//            // 2. Swap Nibbles:
+//            //    (b >>> 4) moves high nibble to low (unsigned shift)
+//            //    (b << 4)  moves low nibble to high
+//            int swapped = (b >>> 4) | (b << 4);
+//
+//            // 3. XOR with 0xA5 and cast back to byte
+//            data[i] = (byte) (swapped ^ 0xA5);
+//        }
+//        return data;
+//    }
+    /**
+     * Scrambles (obfuscates) a password byte array for use in TDS LOGIN7 packet.
+     * This is the exact algorithm specified in [MS-TDS] for SQL Server Authentication.
+     *
+     * @param data The original password encoded as UTF-16LE bytes
+     * @return The scrambled (obfuscated) byte array to send over the wire
+     */
     private byte[] scramblePassword(byte[] data) {
-        if (data.length == 0) return data;
-        for (int i = 0; i < data.length; i++) {
-            byte b = data[i];
-            b = (byte) ((b >> 4) | (b << 4));
-            b ^= (byte) 0xA5;
-            data[i] = b;
+        if (data == null || data.length == 0) {
+            return new byte[0];
         }
-        return data;
+
+        // The length must be even (UTF-16LE characters)
+        if (data.length % 2 != 0) {
+            throw new IllegalArgumentException("Password data must be even length (UTF-16LE)");
+        }
+
+        byte[] result = new byte[data.length];
+
+        for (int i = 0; i < data.length; i++) {
+            int original = data[i] & 0xFF;
+
+            // Step 1: Rotate left by 4 bits (swap high and low nibble)
+            int rotated = ((original << 4) & 0xF0) | ((original >>> 4) & 0x0F);
+
+            // Step 2: XOR with 0xA5
+            result[i] = (byte) (rotated ^ 0xA5);
+        }
+
+        return result;
     }
 
     @Override
