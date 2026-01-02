@@ -31,6 +31,7 @@ public enum TdsVersion {
      * Version 7.4
      */
     V7_4(0x74000004);
+//    V7_4(0x74070004);
 
     private final int value;
 

@@ -47,7 +47,7 @@ public class PreLoginPayload extends Payload {
         this.instance = 0;
         this.threadId = Thread.currentThread().getId();
         this.mars = 0;
-        this.fedAuth = 1;
+        this.fedAuth = 0;
         buildBufferInternal();
     }
 
@@ -75,10 +75,10 @@ public class PreLoginPayload extends Payload {
 
         options.add(new Object[] { (byte)0x00, versionBytes });    // Version
         options.add(new Object[] { (byte)0x01, encryptionBytes }); // Encryption
-        options.add(new Object[] { (byte)0x02, instanceBytes });   // Instance
-        options.add(new Object[] { (byte)0x03, threadIdBytes });   // ThreadID
-        options.add(new Object[] { (byte)0x04, marsBytes });       // MARS
-        options.add(new Object[] { (byte)0x06, fedAuthBytes });    // FedAuth
+//        options.add(new Object[] { (byte)0x02, instanceBytes });   // Instance
+//        options.add(new Object[] { (byte)0x03, threadIdBytes });   // ThreadID
+//        options.add(new Object[] { (byte)0x04, marsBytes });       // MARS
+//        options.add(new Object[] { (byte)0x06, fedAuthBytes });    // FedAuth
 
         // 3. Calculate Sizes
         // Header is: (5 bytes * count) + 1 byte for Terminator
