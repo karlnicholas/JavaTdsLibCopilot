@@ -3,158 +3,173 @@
 
 package org.tdslib.javatdslib.payloads.login7;
 
+// === Package-private enums (allowed in same file as the public class) ===
+
+enum OptionEndian {
+    LittleEndian, BigEndian
+}
+
+enum OptionCharset {
+    Ascii, Ebcdic
+}
+
+enum OptionFloat {
+    IEEE, VAX, ND5000
+}
+
+enum OptionBcpDumpload {
+    On, Off
+}
+
+enum OptionUseDb {
+    On, Off
+}
+
+enum OptionInitDb {
+    Warn, Fatal
+}
+
+enum OptionLangWarn {
+    On, Off
+}
+
 /**
- * Represents the OptionFlags1 byte in the TDS LOGIN7 message.
- * See MS-TDS specification section 2.2.6.4 for bit meanings.
+ * TDS Login7 OptionFlags1
+ * Default value set to 0xE0 as requested
  */
 public final class OptionFlags1 {
 
-    // Bit masks according to MS-TDS
-    private static final int BIT_ENDIAN         = 0x01;  // 1 = LittleEndian (x86), 0 = BigEndian (68000)
-    private static final int BIT_CHARSET        = 0x02;  // 1 = EBCDIC, 0 = ASCII
-    private static final int BIT_FLOAT_VAX      = 0x04;  // VAX floating point
-    private static final int BIT_FLOAT_ND5000   = 0x08;  // ND5000 floating point
-    private static final int BIT_BCP_DUMPLOAD   = 0x10;  // 1 = BCP/Dumpload ON
-    private static final int BIT_USE_DB         = 0x20;  // 1 = UseDB ON
-    private static final int BIT_INIT_DB_FATAL  = 0x40;  // 1 = Fatal on init db change, 0 = Warn
-    private static final int BIT_SET_LANG_WARN  = 0x80;  // 1 = Warn on language change
-
-    public enum Endianness { LittleEndian, BigEndian }
-    public enum Charset    { Ascii, Ebcdic }
-    public enum FloatType  { IEEE, VAX, ND5000 }
-    public enum BcpDumpload{ On, Off }
-    public enum UseDb      { On, Off }
-    public enum InitDb     { Warn, Fatal }
-    public enum LangWarn   { On, Off }
+    private static final int OPTION_ENDIAN_BIT        = 0x01;
+    private static final int OPTION_CHARSET_BIT       = 0x02;
+    private static final int OPTION_FLOAT_VAX_BIT     = 0x04;
+    private static final int OPTION_FLOAT_ND5000_BIT  = 0x08;
+    private static final int OPTION_BCP_DUMPLOAD_BIT  = 0x10;
+    private static final int OPTION_USE_DB_BIT        = 0x20;
+    private static final int OPTION_INIT_DB_BIT       = 0x40;
+    private static final int OPTION_LANG_WARN_BIT     = (byte) 0x80;
 
     private byte value;
 
-    /**
-     * Default constructor - produces a value typical for modern clients
-     * (little-endian, ASCII, IEEE float, BCP on, etc.)
-     * This usually results in 0xF0 or 0xE0 — both work well with SQL Server 2022.
-     */
-    public OptionFlags1() {
-        this.value = (byte) 0xE0;  // Preferred safe default for simple logins
+    // ── Getters ─────────────────────────────────────────────────────────────
 
-        // Or explicitly set (same result):
-        // setEndian(Endianness.LittleEndian);
-        // setCharset(Charset.Ascii);
-        // setFloat(FloatType.IEEE);
-        // setBcpDumpload(BcpDumpload.On);
-        // setUseDb(UseDb.Off);
-        // setInitDb(InitDb.Warn);
-        // setLangWarn(LangWarn.On);
+    public byte getValue() {
+        return value;
+    }
+
+    public OptionEndian getEndian() {
+        return (value & OPTION_ENDIAN_BIT) != 0 ? OptionEndian.BigEndian : OptionEndian.LittleEndian;
+    }
+
+    public OptionCharset getCharset() {
+        return (value & OPTION_CHARSET_BIT) != 0 ? OptionCharset.Ebcdic : OptionCharset.Ascii;
+    }
+
+    public OptionFloat getFloat() {
+        if ((value & OPTION_FLOAT_VAX_BIT) != 0)    return OptionFloat.VAX;
+        if ((value & OPTION_FLOAT_ND5000_BIT) != 0) return OptionFloat.ND5000;
+        return OptionFloat.IEEE;
+    }
+
+    public OptionBcpDumpload getBcpDumpload() {
+        return (value & OPTION_BCP_DUMPLOAD_BIT) != 0 ? OptionBcpDumpload.Off : OptionBcpDumpload.On;
+    }
+
+    public OptionUseDb getUseDb() {
+        return (value & OPTION_USE_DB_BIT) != 0 ? OptionUseDb.Off : OptionUseDb.On;
+    }
+
+    public OptionInitDb getInitDb() {
+        return (value & OPTION_INIT_DB_BIT) != 0 ? OptionInitDb.Fatal : OptionInitDb.Warn;
+    }
+
+    public OptionLangWarn getLangWarn() {
+        return (value & OPTION_LANG_WARN_BIT) != 0 ? OptionLangWarn.On : OptionLangWarn.Off;
+    }
+
+    // ── Setters ─────────────────────────────────────────────────────────────
+
+    public void setEndian(OptionEndian v) {
+        if (v == OptionEndian.LittleEndian) value &= ~OPTION_ENDIAN_BIT;
+        else                                value |=  OPTION_ENDIAN_BIT;
+    }
+
+    public void setCharset(OptionCharset v) {
+        if (v == OptionCharset.Ascii) value &= ~OPTION_CHARSET_BIT;
+        else                          value |=  OPTION_CHARSET_BIT;
+    }
+
+    public void setFloat(OptionFloat v) {
+        value &= ~(OPTION_FLOAT_VAX_BIT | OPTION_FLOAT_ND5000_BIT);
+        if (v == OptionFloat.VAX)    value |= OPTION_FLOAT_VAX_BIT;
+        if (v == OptionFloat.ND5000) value |= OPTION_FLOAT_ND5000_BIT;
+    }
+
+    public void setBcpDumpload(OptionBcpDumpload v) {
+        if (v == OptionBcpDumpload.On) value &= ~OPTION_BCP_DUMPLOAD_BIT;
+        else                           value |=  OPTION_BCP_DUMPLOAD_BIT;
+    }
+
+    public void setUseDb(OptionUseDb v) {
+        if (v == OptionUseDb.On) value &= ~OPTION_USE_DB_BIT;
+        else                     value |=  OPTION_USE_DB_BIT;
+    }
+
+    public void setInitDb(OptionInitDb v) {
+        if (v == OptionInitDb.Warn) value &= ~OPTION_INIT_DB_BIT;
+        else                        value |=  OPTION_INIT_DB_BIT;
+    }
+
+    public void setLangWarn(OptionLangWarn v) {
+        if (v == OptionLangWarn.Off) value &= ~OPTION_LANG_WARN_BIT;
+        else                         value |=  OPTION_LANG_WARN_BIT;
+    }
+
+    // ── Constructors ────────────────────────────────────────────────────────
+
+    public OptionFlags1() {
+        this.value = (byte) 0xE0;   // ← default value you wanted
     }
 
     public OptionFlags1(byte value) {
         this.value = value;
     }
 
-    public Endianness getEndianness() {
-        return (value & BIT_ENDIAN) != 0 ? Endianness.LittleEndian : Endianness.BigEndian;
-    }
-
-    public void setEndianness(Endianness e) {
-        if (e == Endianness.LittleEndian) {
-            value |= BIT_ENDIAN;
-        } else {
-            value &= ~BIT_ENDIAN;
-        }
-    }
-
-    public Charset getCharset() {
-        return (value & BIT_CHARSET) != 0 ? Charset.Ebcdic : Charset.Ascii;
-    }
-
-    public void setCharset(Charset c) {
-        if (c == Charset.Ebcdic) {
-            value |= BIT_CHARSET;
-        } else {
-            value &= ~BIT_CHARSET;
-        }
-    }
-
-    public FloatType getFloat() {
-        if ((value & BIT_FLOAT_VAX) != 0) return FloatType.VAX;
-        if ((value & BIT_FLOAT_ND5000) != 0) return FloatType.ND5000;
-        return FloatType.IEEE;
-    }
-
-    public void setFloat(FloatType f) {
-        value &= ~(BIT_FLOAT_VAX | BIT_FLOAT_ND5000);
-        if (f == FloatType.VAX)     value |= BIT_FLOAT_VAX;
-        else if (f == FloatType.ND5000) value |= BIT_FLOAT_ND5000;
-    }
-
-    public BcpDumpload getBcpDumpload() {
-        return (value & BIT_BCP_DUMPLOAD) != 0 ? BcpDumpload.On : BcpDumpload.Off;
-    }
-
-    public void setBcpDumpload(BcpDumpload v) {
-        if (v == BcpDumpload.On) {
-            value |= BIT_BCP_DUMPLOAD;
-        } else {
-            value &= ~BIT_BCP_DUMPLOAD;
-        }
-    }
-
-    public UseDb getUseDb() {
-        return (value & BIT_USE_DB) != 0 ? UseDb.On : UseDb.Off;
-    }
-
-    public void setUseDb(UseDb v) {
-        if (v == UseDb.On) {
-            value |= BIT_USE_DB;
-        } else {
-            value &= ~BIT_USE_DB;
-        }
-    }
-
-    public InitDb getInitDb() {
-        return (value & BIT_INIT_DB_FATAL) != 0 ? InitDb.Fatal : InitDb.Warn;
-    }
-
-    public void setInitDb(InitDb v) {
-        if (v == InitDb.Fatal) {
-            value |= BIT_INIT_DB_FATAL;
-        } else {
-            value &= ~BIT_INIT_DB_FATAL;
-        }
-    }
-
-    public LangWarn getLangWarn() {
-        return (value & BIT_SET_LANG_WARN) != 0 ? LangWarn.On : LangWarn.Off;
-    }
-
-    public void setLangWarn(LangWarn v) {
-        if (v == LangWarn.On) {
-            value |= BIT_SET_LANG_WARN;
-        } else {
-            value &= ~BIT_SET_LANG_WARN;
-        }
-    }
+    // ── Utilities ───────────────────────────────────────────────────────────
 
     public byte toByte() {
         return value;
     }
 
-    public static OptionFlags1 fromByte(byte b) {
-        return new OptionFlags1(b);
+    public static OptionFlags1 fromByte(byte value) {
+        return new OptionFlags1(value);
     }
 
     @Override
     public String toString() {
-        return String.format(
-                "OptionFlags1[0x%02X] (Endian=%s, Charset=%s, Float=%s, BCP=%s, UseDB=%s, InitDB=%s, LangWarn=%s)",
-                Byte.toUnsignedInt(value),
-                getEndianness(),
-                getCharset(),
-                getFloat(),
-                getBcpDumpload(),
-                getUseDb(),
-                getInitDb(),
-                getLangWarn()
-        );
+        String bin = String.format("%8s", Integer.toBinaryString(Byte.toUnsignedInt(value)))
+                .replace(' ', '0');
+
+        return "OptionFlags1[0x%02X | 0b%s] (Endian=%s, Charset=%s, Float=%s, Bcp=%s, UseDb=%s, InitDb=%s, LangWarn=%s)"
+                .formatted(
+                        Byte.toUnsignedInt(value),
+                        bin,
+                        getEndian(),
+                        getCharset(),
+                        getFloat(),
+                        getBcpDumpload(),
+                        getUseDb(),
+                        getInitDb(),
+                        getLangWarn()
+                );
+    }
+
+    // Quick test main method
+    public static void main(String[] args) {
+        OptionFlags1 flags = new OptionFlags1();
+        System.out.println(flags);
+
+        flags.setLangWarn(OptionLangWarn.Off);
+        flags.setBcpDumpload(OptionBcpDumpload.Off);
+        System.out.println(flags);
     }
 }
