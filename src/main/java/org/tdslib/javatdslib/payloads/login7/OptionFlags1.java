@@ -35,7 +35,7 @@ enum OptionLangWarn {
 
 /**
  * TDS Login7 OptionFlags1
- * Default value set to 0xE0 as requested
+ * Default constructor configures flags via setters → results in 0xE0
  */
 public final class OptionFlags1 {
 
@@ -126,8 +126,22 @@ public final class OptionFlags1 {
 
     // ── Constructors ────────────────────────────────────────────────────────
 
+    /**
+     * Default constructor - sets values using setters
+     * Results in value = 0xE0 (binary: 11100000)
+     */
     public OptionFlags1() {
-        this.value = (byte) 0xE0;   // ← default value you wanted
+        // Start from clean state (all bits 0)
+        this.value = 0;
+
+        // Apply the desired defaults (these match the original 0xE0 behavior)
+        setEndian(OptionEndian.LittleEndian);      // bit 0 = 0
+        setCharset(OptionCharset.Ascii);           // bit 1 = 0
+        setFloat(OptionFloat.IEEE);                // bits 2+3 = 00
+        setBcpDumpload(OptionBcpDumpload.On);      // bit 4 = 0
+        setUseDb(OptionUseDb.Off);                  // bit 5 = 1
+        setInitDb(OptionInitDb.Fatal);              // bit 6 = 1
+        setLangWarn(OptionLangWarn.On);            // bit 7 = 1 → highest bit set
     }
 
     public OptionFlags1(byte value) {
@@ -166,10 +180,6 @@ public final class OptionFlags1 {
     // Quick test main method
     public static void main(String[] args) {
         OptionFlags1 flags = new OptionFlags1();
-        System.out.println(flags);
-
-        flags.setLangWarn(OptionLangWarn.Off);
-        flags.setBcpDumpload(OptionBcpDumpload.Off);
-        System.out.println(flags);
+        System.out.println(flags);  // Should print ... 0xE0 | 0b11100000 ...
     }
 }
