@@ -5,6 +5,10 @@ package org.tdslib.javatdslib;
 
 import org.tdslib.javatdslib.io.MessageHandler;
 import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.packets.PacketType;
+import org.tdslib.javatdslib.payloads.login7.Login7Options;
+import org.tdslib.javatdslib.payloads.login7.Login7Payload;
+import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
@@ -85,13 +89,9 @@ public class TdsClient implements ConnectionContext {
     }
 
     private void preLoginInternal() throws IOException {
-        ByteBuffer preLoginPayload = buildPreLoginPayload(true, false);
-        Message preLoginMsg = new Message(
-                (byte) 0x12, (byte) 0x01, preLoginPayload.capacity() + 8,
-                (short) 0, (short) 1, preLoginPayload, System.nanoTime(), null
-        );
+        Message msg = Message.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload(true, false));
 
-        messageHandler.sendMessage(preLoginMsg);
+        messageHandler.sendMessage(msg);
 
         List<Message> responses = messageHandler.receiveFullResponse();
 
@@ -133,17 +133,32 @@ public class TdsClient implements ConnectionContext {
     private ByteBuffer buildPreLoginPayload(boolean encryptIfNeeded, boolean supportMars) {
         // Implement your PreLogin payload builder here
         // For now, placeholder
-        ByteBuffer payload = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN);
-        payload.flip();
-        return payload;
+        PreLoginPayload preLoginPayload = new PreLoginPayload(false);
+        return preLoginPayload.buildBuffer();
+
+//        ByteBuffer payload = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN);
+//        payload.flip();
+//        return payload;
     }
 
     private ByteBuffer buildLogin7Payload(String username, String password, String database, String appName) {
         // Implement your Login7 payload builder here
-        // For now, placeholder
-        ByteBuffer payload = ByteBuffer.allocate(512).order(ByteOrder.LITTLE_ENDIAN);
-        payload.flip();
-        return payload;
+        Login7Payload login7Payload = new Login7Payload(new Login7Options());
+        login7Payload.hostname = "192.168.1.121";
+        login7Payload.serverName = "MyServerName";
+        login7Payload.appName = "MyAppName";
+        login7Payload.language = "us_english";
+        login7Payload.database = "master";
+        login7Payload.username = "reactnonreact";
+        login7Payload.password = "reactnonreact";
+
+//        login7Payload..TypeFlags.AccessIntent = TypeFlags.OptionAccessIntent.READ_WRITE;
+        return login7Payload.buildBuffer();
+
+//        Message login7Message = Message.createRequest(PacketType.LOGIN7.getValue(), );
+//
+//        payload.flip();
+//        return payload;
     }
 
     private PreLoginResponse processPreLoginResponse(List<Message> packets) {
