@@ -30,7 +30,7 @@ import static org.tdslib.javatdslib.tokens.envchange.EnvChangeType.PACKET_SIZE_A
  * High-level TDS client facade.
  * Provides a simple connect + execute interface, hiding protocol details.
  */
-public class TdsClient implements ConnectionContext {
+public class TdsClient implements ConnectionContext, AutoCloseable {
 
     private final MessageHandler messageHandler;
     private final TcpTransport transport;

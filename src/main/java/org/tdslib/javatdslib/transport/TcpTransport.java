@@ -1,29 +1,31 @@
 package org.tdslib.javatdslib.transport;
 
-import java.io.*;
+import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
 /**
  * Low-level TCP transport for TDS communication.
- * Handles raw byte I/O over TCP (with optional future TLS support).
+ * Handles raw byte I/O over TCP (blocking mode).
  */
-public class TcpTransport implements Closeable {
+public class TcpTransport implements AutoCloseable {
 
     private final SocketChannel socketChannel;
-    private final Socket socket;
 
     private final int connectTimeoutMs = 30_000;
     private final int readTimeoutMs = 60_000;
 
     public TcpTransport(String host, int port) throws IOException {
-        this.socket = new Socket();
-        this.socket.setSoTimeout(readTimeoutMs);
-        this.socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
-        this.socketChannel = socket.getChannel();
+        this.socketChannel = SocketChannel.open();
         this.socketChannel.configureBlocking(true);
+        this.socketChannel.socket().setSoTimeout(readTimeoutMs);
+
+        // Connect with timeout
+        if (!socketChannel.connect(new InetSocketAddress(host, port))) {
+            // If non-blocking connect, finish it (but we use blocking)
+            socketChannel.finishConnect();
+        }
     }
 
     /**
@@ -43,43 +45,40 @@ public class TcpTransport implements Closeable {
         while (buffer.hasRemaining()) {
             int read = socketChannel.read(buffer);
             if (read == -1) {
-                throw new EOFException("Unexpected end of stream");
+                throw new IOException("Unexpected end of stream");
             }
             if (read == 0) {
-                // Should not happen in blocking mode, but safety check
+                // Rare in blocking mode, but safety
                 Thread.onSpinWait();
             }
         }
     }
 
     /**
-     * Flushes any pending data (usually no-op for TCP sockets).
+     * Flushes any pending data (no-op for plain TCP).
      */
     public void flush() {
-        // TCP sockets typically flush automatically, but can be overridden for TLS
+        // No-op for plain TCP sockets
     }
 
     /**
-     * Closes the underlying socket.
+     * Closes the underlying channel/socket.
      */
     @Override
     public void close() throws IOException {
-        socket.close();
+        socketChannel.close();
     }
 
-    /**
-     * Placeholder for future TLS support.
-     */
     public boolean isSecure() {
-        return false; // extend for SSLSocketChannel later
+        return false; // extend for TLS later
     }
 
     public int getCurrentPacketSize() {
-        return 4096; // default TDS packet size; can be updated after ENVCHANGE
+        return 4096; // default; update after ENVCHANGE
     }
 
-    // Optional: methods to update packet size after login/env change
     public void setPacketSize(int newSize) {
-        // Currently no-op; in future can adjust read/write buffers
+        // Future: adjust read/write buffers if needed
+        // Currently no-op
     }
 }

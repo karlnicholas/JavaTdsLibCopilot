@@ -13,12 +13,12 @@ public class TdsPacketWriter {
     /**
      * Builds one or more TDS packets from a payload.
      *
-     * @param packetType     TDS message type (e.g. 0x01 for SQL Batch)
-     * @param statusFlags    status flags (usually 0x01 for last packet)
-     * @param payload        the logical message payload
-     * @param startingPacketId starting packet number
-     * @param maxPacketSize  maximum allowed packet size (from ENVCHANGE or default 4096)
-     * @return list of ready-to-send ByteBuffers (each is a full packet)
+     * @param packetType       TDS message type (e.g. 0x01 for SQL Batch, 0x10 for Login7)
+     * @param statusFlags      status flags (usually 0x01 for last packet)
+     * @param payload          the logical message payload (positioned at 0)
+     * @param startingPacketId starting packet number (usually 1 for client requests)
+     * @param maxPacketSize    maximum allowed packet size (default 4096)
+     * @return list of ready-to-send ByteBuffers (each is a full 8-byte header + payload chunk)
      */
     public List<ByteBuffer> buildPackets(
             byte packetType,
@@ -30,41 +30,44 @@ public class TdsPacketWriter {
         List<ByteBuffer> packets = new ArrayList<>();
         short packetId = startingPacketId;
 
-        // Max payload per packet = maxPacketSize - 8 (header)
+        // Max payload per packet = maxPacketSize - 8 (fixed header size)
         int maxPayloadPerPacket = maxPacketSize - 8;
 
-        payload = payload.asReadOnlyBuffer().order(ByteOrder.BIG_ENDIAN);
+        payload = payload.asReadOnlyBuffer();
         payload.rewind();
 
-        while (payload.hasRemaining()) {
+        boolean isFirst = true;
+
+        while (payload.hasRemaining() || isFirst) { // force at least one packet even if empty
+            isFirst = false;
+
             int thisPayloadSize = Math.min(maxPayloadPerPacket, payload.remaining());
 
-            // For all but the last packet, clear EOM flag
-            byte thisStatus = (byte) (packetType == payload.remaining() ? statusFlags : statusFlags & ~0x01);
+            // Status: last packet gets full flags with EOM, others clear EOM bit (0x01)
+            byte thisStatus = (byte) (payload.hasRemaining() ? (statusFlags & ~0x01) : statusFlags | 0x01);
 
+            // Allocate exactly 8-byte header + payload chunk
             ByteBuffer packet = ByteBuffer.allocate(8 + thisPayloadSize)
                     .order(ByteOrder.BIG_ENDIAN);
 
-            packet.put(packetType);
-            packet.put(thisStatus);
-            packet.putShort((short) (8 + thisPayloadSize)); // length
-            packet.putShort((short) 0); // SPID (usually 0 for client)
-            packet.putShort(packetId++);
-            packet.put((byte) 0); // window
+            packet.put(packetType);                    // Byte 0: Type
+            packet.put(thisStatus);                    // Byte 1: Status (EOM on last)
+            packet.putShort((short) (8 + thisPayloadSize)); // Bytes 2-3: Length (BE)
+            packet.putShort((short) 0);                // Bytes 4-5: SPID (0 for client)
+            packet.put((byte) (packetId & 0xFF));      // Byte 6: Packet Number (1 byte)
+            packet.put((byte) 0);                      // Byte 7: Window (always 0)
 
-            // Copy payload chunk
-            ByteBuffer chunk = payload.slice().limit(thisPayloadSize);
-            packet.put(chunk);
-            payload.position(payload.position() + thisPayloadSize);
+            // Copy payload chunk (payload is LE, but copy preserves bytes as is)
+            if (thisPayloadSize > 0) {
+                ByteBuffer chunk = payload.slice().limit(thisPayloadSize);
+                packet.put(chunk);
+                payload.position(payload.position() + thisPayloadSize);
+            }
 
             packet.flip();
             packets.add(packet);
-        }
 
-        // Ensure last packet has EOM flag set
-        if (!packets.isEmpty()) {
-            ByteBuffer last = packets.get(packets.size() - 1);
-            last.put(1, (byte) (last.get(1) | 0x01)); // force EOM
+            packetId++;
         }
 
         return packets;
