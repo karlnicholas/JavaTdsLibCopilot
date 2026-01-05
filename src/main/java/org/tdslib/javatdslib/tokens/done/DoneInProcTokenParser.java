@@ -1,35 +1,36 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.done;
 
+import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
 
+import java.nio.ByteBuffer;
+
 /**
- * DoneInProc token parser.
+ * Parser for DONE_IN_PROC token (0xFF).
  */
-public class DoneInProcTokenParser extends TokenParser {
+public class DoneInProcTokenParser implements TokenParser {
 
     @Override
-    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
-        // Read Status (2 bytes)
-        int statusValue = handler.readUInt16LE();
-        DoneStatus doneStatus = DoneStatus.fromValue(statusValue);
-
-        // Read Current Command (2 bytes)
-        int currentCommand = handler.readUInt16LE();
-
-        // Read Row Count (size depends on TDS version)
-        long rowCount;
-        if (handler.getOptions().getTdsVersion().ordinal() > TdsVersion.V7_2.ordinal()) {
-            rowCount = handler.readUInt64LE();
-        } else {
-            rowCount = handler.readUInt32LE();
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+        if (tokenType != TokenType.DONE_IN_PROC.getValue()) {
+            throw new IllegalArgumentException("Expected DONE_IN_PROC token, got 0x" + Integer.toHexString(tokenType & 0xFF));
         }
 
-        return new DoneInProcToken(doneStatus, currentCommand, rowCount);
+        int statusValue = Short.toUnsignedInt(payload.getShort());
+        DoneStatus status = DoneStatus.fromValue(statusValue);
+
+        int currentCommand = Short.toUnsignedInt(payload.getShort());
+
+        long rowCount;
+        if (context.getTdsVersion().ordinal() >= TdsVersion.V7_2.ordinal()) {
+            rowCount = payload.getLong();
+        } else {
+            rowCount = Integer.toUnsignedLong(payload.getInt());
+        }
+
+        return new DoneInProcToken(status, currentCommand, rowCount);
     }
 }

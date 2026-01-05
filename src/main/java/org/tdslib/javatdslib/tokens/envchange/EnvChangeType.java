@@ -7,13 +7,12 @@ public enum EnvChangeType {
     PACKET_SIZE((byte) 1),
     DATABASE((byte) 2),
     LANGUAGE((byte) 3),
-    PACKET_SIZE_ALT((byte) 4), // some servers use 4 instead of 1
+    PACKET_SIZE_ALT((byte) 4),
     COLLATION((byte) 5),
     BEGIN_TRAN((byte) 6),
     COMMIT_TRAN((byte) 7),
     ROLLBACK_TRAN((byte) 8),
     ANSI_SETTINGS((byte) 9),
-    // Add more as needed...
 
     UNKNOWN((byte) -1);
 
@@ -21,6 +20,10 @@ public enum EnvChangeType {
 
     EnvChangeType(byte value) {
         this.value = value;
+    }
+
+    public byte getValue() {
+        return value;
     }
 
     public static EnvChangeType fromByte(byte b) {

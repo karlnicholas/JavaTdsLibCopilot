@@ -1,45 +1,15 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.done;
 
 /**
- * Done status for Done, DoneProc, DoneInProc.
+ * Status flags for DONE family tokens.
  */
 public enum DoneStatus {
-    /**
-     * Final.
-     */
     FINAL(0x0000),
-
-    /**
-     * More.
-     */
     MORE(0x0001),
-
-    /**
-     * Error.
-     */
     ERROR(0x0002),
-
-    /**
-     * In Transaction.
-     */
     IN_XACT(0x0004),
-
-    /**
-     * Count.
-     */
     COUNT(0x0010),
-
-    /**
-     * Attention.
-     */
     ATTN(0x0020),
-
-    /**
-     * Server Error.
-     */
     SERVER_ERROR(0x0100);
 
     private final int value;
@@ -53,11 +23,20 @@ public enum DoneStatus {
     }
 
     public static DoneStatus fromValue(int value) {
-        for (DoneStatus status : values()) {
-            if (status.value == value) {
-                return status;
+        for (DoneStatus s : values()) {
+            if ((value & s.value) == s.value) {
+                return s;
             }
         }
-        return null;
+        return FINAL;
+    }
+
+    public boolean isSet(int combined) {
+        return (combined & value) != 0;
+    }
+
+    @Override
+    public String toString() {
+        return name() + " (0x" + Integer.toHexString(value) + ")";
     }
 }

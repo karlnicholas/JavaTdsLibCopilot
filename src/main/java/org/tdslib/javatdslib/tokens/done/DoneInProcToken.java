@@ -1,15 +1,12 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-
 package org.tdslib.javatdslib.tokens.done;
 
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Token indicating the completion status of a statement in a procedure.
+ * DONE_IN_PROC token (0xFF) - completion of a statement inside a stored procedure.
  */
-public final class DoneInProcToken extends DoneToken {
+public final class DoneInProcToken extends AbstractDoneToken {
+
     public DoneInProcToken(DoneStatus status, int currentCommand, long rowCount) {
         super(status, currentCommand, rowCount);
     }

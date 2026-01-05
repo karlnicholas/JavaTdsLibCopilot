@@ -1,15 +1,12 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-
 package org.tdslib.javatdslib.tokens.done;
 
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Statement in a procedure done.
+ * DONE_PROC token (0xFE) - completion of a stored procedure or RPC.
  */
-public final class DoneProcToken extends DoneToken {
+public final class DoneProcToken extends AbstractDoneToken {
+
     public DoneProcToken(DoneStatus status, int currentCommand, long rowCount) {
         super(status, currentCommand, rowCount);
     }

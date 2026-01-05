@@ -1,19 +1,19 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.featureextack;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Feature extension acknowledgement token (skeleton).
+ * FEATURE_EXT_ACK token (0xAE) - acknowledges feature extensions (e.g., FedAuth).
  */
 public final class FeatureExtAckToken extends Token {
-    private final int featureId;
 
-    public FeatureExtAckToken(int featureId) {
+    private final byte featureId;
+    private final byte[] data; // Raw data bytes following the ID
+
+    public FeatureExtAckToken(byte featureId, byte[] data) {
         this.featureId = featureId;
+        this.data = data != null ? data.clone() : new byte[0];
     }
 
     @Override
@@ -21,12 +21,25 @@ public final class FeatureExtAckToken extends Token {
         return TokenType.FEATURE_EXT_ACK;
     }
 
-    public int getFeatureId() {
+    /**
+     * Gets the feature extension ID (e.g., FED_AUTH = 0x02).
+     */
+    public byte getFeatureId() {
         return featureId;
+    }
+
+    /**
+     * Gets the raw data bytes associated with this feature (may be empty).
+     */
+    public byte[] getData() {
+        return data.clone();
     }
 
     @Override
     public String toString() {
-        return "FeatureExtAckToken[FeatureId=" + featureId + "]";
+        return "FeatureExtAckToken{" +
+                "featureId=0x" + String.format("%02X", featureId) +
+                ", dataLength=" + data.length +
+                '}';
     }
 }

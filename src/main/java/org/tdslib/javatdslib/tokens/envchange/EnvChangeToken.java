@@ -5,6 +5,7 @@ import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
  * Represents an ENVCHANGE token (0xE3) sent by the server.
+ * Contains environment change notifications such as database name, packet size, language, collation, etc.
  */
 public class EnvChangeToken extends Token {
 
@@ -41,6 +42,10 @@ public class EnvChangeToken extends Token {
         return newValue;
     }
 
+    /**
+     * Convenience method: interpret the new value as an integer (useful for packet size).
+     * Returns -1 if parsing fails.
+     */
     public int getNewValueAsInt() {
         try {
             return Integer.parseInt(newValue);

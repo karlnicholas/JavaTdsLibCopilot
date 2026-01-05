@@ -16,4 +16,6 @@ public interface ConnectionContext {
      * Called automatically when a packet with resetConnection flag is seen.
      */
     void resetToDefaults();
+
+    TdsVersion getTdsVersion();  // ← ADD THIS
 }

@@ -1,34 +1,33 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.featureextack;
 
+import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
 
+import java.nio.ByteBuffer;
+
 /**
- * Parser for FEATURE_EXT_ACK token (skeleton, not implemented).
+ * Parser for FEATURE_EXT_ACK token (0xAE).
+ * Eagerly decodes the feature ID and its associated data.
  */
-public class FeatureExtAckTokenParser extends TokenParser {
+public class FeatureExtAckTokenParser implements TokenParser {
 
     @Override
-    public Token parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler) {
-        // Read Length (2 bytes)
-        int length = tokenStreamHandler.readUInt16LE();
-
-        // Read the raw payload bytes
-        byte[] bytes = tokenStreamHandler.readBytes(length);
-
-        // Parse the first 4 bytes as a Little-Endian integer (simulating the skeleton logic)
-        int featureData = 0;
-        if (bytes.length >= 4) {
-            featureData = (bytes[0] & 0xFF) |
-                    ((bytes[1] & 0xFF) << 8) |
-                    ((bytes[2] & 0xFF) << 16) |
-                    ((bytes[3] & 0xFF) << 24);
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+        if (tokenType != TokenType.FEATURE_EXT_ACK.getValue()) {
+            throw new IllegalArgumentException(
+                    "Expected FEATURE_EXT_ACK token (0xAE), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }
 
-        return new FeatureExtAckToken(featureData);
+        // Feature extension ID (1 byte)
+        byte featureId = payload.get();
+
+        // Remaining bytes are the feature-specific data (variable length)
+        int remaining = payload.remaining();
+        byte[] data = new byte[remaining];
+        payload.get(data);
+
+        return new FeatureExtAckToken(featureId, data);
     }
 }

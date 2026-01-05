@@ -1,15 +1,13 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.returnstatus;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Return status token.
+ * Return status token (0x79) - contains the return value from a stored procedure or RPC.
  */
 public final class ReturnStatusToken extends Token {
+
     private final int value;
 
     public ReturnStatusToken(int value) {
@@ -27,6 +25,6 @@ public final class ReturnStatusToken extends Token {
 
     @Override
     public String toString() {
-        return "ReturnStatusToken[Value=" + value + "]";
+        return "ReturnStatusToken{value=" + value + "}";
     }
 }

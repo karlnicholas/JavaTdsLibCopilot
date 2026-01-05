@@ -1,16 +1,14 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-
 package org.tdslib.javatdslib.tokens.error;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Error message.
+ * Represents an ERROR token (0xAA) sent by the server.
+ * Contains SQL error details including number, severity, message, etc.
  */
 public class ErrorToken extends Token {
+
     private final long number;
     private final byte state;
     private final byte severity;
@@ -19,81 +17,75 @@ public class ErrorToken extends Token {
     private final String procName;
     private final long lineNumber;
 
-    /**
-     * Token type.
-     */
+    public ErrorToken(
+            long number,
+            byte state,
+            byte severity,
+            String message,
+            String serverName,
+            String procName,
+            long lineNumber) {
+
+        this.number = number;
+        this.state = state;
+        this.severity = severity;
+        this.message = message != null ? message.trim() : "";
+        this.serverName = serverName != null ? serverName.trim() : "";
+        this.procName = procName != null ? procName.trim() : "";
+        this.lineNumber = lineNumber;
+    }
+
     @Override
     public TokenType getType() {
         return TokenType.ERROR;
     }
 
-    /**
-     * Error number.
-     */
     public long getNumber() {
         return number;
     }
 
-    /**
-     * State.
-     */
     public byte getState() {
         return state;
     }
 
-    /**
-     * Severity.
-     */
     public byte getSeverity() {
         return severity;
     }
 
-    /**
-     * Message.
-     */
     public String getMessage() {
         return message;
     }
 
-    /**
-     * Server name.
-     */
     public String getServerName() {
         return serverName;
     }
 
-    /**
-     * Process name.
-     */
     public String getProcName() {
         return procName;
     }
 
-    /**
-     * Line number.
-     */
     public long getLineNumber() {
         return lineNumber;
     }
 
-    /**
-     * Creates a new instance of the token.
-     */
-    public ErrorToken(long number, byte state, byte severity, String message, String serverName, String procName, long lineNumber) {
-        this.number = number;
-        this.state = state;
-        this.severity = severity;
-        this.message = message;
-        this.serverName = serverName;
-        this.procName = procName;
-        this.lineNumber = lineNumber;
+    public boolean isInfoMessage() {
+        return severity <= 10;
     }
 
-    /**
-     * Gets a human readable string representation of this token.
-     */
+    public boolean isError() {
+        return severity > 10;
+    }
+
     @Override
     public String toString() {
-        return "ErrorToken[Number=" + number + ", State=" + state + ", Severity=" + severity + ", Message=" + message + ", ServerName=" + serverName + ", ProcName=" + procName + ", LineNumber=" + lineNumber + "]";
+        return "ErrorToken{" +
+                "number=" + number +
+                ", severity=" + severity +
+                ", state=" + state +
+                ", message='" + message + '\'' +
+                ", server='" + serverName + '\'' +
+                ", proc='" + procName + '\'' +
+                ", line=" + lineNumber +
+                '}';
     }
 }

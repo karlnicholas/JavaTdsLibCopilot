@@ -41,6 +41,13 @@ public class TdsClient implements ConnectionContext {
     private String currentDatabase = null;
     private int packetSize = 4096;
 
+    private TdsVersion tdsVersion = TdsVersion.V7_4; // default
+
+    @Override
+    public TdsVersion getTdsVersion() {
+        return tdsVersion;
+    }
+
     @Override
     public String getCurrentDatabase() {
         return currentDatabase;
