@@ -1,22 +1,25 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-
 package org.tdslib.javatdslib.tokens.envchange;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Environment change token.
+ * Represents an ENVCHANGE token (0xE3) sent by the server.
  */
 public class EnvChangeToken extends Token {
-    private final EnvChangeTokenSubType subType;
+
+    private final EnvChangeType changeType;
     private final String oldValue;
     private final String newValue;
 
+    public EnvChangeToken(EnvChangeType changeType, String oldValue, String newValue) {
+        this.changeType = changeType != null ? changeType : EnvChangeType.UNKNOWN;
+        this.oldValue = oldValue != null ? oldValue.trim() : "";
+        this.newValue = newValue != null ? newValue.trim() : "";
+    }
+
     /**
-     * Token type.
+     * Returns the general TDS token type (always ENV_CHANGE).
      */
     @Override
     public TokenType getType() {
@@ -24,40 +27,34 @@ public class EnvChangeToken extends Token {
     }
 
     /**
-     * Token sub type.
+     * Returns the specific subtype of this ENVCHANGE (e.g. PACKET_SIZE, DATABASE, etc.).
      */
-    public EnvChangeTokenSubType getSubType() {
-        return subType;
+    public EnvChangeType getChangeType() {
+        return changeType;
     }
 
-    /**
-     * Old value.
-     */
     public String getOldValue() {
         return oldValue;
     }
 
-    /**
-     * New value.
-     */
     public String getNewValue() {
         return newValue;
     }
 
-    /**
-     * Create a new token.
-     */
-    public EnvChangeToken(EnvChangeTokenSubType subType, String oldValue, String newValue) {
-        this.subType = subType;
-        this.oldValue = oldValue;
-        this.newValue = newValue;
+    public int getNewValueAsInt() {
+        try {
+            return Integer.parseInt(newValue);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
-    /**
-     * Gets a human readable string representation of this token.
-     */
     @Override
     public String toString() {
-        return "EnvChangeToken[SubType=" + subType + ", NewValue=" + newValue + ", OldValue=" + oldValue + "]";
+        return "EnvChangeToken{" +
+                "changeType=" + changeType +
+                ", old='" + oldValue + '\'' +
+                ", new='" + newValue + '\'' +
+                '}';
     }
 }

@@ -3,36 +3,21 @@
 
 package org.tdslib.javatdslib.tokens.loginack;
 
-/**
- * SQL interface type.
- */
+// SqlInterfaceType.java
 public enum SqlInterfaceType {
-    /**
-     * Default.
-     */
-    DEFAULT(0),
-
-    /**
-     * T-SQL.
-     */
-    T_SQL(1);
+    SQL_DFLT((byte) 0x01),
+    SQL_TSQL((byte) 0x02);
 
     private final byte value;
 
-    SqlInterfaceType(int value) {
-        this.value = (byte) value;
+    SqlInterfaceType(byte value) {
+        this.value = value;
     }
 
-    public byte getValue() {
-        return value;
-    }
-
-    public static SqlInterfaceType fromValue(byte value) {
-        for (SqlInterfaceType type : values()) {
-            if (type.value == value) {
-                return type;
-            }
+    public static SqlInterfaceType fromByte(byte b) {
+        for (SqlInterfaceType t : values()) {
+            if (t.value == b) return t;
         }
-        return null;
+        return SQL_DFLT; // fallback
     }
 }

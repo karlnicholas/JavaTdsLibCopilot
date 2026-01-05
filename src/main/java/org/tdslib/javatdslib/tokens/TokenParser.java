@@ -3,13 +3,20 @@
 
 package org.tdslib.javatdslib.tokens;
 
-/**
- * Token parser.
- */
-public abstract class TokenParser {
+import org.tdslib.javatdslib.ConnectionContext;
+
+import java.nio.ByteBuffer;
+
+public interface TokenParser {
 
     /**
-     * Parse a token from the token handler.
+     * Parse exactly one token of the given type from the current payload position.
+     *
+     * @param payload     The ByteBuffer containing the message payload.
+     *                    Position is already right after the token type byte.
+     * @param tokenType   The type byte that was just read (for reference/validation)
+     * @param context     Access to connection state (for ENV_CHANGE, etc.)
+     * @return            The parsed token object, or null if no object is needed
      */
-    public abstract Token parse(TokenType tokenType, TokenStreamHandler tokenStreamHandler);
+    Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context);
 }

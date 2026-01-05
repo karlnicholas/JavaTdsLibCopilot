@@ -6,7 +6,6 @@ package org.tdslib.javatdslib.tokens.error;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
-import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**

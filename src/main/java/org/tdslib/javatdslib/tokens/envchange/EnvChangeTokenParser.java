@@ -1,63 +1,56 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.envchange;
 
+import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
-import org.tdslib.javatdslib.tokens.TokenStreamHandler;
-import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Environment change token parser.
+ * Parser for ENVCHANGE token (0xE3).
+ * Eagerly decodes the token and applies the change to the connection context.
  */
-public class EnvChangeTokenParser extends TokenParser {
+public class EnvChangeTokenParser implements TokenParser {
 
     @Override
-    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
-        // Read Length (2 bytes)
-        int length = handler.readUInt16LE();
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+        // Type of change
+        byte changeType = payload.get();
 
-        // Read SubType (1 byte)
-        int subTypeValue = handler.readUInt8();
-        EnvChangeTokenSubType subType = EnvChangeTokenSubType.fromValue((byte) subTypeValue);
+        // Old value length + data
+        byte oldLen = payload.get();
+        byte[] oldData = new byte[oldLen & 0xFF];
+        payload.get(oldData);
+        String oldValue = new String(oldData, StandardCharsets.US_ASCII).trim();
 
-        if (subType == null) {
-            throw new IllegalArgumentException("Unknown EnvChange sub type: " + subTypeValue);
+        // New value length + data
+        byte newLen = payload.get();
+        byte[] newData = new byte[newLen & 0xFF];
+        payload.get(newData);
+        String newValue = new String(newData, StandardCharsets.US_ASCII).trim();
+
+        EnvChangeToken token = new EnvChangeToken(changeType, oldValue, newValue);
+
+        // Apply the change immediately to connection context
+        applyChange(changeType, newValue, context);
+
+        return token;
+    }
+
+    private void applyChange(byte type, String newValue, ConnectionContext context) {
+        switch (EnvChangeType.fromByte(type)) {
+            case PACKET_SIZE, PACKET_SIZE_ALT -> context.setPacketSize(Integer.parseInt(newValue));
+            case DATABASE -> context.setDatabase(newValue);
+            case UNKNOWN -> { /* log or ignore */ }
         }
+    }
 
-        if (subType == EnvChangeTokenSubType.PACKET_SIZE) {
-            // Packet size is sent as two 4-byte little-endian integers (new, old)
-            // Note: readUInt32LE returns long, we cast to int as packet sizes fit in int
-            int newPacketSize = (int) handler.readUInt32LE();
-            int oldPacketSize = (int) handler.readUInt32LE();
-
-            // Update connection options packet size
-            try {
-                handler.getOptions().setPacketSize(newPacketSize);
-            } catch (IllegalArgumentException ex) {
-                // ignore invalid packet size from server
-            }
-
-            return new EnvChangeToken(
-                    subType,
-                    String.valueOf(oldPacketSize),
-                    String.valueOf(newPacketSize)
-            );
-        } else {
-            // Standard string-based EnvChanges (Database, Language, Charset, Routing)
-            String newValue = handler.readBVarChar();
-            String oldValue = handler.readBVarChar();
-
-            if (subType == EnvChangeTokenSubType.ROUTING) {
-                try {
-                    handler.getOptions().setRoutingHint(newValue);
-                } catch (Exception ex) {
-                    // ignore failures when storing routing hint
-                }
-            }
-
-            return new EnvChangeToken(subType, oldValue, newValue);
+    private int parseIntSafe(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 }

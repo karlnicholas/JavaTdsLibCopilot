@@ -1,56 +1,48 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.tokens.loginack;
 
-import org.tdslib.javatdslib.TdsVersion;
+import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
-import org.tdslib.javatdslib.tokens.TokenStreamHandler;
-import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Login ack token parser.
+ * Parser for LOGINACK token (0xAD).
  */
-public class LoginAckTokenParser extends TokenParser {
+public class LoginAckTokenParser implements TokenParser {
 
     @Override
-    public Token parse(TokenType tokenType, TokenStreamHandler handler) {
-        // Read Length (2 bytes)
-        // This is the total length of the data that follows. We read it to advance the stream
-        // but generally parse the specific fields individually below.
-        int length = handler.readUInt16LE();
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+        // Interface type (0x01 = SQL_DFLT, 0x02 = SQL_TSQL)
+        byte interfaceTypeByte = payload.get();
+        SqlInterfaceType interfaceType = SqlInterfaceType.fromByte(interfaceTypeByte);
 
-        // Read Interface Type (1 byte)
-        int type = handler.readUInt8();
-        SqlInterfaceType interfaceType = SqlInterfaceType.fromValue((byte) type);
-        if (interfaceType == null) {
-            throw new IllegalArgumentException("Unknown Sql Interface type: " + type);
-        }
+        // TDS version (major.minor.build)
+        byte major = payload.get();
+        byte minor = payload.get();
+        short build = payload.getShort();
 
-        // Read TDS Version (4 bytes, Big Endian)
-        long version = handler.readUInt32BE();
-        TdsVersion tdsVersion = TdsVersion.fromValue((int) version);
-        if (tdsVersion == null) {
-            throw new IllegalArgumentException("Unknown Tds Version: " + Integer.toHexString((int) version));
-        }
+        TdsVersion tdsVersion = new TdsVersion(major, minor, build);
 
-        // Read Program Name (BVarChar)
-        String progName = handler.readBVarChar();
+        // Program name length (1 byte) + name (ASCII)
+        int progNameLen = payload.get() & 0xFF;
+        byte[] progNameBytes = new byte[progNameLen];
+        payload.get(progNameBytes);
+        String progName = new String(progNameBytes, StandardCharsets.US_ASCII);
 
-        // Read Program Version (4 bytes total: Major, Minor, BuildHi, BuildLow)
-        int major = handler.readUInt8();
-        int minor = handler.readUInt8();
-        int buildHi = handler.readUInt8();
-        int buildLow = handler.readUInt8();
+        // Program version (4 bytes: major, minor, build, sub-build)
+        byte progMajor = payload.get();
+        byte progMinor = payload.get();
+        short progBuild = payload.getShort();
+        byte progSubBuild = payload.get();
+        ProgVersion progVersion = new ProgVersion(progMajor, progMinor, progBuild, progSubBuild);
 
-        ProgVersion progVersion = new ProgVersion(
-                (byte) major,
-                (byte) minor,
-                (byte) buildHi,
-                (byte) buildLow
+        return new LoginAckToken(
+                interfaceType,
+                tdsVersion,
+                progName,
+                progVersion
         );
-
-        return new LoginAckToken(interfaceType, tdsVersion, progName, progVersion);
     }
 }

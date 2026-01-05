@@ -36,4 +36,5 @@ public interface IConnection extends AutoCloseable {
      */
     void clearIncomingData();
 
+    void stopTls();
 }

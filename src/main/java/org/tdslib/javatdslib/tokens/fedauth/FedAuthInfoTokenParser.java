@@ -5,7 +5,6 @@ package org.tdslib.javatdslib.tokens.fedauth;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
-import org.tdslib.javatdslib.tokens.TokenStreamHandler;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**

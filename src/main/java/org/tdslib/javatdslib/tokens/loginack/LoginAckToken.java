@@ -1,13 +1,11 @@
+package org.tdslib.javatdslib.tokens.loginack;
+
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 
-package org.tdslib.javatdslib.tokens.loginack;
-
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
-
-import org.tdslib.javatdslib.TdsVersion;
 
 /**
  * Login7 response.

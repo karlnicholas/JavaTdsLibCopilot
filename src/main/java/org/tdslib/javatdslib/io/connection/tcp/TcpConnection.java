@@ -199,6 +199,11 @@ public class TcpConnection implements IConnection {
         }
     }
 
+    @Override
+    public void stopTls() {
+        sslEngine = null;
+    }
+
     private void readFully(ByteBuffer buffer) throws IOException {
         while (buffer.hasRemaining()) {
             int count = channel.read(buffer);

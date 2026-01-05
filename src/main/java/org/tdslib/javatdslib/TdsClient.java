@@ -3,97 +3,253 @@
 
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.io.connection.IConnection;
-import org.tdslib.javatdslib.io.connection.tcp.TcpConnection;
-import org.tdslib.javatdslib.io.connection.tcp.TcpConnectionOptions;
-import org.tdslib.javatdslib.io.connection.tcp.TcpServerEndpoint;
-import org.tdslib.javatdslib.messages.MessageHandler;
-import org.tdslib.javatdslib.tokens.TokenStreamHandler;
+import org.tdslib.javatdslib.io.MessageHandler;
+import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.tokens.TokenVisitor;
+import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
+import org.tdslib.javatdslib.tokens.envchange.EnvChangeType;
+import org.tdslib.javatdslib.tokens.error.ErrorToken;
+import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
+import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+import static org.tdslib.javatdslib.tokens.envchange.EnvChangeType.PACKET_SIZE;
+import static org.tdslib.javatdslib.tokens.envchange.EnvChangeType.PACKET_SIZE_ALT;
 
 /**
- * TDS Client.
+ * High-level TDS client facade.
+ * Provides a simple connect + execute interface, hiding protocol details.
  */
-public class TdsClient implements AutoCloseable {
-    private IConnection connection;
-    private MessageHandler messageHandler;
-    private TokenStreamHandler tokenStreamHandler;
+public class TdsClient implements ConnectionContext {
 
-    /**
-     * Underlying connection used to communicate with the SQL Server.
-     */
-    public IConnection getConnection() {
-        return connection;
-    }
+    private final MessageHandler messageHandler;
+    private final TcpTransport transport;
+    private final TokenDispatcher tokenDispatcher;
 
-    /**
-     * The MessageHandler of this client.
-     */
-    public MessageHandler getMessageHandler() {
-        return messageHandler;
-    }
+    private boolean connected = false;
 
-    /**
-     * The TokenStreamHandler of this client.
-     */
-    public TokenStreamHandler getTokenStreamHandler() {
-        return tokenStreamHandler;
-    }
+    private String currentDatabase = null;
+    private int packetSize = 4096;
 
-    /**
-     * Creates a new TDS Client and establishes a Tcp connection to the endpoint specified by the TcpServerEndpoint using default connection options.
-     */
-    public TdsClient(TcpServerEndpoint serverEndpoint) throws IOException {
-        this(new TcpConnectionOptions(), serverEndpoint);
-    }
-
-    /**
-     * Creates a new TDS Client and establishes a Tcp connection to the endpoint specified by the TcpServerEndpoint using the specified ConnectionOptions.
-     */
-    public TdsClient(TcpConnectionOptions options, TcpServerEndpoint serverEndpoint) throws IOException {
-        this(new TcpConnection(options, serverEndpoint));
-    }
-
-    /**
-     * Creates a new TDS Client with a connection to a SQL Server.
-     */
-    public TdsClient(IConnection connection) {
-        this.connection = connection != null ? connection : null; // throw new NullPointerException
-        this.messageHandler = new MessageHandler(this);
-        this.tokenStreamHandler = new TokenStreamHandler(this);
-    }
-
-    /**
-     * Performs the TLS handshake between the client and the database server.
-     */
-    public void performTlsHandshake() {
-        connection.startTLS();
-    }
-
-    /**
-     * Closes the connection to the actual database server and re-establishes a Tcp connection to a new database server endpoint.
-     */
-    public void reEstablishConnection(TcpConnectionOptions options, TcpServerEndpoint serverEndpoint) throws Exception {
-        connection.close();
-        connection = new TcpConnection(options, serverEndpoint);
-    }
-
-    /**
-     * Closes the connection to the actual database server and re-establishes a connection to a SQL Server.
-     */
-    public void reEstablishConnection(IConnection connection) throws Exception {
-        this.connection.close();
-        this.connection = connection != null ? connection : null;
-    }
-
-    /**
-     * Disposes resources from this TDS client and underlying components.
-     */
     @Override
-    public void close() throws Exception {
-        if (connection != null) {
-            connection.close();
+    public String getCurrentDatabase() {
+        return currentDatabase;
+    }
+
+    @Override
+    public int getCurrentPacketSize() {
+        return packetSize;
+    }
+
+    @Override
+    public void setDatabase(String database) {
+        this.currentDatabase = database;
+    }
+
+    @Override
+    public void setPacketSize(int size) {
+        this.packetSize = size;
+        transport.setPacketSize(size);
+    }
+
+    @Override
+    public void resetToDefaults() {
+        currentDatabase = null;
+        packetSize = 4096;
+        // Reset other state as needed
+        System.out.println("Session state reset due to resetConnection flag");
+    }
+
+    public TdsClient(String host, int port) throws IOException {
+        this.transport = new TcpTransport(host, port);
+        this.messageHandler = new MessageHandler(transport);
+        this.tokenDispatcher = new TokenDispatcher();
+        this.connected = false;
+    }
+
+    public void connect(String username, String password, String database, String appName) throws IOException {
+        if (connected) {
+            throw new IllegalStateException("Already connected");
         }
+
+        preLoginInternal();
+        loginInternal(username, password, database, appName);
+
+        connected = true;
+    }
+
+    private void preLoginInternal() throws IOException {
+        ByteBuffer preLoginPayload = buildPreLoginPayload(true, false);
+        Message preLoginMsg = new Message(
+                (byte) 0x12, (byte) 0x01, preLoginPayload.capacity() + 8,
+                (short) 0, (short) 1, preLoginPayload, System.nanoTime(), null
+        );
+
+        messageHandler.sendMessage(preLoginMsg);
+
+        List<Message> responses = messageHandler.receiveFullResponse();
+
+        PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
+
+        // Apply negotiated packet size
+        int negotiatedSize = preLoginResponse.getNegotiatedPacketSize();
+        if (negotiatedSize > 0) {
+            packetSize = negotiatedSize;
+            transport.setPacketSize(packetSize);
+        }
+
+        if (preLoginResponse.requiresEncryption()) {
+            enableTls();
+        }
+    }
+
+    private void loginInternal(String username, String password, String database, String appName) throws IOException {
+        ByteBuffer loginPayload = buildLogin7Payload(username, password, database, appName);
+
+        Message loginMsg = new Message(
+                (byte) 0x10, (byte) 0x01, loginPayload.capacity() + 8,
+                (short) 0, (short) 1, loginPayload, System.nanoTime(), null
+        );
+
+        messageHandler.sendMessage(loginMsg);
+
+        List<Message> responses = messageHandler.receiveFullResponse();
+
+        LoginResponse loginResponse = processLoginResponse(responses);
+
+        if (!loginResponse.isSuccess()) {
+            throw new IOException("Login failed: " + loginResponse.getErrorMessage());
+        }
+
+        currentDatabase = loginResponse.getDatabase();
+    }
+
+    private ByteBuffer buildPreLoginPayload(boolean encryptIfNeeded, boolean supportMars) {
+        // Implement your PreLogin payload builder here
+        // For now, placeholder
+        ByteBuffer payload = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN);
+        payload.flip();
+        return payload;
+    }
+
+    private ByteBuffer buildLogin7Payload(String username, String password, String database, String appName) {
+        // Implement your Login7 payload builder here
+        // For now, placeholder
+        ByteBuffer payload = ByteBuffer.allocate(512).order(ByteOrder.LITTLE_ENDIAN);
+        payload.flip();
+        return payload;
+    }
+
+    private PreLoginResponse processPreLoginResponse(List<Message> packets) {
+        ByteBuffer combined = combinePayloads(packets);
+        PreLoginResponse response = new PreLoginResponse();
+
+        // PreLogin is NOT token-based — it's a fixed option table
+        // Parse manually (simple loop over option list)
+        if (combined.hasRemaining()) {
+            combined.get(); // skip first byte (usually 0x00 or option count)
+            while (combined.hasRemaining()) {
+                byte option = combined.get();
+                if (option == (byte) 0xFF) break; // terminator
+
+                short offset = combined.getShort();
+                short length = combined.getShort();
+
+                int savedPos = combined.position();
+                combined.position(offset);
+
+                switch (option) {
+                    case 0x00: // VERSION
+                        int major = combined.get() & 0xFF;
+                        int minor = combined.get() & 0xFF;
+                        short build = combined.getShort();
+                        response.setVersion(major, minor, build);
+                        break;
+                    case 0x01: // ENCRYPTION
+                        byte enc = combined.get();
+                        response.setEncryption(enc);
+                        break;
+                    case 0x04: // PACKETSIZE (optional in PreLogin, but some servers send it)
+                        // Read as B_VARCHAR (length byte + string)
+                        int psLen = combined.get() & 0xFF;
+                        byte[] psBytes = new byte[psLen];
+                        combined.get(psBytes);
+                        String psStr = new String(psBytes, StandardCharsets.US_ASCII);
+                        try {
+                            response.setNegotiatedPacketSize(Integer.parseInt(psStr));
+                        } catch (NumberFormatException ignored) {}
+                        break;
+                    // Add MARS, INSTANCE, etc. as needed
+                }
+
+                combined.position(savedPos);
+            }
+        }
+
+        return response;
+    }
+
+    private LoginResponse processLoginResponse(List<Message> packets) {
+        LoginResponse loginResponse = new LoginResponse();
+
+        // Use TokenDispatcher to process each packet individually
+        for (Message msg : packets) {
+            tokenDispatcher.processMessage(msg, this, token -> {
+                if (token instanceof LoginAckToken ack) {
+                    loginResponse.setSuccess(true);
+                } else if (token instanceof ErrorToken err) {
+                    loginResponse.setSuccess(false);
+                    loginResponse.setErrorMessage(err.getMessage());
+                } else if (token instanceof EnvChangeToken change) {
+                    loginResponse.addEnvChange(change);
+
+                    // Apply immediately — clean & extensible
+                    switch (change.getChangeType()) {
+                        case PACKET_SIZE, PACKET_SIZE_ALT -> setPacketSize(change.getNewValueAsInt());
+                        case DATABASE -> setDatabase(change.getNewValue());
+                        case LANGUAGE -> { /* future: setLanguage(...) */ }
+                        case UNKNOWN -> { /* log warning */ }
+                    }
+                }
+                // Handle INFO, DONE, etc. as needed
+            });
+
+            // Handle resetConnection flag if present
+            if (msg.isResetConnection()) {
+                resetToDefaults();
+            }
+        }
+
+        return loginResponse;
+    }
+
+    private void enableTls() throws IOException {
+        // Implement TLS handshake
+        throw new UnsupportedOperationException("TLS not yet implemented");
+    }
+
+    private ByteBuffer combinePayloads(List<Message> packets) {
+        int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
+        ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
+        for (Message m : packets) {
+            combined.put(m.getPayload().duplicate());
+        }
+        combined.flip();
+        return combined;
+    }
+
+    public void close() throws IOException {
+        messageHandler.close();
+        connected = false;
+    }
+
+    public boolean isConnected() {
+        return connected;
     }
 }
