@@ -14,7 +14,7 @@ public class TdsPacketWriter {
      * Builds one or more TDS packets from a payload.
      *
      * @param packetType       TDS message type (e.g. 0x01 for SQL Batch, 0x10 for Login7)
-     * @param statusFlags      status flags (usually 0x01 for last packet)
+     * @param statusFlags      status flags (usually 0x01 for last packet/EOM)
      * @param payload          the logical message payload (positioned at 0)
      * @param startingPacketId starting packet number (usually 1 for client requests)
      * @param maxPacketSize    maximum allowed packet size (default 4096)
@@ -30,7 +30,6 @@ public class TdsPacketWriter {
         List<ByteBuffer> packets = new ArrayList<>();
         short packetId = startingPacketId;
 
-        // Max payload per packet = maxPacketSize - 8 (fixed header size)
         int maxPayloadPerPacket = maxPacketSize - 8;
 
         payload = payload.asReadOnlyBuffer();
@@ -38,15 +37,16 @@ public class TdsPacketWriter {
 
         boolean isFirst = true;
 
-        while (payload.hasRemaining() || isFirst) { // force at least one packet even if empty
+        while (payload.hasRemaining() || isFirst) {
             isFirst = false;
 
             int thisPayloadSize = Math.min(maxPayloadPerPacket, payload.remaining());
 
-            // Status: last packet gets full flags with EOM, others clear EOM bit (0x01)
-            byte thisStatus = (byte) (payload.hasRemaining() ? (statusFlags & ~0x01) : statusFlags | 0x01);
+            // For multi-packet: only last packet has EOM (0x01)
+            // For single-packet: always set EOM
+            boolean isLast = !payload.hasRemaining() || thisPayloadSize == payload.remaining();
+            byte thisStatus = (byte) (isLast ? (statusFlags | 0x01) : (statusFlags & ~0x01));
 
-            // Allocate exactly 8-byte header + payload chunk
             ByteBuffer packet = ByteBuffer.allocate(8 + thisPayloadSize)
                     .order(ByteOrder.BIG_ENDIAN);
 
@@ -57,7 +57,6 @@ public class TdsPacketWriter {
             packet.put((byte) (packetId & 0xFF));      // Byte 6: Packet Number (1 byte)
             packet.put((byte) 0);                      // Byte 7: Window (always 0)
 
-            // Copy payload chunk (payload is LE, but copy preserves bytes as is)
             if (thisPayloadSize > 0) {
                 ByteBuffer chunk = payload.slice().limit(thisPayloadSize);
                 packet.put(chunk);

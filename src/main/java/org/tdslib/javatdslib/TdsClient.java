@@ -96,7 +96,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     private void preLoginInternal() throws IOException {
-        Message msg = Message.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload(true, false));
+        Message msg = Message.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload(false, false));
 
         messageHandler.sendMessage(msg);
 
