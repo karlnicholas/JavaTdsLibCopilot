@@ -3,16 +3,14 @@
 
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.io.MessageHandler;
+import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.messages.Message;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
-import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
-import org.tdslib.javatdslib.tokens.envchange.EnvChangeType;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
 import org.tdslib.javatdslib.transport.TcpTransport;
@@ -22,9 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-
-import static org.tdslib.javatdslib.tokens.envchange.EnvChangeType.PACKET_SIZE;
-import static org.tdslib.javatdslib.tokens.envchange.EnvChangeType.PACKET_SIZE_ALT;
 
 /**
  * High-level TDS client facade.
