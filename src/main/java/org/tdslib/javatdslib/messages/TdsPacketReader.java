@@ -35,15 +35,17 @@ public class TdsPacketReader {
             throw new IOException("Invalid TDS packet length: " + length);
         }
 
-        // Now read the remaining payload
+        // Read the remaining payload
+        ByteBuffer payloadBuffer = ByteBuffer.allocate(length - 8).order(ByteOrder.LITTLE_ENDIAN);
+        transport.readFully(payloadBuffer);
+        payloadBuffer.flip();
+
+        // Combine header + payload into full packet
         ByteBuffer fullPacket = ByteBuffer.allocate(length).order(ByteOrder.BIG_ENDIAN);
-        fullPacket.put(header.array());  // copy header back in
-        ByteBuffer payloadPart = fullPacket.slice();
-        payloadPart.position(8);
-
-        transport.readFully(payloadPart);
-
+        fullPacket.put(header.array());
+        fullPacket.put(payloadBuffer.array());
         fullPacket.flip();
+
         return fullPacket;
     }
 

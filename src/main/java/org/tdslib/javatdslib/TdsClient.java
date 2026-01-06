@@ -175,7 +175,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         // PreLogin is NOT token-based — it's a fixed option table
         // Parse manually (simple loop over option list)
         if (combined.hasRemaining()) {
-            combined.get(); // skip first byte (usually 0x00 or option count)
             while (combined.hasRemaining()) {
                 byte option = combined.get();
                 if (option == (byte) 0xFF) break; // terminator
@@ -258,7 +257,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     private ByteBuffer combinePayloads(List<Message> packets) {
         int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
-        ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
         for (Message m : packets) {
             combined.put(m.getPayload().duplicate());
         }
