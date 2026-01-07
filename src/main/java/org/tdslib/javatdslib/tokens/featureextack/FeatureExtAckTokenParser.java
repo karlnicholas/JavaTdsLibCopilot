@@ -28,6 +28,6 @@ public class FeatureExtAckTokenParser implements TokenParser {
         byte[] data = new byte[remaining];
         payload.get(data);
 
-        return new FeatureExtAckToken(featureId, data);
+        return new FeatureExtAckToken(tokenType, featureId, data);
     }
 }

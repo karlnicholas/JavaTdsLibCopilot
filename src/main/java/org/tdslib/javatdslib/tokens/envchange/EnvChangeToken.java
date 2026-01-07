@@ -3,10 +3,6 @@ package org.tdslib.javatdslib.tokens.envchange;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-
 /**
  * Represents an ENVCHANGE token (0xE3) in the TDS protocol.
  *
@@ -22,14 +18,10 @@ public class EnvChangeToken extends Token {
     private final EnvChangeType changeType;
     private final byte[] valueBytes;  // All data after the change type byte
 
-    public EnvChangeToken(EnvChangeType changeType, byte[] valueBytes) {
+    public EnvChangeToken(byte type, EnvChangeType changeType, byte[] valueBytes) {
+        super(TokenType.fromValue(type));
         this.changeType = changeType != null ? changeType : EnvChangeType.UNKNOWN;
         this.valueBytes = valueBytes != null ? valueBytes.clone() : new byte[0];
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.ENV_CHANGE;
     }
 
     public EnvChangeType getChangeType() {

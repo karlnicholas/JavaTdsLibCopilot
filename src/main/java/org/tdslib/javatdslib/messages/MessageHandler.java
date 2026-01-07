@@ -9,7 +9,6 @@ import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 

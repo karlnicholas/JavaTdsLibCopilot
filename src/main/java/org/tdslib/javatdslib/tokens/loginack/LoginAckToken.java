@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.tokens.loginack;
 
-import org.tdslib.javatdslib.TdsVersion; // The TDS protocol version enum
-import org.tdslib.javatdslib.tokens.loginack.ServerVersion; // The new SQL Server product version enum
+import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
@@ -15,16 +14,12 @@ public class LoginAckToken extends Token {
     private final String serverName;
     private final ServerVersion serverVersion;
 
-    public LoginAckToken(SqlInterfaceType interfaceType, TdsVersion tdsVersion, String serverName, ServerVersion serverVersion) {
+    public LoginAckToken(byte type, SqlInterfaceType interfaceType, TdsVersion tdsVersion, String serverName, ServerVersion serverVersion) {
+        super(TokenType.fromValue(type));
         this.interfaceType = interfaceType;
         this.tdsVersion = tdsVersion;
         this.serverName = serverName;
         this.serverVersion = serverVersion != null ? serverVersion : ServerVersion.UNKNOWN;
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.LOGIN_ACK;
     }
 
     public SqlInterfaceType getInterfaceType() {

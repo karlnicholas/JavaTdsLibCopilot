@@ -33,7 +33,7 @@ public class EnvChangeTokenParser implements TokenParser {
         byte[] valueBytes = new byte[envDataLength - 1];
         System.arraycopy(allBytes, 1, valueBytes, 0, valueBytes.length);
 
-        return new EnvChangeToken(changeType, valueBytes);
+        return new EnvChangeToken(tokenType, changeType, valueBytes);
     }
 
     private int parseIntSafe(String value) {

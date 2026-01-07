@@ -31,6 +31,6 @@ public class DoneProcTokenParser implements TokenParser {
             rowCount = Integer.toUnsignedLong(payload.getInt());
         }
 
-        return new DoneProcToken(status, currentCommand, rowCount);
+        return new DoneProcToken(tokenType, status, currentCommand, rowCount);
     }
 }

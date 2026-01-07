@@ -4,8 +4,9 @@
 package org.tdslib.javatdslib.io.connection.tcp;
 
 import org.tdslib.javatdslib.io.connection.ConnectionOptions;
-import java.time.Duration;
+
 import javax.net.ssl.HostnameVerifier;
+import java.time.Duration;
 
 /**
  * Connection options for Tcp connection.

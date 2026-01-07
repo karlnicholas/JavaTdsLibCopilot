@@ -7,10 +7,17 @@ package org.tdslib.javatdslib.tokens;
  * Tds data stream token.
  */
 public abstract class Token {
+    private final TokenType type;
+
+    protected Token(TokenType type) {
+        this.type = type;
+    }
 
     /**
      * Type of the token.
      */
-    public abstract TokenType getType();
+    public final TokenType getType() {
+        return type;
+    }
 
 }

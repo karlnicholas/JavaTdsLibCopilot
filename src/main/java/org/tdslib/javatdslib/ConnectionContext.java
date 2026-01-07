@@ -1,7 +1,5 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.TdsVersion; // assuming your TDS version enum/class
-
 /**
  * Represents the current session/connection state in a TDS connection.
  * Tracks environment changes (ENVCHANGE), login ack info, and other server-driven state.

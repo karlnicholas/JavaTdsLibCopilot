@@ -4,7 +4,6 @@
 package org.tdslib.javatdslib.io.connection;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Connection to the SQL Server.

@@ -63,7 +63,7 @@ public class InfoTokenParser implements TokenParser {
             lineNumber = Integer.toUnsignedLong(payload.getInt());
         }
 
-        return new InfoToken(number, state, severity, message, serverName, procName, lineNumber);
+        return new InfoToken(tokenType, number, state, severity, message, serverName, procName, lineNumber);
     }
 
     private static String readUsVarChar(ByteBuffer buf) {

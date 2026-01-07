@@ -13,7 +13,8 @@ public abstract class AbstractDoneToken extends Token {
     private final int currentCommand;
     private final long rowCount;
 
-    protected AbstractDoneToken(DoneStatus status, int currentCommand, long rowCount) {
+    protected AbstractDoneToken(byte type, DoneStatus status, int currentCommand, long rowCount) {
+        super(TokenType.fromValue(type));
         this.status = status != null ? status : DoneStatus.FINAL;
         this.currentCommand = currentCommand;
         this.rowCount = rowCount;

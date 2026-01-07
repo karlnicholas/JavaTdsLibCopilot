@@ -17,6 +17,7 @@ public final class InfoToken extends Token {
     private final long lineNumber;
 
     public InfoToken(
+            byte type,
             long number,
             byte state,
             byte severity,
@@ -25,6 +26,7 @@ public final class InfoToken extends Token {
             String procName,
             long lineNumber) {
 
+        super(TokenType.fromValue(type));
         this.number = number;
         this.state = state;
         this.severity = severity;
@@ -32,11 +34,6 @@ public final class InfoToken extends Token {
         this.serverName = serverName != null ? serverName.trim() : "";
         this.procName = procName != null ? procName.trim() : "";
         this.lineNumber = lineNumber;
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.INFO;
     }
 
     public long getNumber() {
@@ -65,6 +62,12 @@ public final class InfoToken extends Token {
 
     public long getLineNumber() {
         return lineNumber;
+    }
+    /**
+     * Returns true if this is an error message (severity > 10 in TDS).
+     */
+    public boolean isError() {
+        return severity > 10;
     }
 
     @Override

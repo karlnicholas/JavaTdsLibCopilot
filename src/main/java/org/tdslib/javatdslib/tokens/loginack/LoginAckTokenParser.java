@@ -3,7 +3,7 @@ package org.tdslib.javatdslib.tokens.loginack;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
-import org.tdslib.javatdslib.TdsVersion; // The enum - this is the only one we use
+import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -46,6 +46,6 @@ public class LoginAckTokenParser implements TokenParser {
         bigEndianValue = Integer.reverseBytes(serverVersionValue); // to match your enum
         ServerVersion serverVersion = ServerVersion.fromValue(bigEndianValue);
 
-        return new LoginAckToken(interfaceType, tdsVersion, serverName, serverVersion);
+        return new LoginAckToken(tokenType, interfaceType, tdsVersion, serverName, serverVersion);
     }
 }

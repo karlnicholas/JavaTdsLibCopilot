@@ -18,6 +18,7 @@ public class ErrorToken extends Token {
     private final long lineNumber;
 
     public ErrorToken(
+            byte type,
             long number,
             byte state,
             byte severity,
@@ -26,6 +27,7 @@ public class ErrorToken extends Token {
             String procName,
             long lineNumber) {
 
+        super(TokenType.fromValue(type));
         this.number = number;
         this.state = state;
         this.severity = severity;
@@ -33,11 +35,6 @@ public class ErrorToken extends Token {
         this.serverName = serverName != null ? serverName.trim() : "";
         this.procName = procName != null ? procName.trim() : "";
         this.lineNumber = lineNumber;
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.ERROR;
     }
 
     public long getNumber() {

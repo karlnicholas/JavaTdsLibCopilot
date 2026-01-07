@@ -35,6 +35,7 @@ public class ErrorTokenParser implements TokenParser {
         }
 
         return new ErrorToken(
+                tokenType,
                 number,
                 state,
                 severity,

@@ -23,6 +23,6 @@ public class ReturnStatusTokenParser implements TokenParser {
         // Return status is always a 4-byte signed integer (little-endian)
         int value = payload.getInt();
 
-        return new ReturnStatusToken(value);
+        return new ReturnStatusToken(tokenType, value);
     }
 }

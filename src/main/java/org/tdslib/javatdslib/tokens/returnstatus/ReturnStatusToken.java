@@ -10,13 +10,9 @@ public final class ReturnStatusToken extends Token {
 
     private final int value;
 
-    public ReturnStatusToken(int value) {
+    public ReturnStatusToken(byte tokenType, int value) {
+        super(TokenType.fromValue(tokenType));
         this.value = value;
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.RETURN_STATUS;
     }
 
     public int getValue() {

@@ -11,14 +11,10 @@ public final class FeatureExtAckToken extends Token {
     private final byte featureId;
     private final byte[] data; // Raw data bytes following the ID
 
-    public FeatureExtAckToken(byte featureId, byte[] data) {
+    public FeatureExtAckToken(byte tokenType, byte featureId, byte[] data) {
+        super(TokenType.fromValue(tokenType));
         this.featureId = featureId;
         this.data = data != null ? data.clone() : new byte[0];
-    }
-
-    @Override
-    public TokenType getType() {
-        return TokenType.FEATURE_EXT_ACK;
     }
 
     /**

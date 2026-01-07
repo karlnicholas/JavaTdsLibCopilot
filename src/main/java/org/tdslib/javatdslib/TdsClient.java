@@ -3,8 +3,8 @@
 
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
@@ -329,5 +329,60 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     public boolean isConnected() {
         return connected;
+    }
+
+    public QueryResponse query(String sql) throws IOException {
+        if (!connected) {
+            throw new IllegalStateException("Not connected");
+        }
+
+        return queryInternal().getQueryResponse();
+    }
+
+    private QueryResponseTokenVisitor queryInternal() throws IOException {
+
+// Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix for SQL_BATCH)
+        String sql = "SELECT @@VERSION";
+        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
+
+        ByteBuffer queryPayload = ByteBuffer.wrap(sqlBytes);  // Direct wrap, no extra build method needed
+
+// Create SQL_BATCH message (type 0x01, EOM=0x01)
+        Message queryMsg = new Message(
+                (byte) 0x01,  // Type: SQL_BATCH
+                (byte) 0x01,  // Status: EOM (end of message)
+                sqlBytes.length + 8,  // Total length (header 8 + payload)
+                (short) 0,    // SPID (0 for client)
+                (short) 1,    // Packet sequence (increment if multi-packet)
+                queryPayload,
+                System.nanoTime(),
+                null
+        );
+
+        messageHandler.sendMessage(queryMsg);
+
+// Receive & process full response (same as login)
+        List<Message> responses = messageHandler.receiveFullResponse();
+
+        return processQueryResponse(responses);
+
+    }
+
+    private QueryResponseTokenVisitor processQueryResponse(List<Message> packets) {
+        QueryResponseTokenVisitor queryResponseTokenVisitor = new QueryResponseTokenVisitor(this, new QueryContext());
+
+        for (Message msg : packets) {
+            // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
+            tokenDispatcher.processMessage(msg, this, queryResponseTokenVisitor);
+
+            // Still handle reset flag separately (visitor doesn't cover message-level flags)
+            if (msg.isResetConnection()) {
+                resetToDefaults();
+            }
+        }
+
+        // Optional: After full login response, check if we have a successful LoginAck
+        // (you can add a flag or check in visitor if needed)
+        return queryResponseTokenVisitor;
     }
 }
