@@ -9,6 +9,7 @@ import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
+import org.tdslib.javatdslib.tokens.ApplyingTokenVisitor;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -34,13 +36,29 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     private boolean connected = false;
 
     private String currentDatabase = null;
+    private String currentLanguage = "us_english"; // Default
+    private String currentCharset = null; // Legacy, usually null
     private int packetSize = 4096;
+    private byte[] currentCollationBytes = new byte[0];
+    private boolean inTransaction = false;
+    private String serverName = null;
+    private String serverVersionString = null;
 
     private TdsVersion tdsVersion = TdsVersion.V7_4; // default
 
     @Override
     public TdsVersion getTdsVersion() {
         return tdsVersion;
+    }
+
+    @Override
+    public void setTdsVersion(TdsVersion version) {
+        this.tdsVersion = version;
+    }
+
+    @Override
+    public boolean isUnicodeEnabled() {
+        return tdsVersion.ordinal() >= TdsVersion.V7_1.ordinal(); // Unicode from TDS 7.1+
     }
 
     @Override
@@ -59,16 +77,80 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     @Override
+    public String getCurrentLanguage() {
+        return currentLanguage;
+    }
+
+    @Override
+    public void setLanguage(String language) {
+        this.currentLanguage = language;
+    }
+
+    @Override
+    public String getCurrentCharset() {
+        return currentCharset;
+    }
+
+    @Override
+    public void setCharset(String charset) {
+        this.currentCharset = charset;
+    }
+
+    @Override
     public void setPacketSize(int size) {
         this.packetSize = size;
         transport.setPacketSize(size);
     }
 
     @Override
+    public byte[] getCurrentCollationBytes() {
+        return Arrays.copyOf(currentCollationBytes, currentCollationBytes.length); // Defensive copy
+    }
+
+    @Override
+    public void setCollationBytes(byte[] collationBytes) {
+        this.currentCollationBytes = collationBytes != null ? Arrays.copyOf(collationBytes, collationBytes.length) : new byte[0];
+    }
+
+    @Override
+    public boolean isInTransaction() {
+        return inTransaction;
+    }
+
+    @Override
+    public void setInTransaction(boolean inTransaction) {
+        this.inTransaction = inTransaction;
+    }
+
+    @Override
+    public String getServerName() {
+        return serverName;
+    }
+
+    @Override
+    public void setServerName(String serverName) {
+        this.serverName = serverName;
+    }
+
+    @Override
+    public String getServerVersionString() {
+        return serverVersionString;
+    }
+
+    @Override
+    public void setServerVersionString(String versionString) {
+        this.serverVersionString = versionString;
+    }
+
+    @Override
     public void resetToDefaults() {
         currentDatabase = null;
+        currentLanguage = "us_english";
+        currentCharset = null;
         packetSize = 4096;
-        // Reset other state as needed
+        currentCollationBytes = new byte[0];
+        inTransaction = false;
+        // Do NOT reset tdsVersion, serverName, or serverVersionString (connection-level)
         System.out.println("Session state reset due to resetConnection flag");
     }
 
@@ -85,6 +167,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         }
 
         preLoginInternal();
+        transport.enableTls();
         loginInternal(username, password, database, appName);
 
         connected = true;
@@ -214,34 +297,28 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     private LoginResponse processLoginResponse(List<Message> packets) {
         LoginResponse loginResponse = new LoginResponse();
 
-        // Use TokenDispatcher to process each packet individually
-        for (Message msg : packets) {
-            tokenDispatcher.processMessage(msg, this, token -> {
-                if (token instanceof LoginAckToken ack) {
-                    loginResponse.setSuccess(true);
-                } else if (token instanceof ErrorToken err) {
-                    loginResponse.setSuccess(false);
-                    loginResponse.setErrorMessage(err.getMessage());
-                } else if (token instanceof EnvChangeToken change) {
-                    loginResponse.addEnvChange(change);
+        // Create the visitor once — it will apply changes to 'this' (TdsClient as ConnectionContext)
+        ApplyingTokenVisitor visitor = new ApplyingTokenVisitor(this);
 
-                    // Apply immediately — clean & extensible
-                    switch (change.getChangeType()) {
-                        case PACKET_SIZE, PACKET_SIZE_ALT -> setPacketSize(change.getNewValueAsInt());
-                        case DATABASE -> setDatabase(change.getNewValue());
-                        case LANGUAGE -> { /* future: setLanguage(...) */ }
-                        case UNKNOWN -> { /* log warning */ }
-                    }
+        for (Message msg : packets) {
+            // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
+            tokenDispatcher.processMessage(msg, this, token-> {
+                if ( token instanceof LoginAckToken ack ) {
+                    loginResponse.setSuccess(true);
+                    loginResponse.setDatabase(ack.getInitialDatabase());
+                    loginResponse.addEnvChange();
                 }
-                // Handle INFO, DONE, etc. as needed
+                visitor.onToken(token);
             });
 
-            // Handle resetConnection flag if present
+            // Still handle reset flag separately (visitor doesn't cover message-level flags)
             if (msg.isResetConnection()) {
                 resetToDefaults();
             }
         }
 
+        // Optional: After full login response, check if we have a successful LoginAck
+        // (you can add a flag or check in visitor if needed)
         return loginResponse;
     }
 

@@ -43,11 +43,45 @@ public enum TdsVersion {
     }
 
     public static TdsVersion fromValue(int value) {
-        for (TdsVersion version : values()) {
-            if (version.value == value) {
-                return version;
+        for (TdsVersion v : values()) {
+            if (v.getValue() == value) {
+                return v;
             }
         }
-        return null;
+        return V7_4; // fallback
+    }
+
+    // In TdsVersion enum (add these)
+    public int getMajor() {
+        return switch (this) {
+            case V7_1 -> 7;
+            case V7_2 -> 7;
+            case V7_3_A, V7_3_B -> 7;
+            case V7_4 -> 7;
+        };
+    }
+
+    public int getMinor() {
+        return switch (this) {
+            case V7_1 -> 1;
+            case V7_2 -> 2;
+            case V7_3_A -> 3;
+            case V7_3_B -> 3;
+            case V7_4 -> 4;
+        };
+    }
+
+    public int getBuild() {
+        return switch (this) {
+            case V7_1 -> 0; // or actual
+            case V7_2 -> 0;
+            case V7_3_A -> 0;
+            case V7_3_B -> 0;
+            case V7_4 -> 0;
+        };
+    }
+
+    public String toVersionString() {
+        return getMajor() + "." + getMinor() + "." + getBuild();
     }
 }

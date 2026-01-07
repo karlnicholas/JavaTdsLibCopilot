@@ -1,72 +1,62 @@
 package org.tdslib.javatdslib.tokens.loginack;
 
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-
+import org.tdslib.javatdslib.TdsVersion; // The TDS protocol version enum
+import org.tdslib.javatdslib.tokens.loginack.ServerVersion; // The new SQL Server product version enum
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
 /**
- * Login7 response.
+ * LOGINACK token (0xAD) - sent by server after successful login.
  */
 public class LoginAckToken extends Token {
+
     private final SqlInterfaceType interfaceType;
     private final TdsVersion tdsVersion;
-    private final String progName;
-    private final ProgVersion progVersion;
+    private final String serverName;
+    private final ServerVersion serverVersion;
 
-    /**
-     * Token type.
-     */
+    public LoginAckToken(SqlInterfaceType interfaceType, TdsVersion tdsVersion, String serverName, ServerVersion serverVersion) {
+        this.interfaceType = interfaceType;
+        this.tdsVersion = tdsVersion;
+        this.serverName = serverName;
+        this.serverVersion = serverVersion != null ? serverVersion : ServerVersion.UNKNOWN;
+    }
+
     @Override
     public TokenType getType() {
         return TokenType.LOGIN_ACK;
     }
 
-    /**
-     * SQL interface type.
-     */
     public SqlInterfaceType getInterfaceType() {
         return interfaceType;
     }
 
-    /**
-     * Tds version.
-     */
     public TdsVersion getTdsVersion() {
         return tdsVersion;
     }
 
-    /**
-     * Program name.
-     */
-    public String getProgName() {
-        return progName;
+    public String getServerName() {
+        return serverName;
+    }
+
+    public ServerVersion getServerVersion() {
+        return serverVersion;
     }
 
     /**
-     * Program version.
+     * Convenience method: returns the server version as string (e.g. "SQL Server 2022").
      */
-    public ProgVersion getProgVersion() {
-        return progVersion;
+    public String getServerVersionString() {
+        return serverVersion.toVersionString();
     }
 
-    /**
-     * Creates a new instance of this token.
-     */
-    public LoginAckToken(SqlInterfaceType interfaceType, TdsVersion tdsVersion, String progName, ProgVersion progVersion) {
-        this.interfaceType = interfaceType;
-        this.tdsVersion = tdsVersion;
-        this.progName = progName;
-        this.progVersion = progVersion;
-    }
-
-    /**
-     * Gets a human readable string representation of this token.
-     */
     @Override
     public String toString() {
-        return "LoginAckToken[InterfaceType=" + interfaceType + ", TdsVersion=" + tdsVersion + ", ProgName=" + progName + ", ProgVersion=" + progVersion + "]";
+        return "LoginAckToken[" +
+                "InterfaceType=" + interfaceType +
+                ", TdsVersion=" + tdsVersion +
+                ", ServerName=" + serverName +
+                ", ServerVersion=" + serverVersion +
+                ']';
     }
 }

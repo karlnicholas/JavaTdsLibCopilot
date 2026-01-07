@@ -11,6 +11,7 @@ import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,7 +49,7 @@ public class TokenDispatcher {
      * @param visitor  Callback to handle each parsed token
      */
     public void processMessage(Message message, ConnectionContext context, TokenVisitor visitor) {
-        ByteBuffer payload = message.getPayload().duplicate(); // safe, independent copy
+        ByteBuffer payload = message.getPayload().order(ByteOrder.LITTLE_ENDIAN); // safe, independent copy
 
         while (payload.hasRemaining()) {
             byte tokenTypeByte = payload.get();

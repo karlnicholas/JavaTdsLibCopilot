@@ -1,8 +1,12 @@
 package org.tdslib.javatdslib.tokens.loginack;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.TdsVersion; // The enum - this is the only one we use
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
+import org.tdslib.javatdslib.tokens.TokenType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -11,38 +15,36 @@ import java.nio.charset.StandardCharsets;
  * Parser for LOGINACK token (0xAD).
  */
 public class LoginAckTokenParser implements TokenParser {
+    private static final Logger logger = LoggerFactory.getLogger(LoginAckTokenParser.class);
 
     @Override
     public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
-        // Interface type (0x01 = SQL_DFLT, 0x02 = SQL_TSQL)
+        if (tokenType != TokenType.LOGIN_ACK.getValue()) {
+            throw new IllegalArgumentException("Expected LOGINACK (0xAD), got 0x" + Integer.toHexString(tokenType & 0xFF));
+        }
+
+        // Skip total length if not needed (or read it for validation)
+        int tokenDataLength = Short.toUnsignedInt(payload.getShort());
+
+        // Interface type
         byte interfaceTypeByte = payload.get();
         SqlInterfaceType interfaceType = SqlInterfaceType.fromByte(interfaceTypeByte);
 
-        // TDS version (major.minor.build)
-        byte major = payload.get();
-        byte minor = payload.get();
-        short build = payload.getShort();
+        // TDS version: 4-byte little-endian DWORD
+        int tdsVersionValue = payload.getInt(); // little-endian by default in ByteBuffer
+        int bigEndianValue = Integer.reverseBytes(tdsVersionValue); // to match your enum
+        TdsVersion tdsVersion = TdsVersion.fromValue(bigEndianValue);
 
-        TdsVersion tdsVersion = new TdsVersion(major, minor, build);
+        // Server name: 1 byte char count + UTF-16LE data
+        int serverCharLen = payload.get() & 0xFF;
+        byte[] serverBytes = new byte[serverCharLen * 2];
+        payload.get(serverBytes);
+        String serverName = new String(serverBytes, StandardCharsets.UTF_16LE).trim();
 
-        // Program name length (1 byte) + name (ASCII)
-        int progNameLen = payload.get() & 0xFF;
-        byte[] progNameBytes = new byte[progNameLen];
-        payload.get(progNameBytes);
-        String progName = new String(progNameBytes, StandardCharsets.US_ASCII);
+        // Server version: 4-byte little-endian int
+        int serverVersionValue = payload.getInt();
+        ServerVersion serverVersion = ServerVersion.fromValue(serverVersionValue);
 
-        // Program version (4 bytes: major, minor, build, sub-build)
-        byte progMajor = payload.get();
-        byte progMinor = payload.get();
-        short progBuild = payload.getShort();
-        byte progSubBuild = payload.get();
-        ProgVersion progVersion = new ProgVersion(progMajor, progMinor, progBuild, progSubBuild);
-
-        return new LoginAckToken(
-                interfaceType,
-                tdsVersion,
-                progName,
-                progVersion
-        );
+        return new LoginAckToken(interfaceType, tdsVersion, serverName, serverVersion);
     }
 }

@@ -18,21 +18,44 @@ public class InfoTokenParser implements TokenParser {
     @Override
     public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
         if (tokenType != TokenType.INFO.getValue()) {
-            throw new IllegalArgumentException(
-                    "Expected INFO token (0xAB), got 0x" + Integer.toHexString(tokenType & 0xFF));
+            throw new IllegalArgumentException("Expected INFO (0xAB), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }
 
-        // Length (2 bytes) - skip since we parse sequentially
-        payload.getShort();
+        // Total length of the rest (bytes) — optional skip/validate
+        int totalLength = Short.toUnsignedInt(payload.getShort());
 
         long number = Integer.toUnsignedLong(payload.getInt());
         byte state = payload.get();
         byte severity = payload.get();
 
-        String message = readUsVarChar(payload);
-        String serverName = readBVarChar(payload);
-        String procName = readBVarChar(payload);
+        // Message text: USHORT char count → bytes = count * 2
+        int msgCharLen = Short.toUnsignedInt(payload.getShort());
+        String message = "";
+        if (msgCharLen > 0) {
+            byte[] msgBytes = new byte[msgCharLen * 2];
+            payload.get(msgBytes);
+            message = new String(msgBytes, StandardCharsets.UTF_16LE).trim();
+        }
 
+        // Server name: BYTE char count → bytes = count * 2
+        int serverCharLen = payload.get() & 0xFF;
+        String serverName = "";
+        if (serverCharLen > 0) {
+            byte[] serverBytes = new byte[serverCharLen * 2];
+            payload.get(serverBytes);
+            serverName = new String(serverBytes, StandardCharsets.UTF_16LE).trim();
+        }
+
+        // Proc name: BYTE char count → bytes = count * 2
+        int procCharLen = payload.get() & 0xFF;
+        String procName = "";
+        if (procCharLen > 0) {
+            byte[] procBytes = new byte[procCharLen * 2];
+            payload.get(procBytes);
+            procName = new String(procBytes, StandardCharsets.UTF_16LE).trim();
+        }
+
+        // Line number: 2 or 4 bytes depending on TDS version
         long lineNumber;
         if (context != null && context.getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
             lineNumber = Short.toUnsignedInt(payload.getShort());
@@ -40,15 +63,7 @@ public class InfoTokenParser implements TokenParser {
             lineNumber = Integer.toUnsignedLong(payload.getInt());
         }
 
-        return new InfoToken(
-                number,
-                state,
-                severity,
-                message,
-                serverName,
-                procName,
-                lineNumber
-        );
+        return new InfoToken(number, state, severity, message, serverName, procName, lineNumber);
     }
 
     private static String readUsVarChar(ByteBuffer buf) {

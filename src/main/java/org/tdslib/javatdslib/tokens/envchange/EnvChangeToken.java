@@ -3,63 +3,54 @@ package org.tdslib.javatdslib.tokens.envchange;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+
 /**
- * Represents an ENVCHANGE token (0xE3) sent by the server.
- * Contains environment change notifications such as database name, packet size, language, collation, etc.
+ * Represents an ENVCHANGE token (0xE3) in the TDS protocol.
+ *
+ * This token notifies the client of environment changes such as database, packet size,
+ * language, collation, transaction state, etc.
+ *
+ * The values are stored as raw bytes to support both ASCII and UCS-2 Unicode encoding.
+ * String decoding should be handled by the TokenVisitor or ConnectionContext based
+ * on the connection's Unicode mode (TDS version ≥ 7.0).
  */
 public class EnvChangeToken extends Token {
 
     private final EnvChangeType changeType;
-    private final String oldValue;
-    private final String newValue;
+    private final byte[] valueBytes;  // All data after the change type byte
 
-    public EnvChangeToken(EnvChangeType changeType, String oldValue, String newValue) {
+    public EnvChangeToken(EnvChangeType changeType, byte[] valueBytes) {
         this.changeType = changeType != null ? changeType : EnvChangeType.UNKNOWN;
-        this.oldValue = oldValue != null ? oldValue.trim() : "";
-        this.newValue = newValue != null ? newValue.trim() : "";
+        this.valueBytes = valueBytes != null ? valueBytes.clone() : new byte[0];
     }
 
-    /**
-     * Returns the general TDS token type (always ENV_CHANGE).
-     */
     @Override
     public TokenType getType() {
         return TokenType.ENV_CHANGE;
     }
 
-    /**
-     * Returns the specific subtype of this ENVCHANGE (e.g. PACKET_SIZE, DATABASE, etc.).
-     */
     public EnvChangeType getChangeType() {
         return changeType;
     }
 
-    public String getOldValue() {
-        return oldValue;
-    }
-
-    public String getNewValue() {
-        return newValue;
-    }
-
-    /**
-     * Convenience method: interpret the new value as an integer (useful for packet size).
-     * Returns -1 if parsing fails.
-     */
-    public int getNewValueAsInt() {
-        try {
-            return Integer.parseInt(newValue);
-        } catch (NumberFormatException e) {
-            return -1;
-        }
+    public byte[] getValueBytes() {
+        return valueBytes.clone();
     }
 
     @Override
     public String toString() {
-        return "EnvChangeToken{" +
-                "changeType=" + changeType +
-                ", old='" + oldValue + '\'' +
-                ", new='" + newValue + '\'' +
-                '}';
+        return "EnvChangeToken{type=" + changeType + ", valueBytes=" + bytesToHex(valueBytes) + "}";
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        if (bytes.length == 0) return "[]";
+        StringBuilder sb = new StringBuilder("[");
+        for (byte b : bytes) sb.append(String.format("%02X ", b));
+        sb.setLength(sb.length() - 1);
+        sb.append("]");
+        return sb.toString();
     }
 }

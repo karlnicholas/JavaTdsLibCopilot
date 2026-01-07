@@ -1,21 +1,63 @@
 package org.tdslib.javatdslib;
 
+import org.tdslib.javatdslib.TdsVersion; // assuming your TDS version enum/class
+
+/**
+ * Represents the current session/connection state in a TDS connection.
+ * Tracks environment changes (ENVCHANGE), login ack info, and other server-driven state.
+ *
+ * Getters are used for query execution and client awareness.
+ * Setters are called internally by ApplyingTokenVisitor on ENVCHANGE/LOGINACK.
+ */
 public interface ConnectionContext {
 
-    // Current state getters (useful for queries too)
-    String getCurrentDatabase();
-    int getCurrentPacketSize();
-    // ... add more later (language, collation, etc.)
+    // === TDS Protocol Version (set from LOGINACK) ===
+    TdsVersion getTdsVersion();
+    void setTdsVersion(TdsVersion version);
 
-    // Mutators for ENVCHANGE and reset
+    // === Derived: Unicode support (TDS 7.0+) ===
+    boolean isUnicodeEnabled();
+
+    // === Database ===
+    String getCurrentDatabase();
     void setDatabase(String database);
+
+    // === Language ===
+    String getCurrentLanguage();
+    void setLanguage(String language);
+
+    // === Character Set / Code Page (legacy) ===
+    String getCurrentCharset();
+    void setCharset(String charset);
+
+    // === Packet Size (negotiated via ENVCHANGE) ===
+    int getCurrentPacketSize();
     void setPacketSize(int size);
 
+    // === SQL Collation (binary from ENVCHANGE type 7) ===
+    byte[] getCurrentCollationBytes();
+    void setCollationBytes(byte[] collationBytes);
+
+    // === Transaction State (from BEGIN/COMMIT/ROLLBACK ENVCHANGE) ===
+    boolean isInTransaction();
+    void setInTransaction(boolean inTransaction);
+
+    // === Server Info (from LOGINACK) ===
+    String getServerName();
+    void setServerName(String serverName);
+
+    String getServerVersionString();
+    void setServerVersionString(String versionString);
+
+    // === Reset / Recovery ===
     /**
-     * Resets all session state to defaults as per TDS resetConnection flag.
-     * Called automatically when a packet with resetConnection flag is seen.
+     * Resets session state to defaults (called on resetConnection flag or explicit reset).
+     * Should clear database, transaction state, etc., but keep TDS version.
      */
     void resetToDefaults();
 
-    TdsVersion getTdsVersion();  // ← ADD THIS
+    // === Optional future extensions ===
+    // void addRoutingInfo(RoutingInfo info);
+    // byte[] getTransactionId();
+    // void setTransactionId(byte[] id);
 }
