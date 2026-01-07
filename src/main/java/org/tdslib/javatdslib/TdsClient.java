@@ -9,11 +9,7 @@ import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
-import org.tdslib.javatdslib.tokens.ApplyingTokenVisitor;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
-import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
-import org.tdslib.javatdslib.tokens.error.ErrorToken;
-import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
@@ -295,21 +291,14 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     private LoginResponse processLoginResponse(List<Message> packets) {
-        LoginResponse loginResponse = new LoginResponse();
+        LoginResponse loginResponse = new LoginResponse(this);
 
         // Create the visitor once — it will apply changes to 'this' (TdsClient as ConnectionContext)
-        ApplyingTokenVisitor visitor = new ApplyingTokenVisitor(this);
+//        ApplyingTokenVisitor visitor = new ApplyingTokenVisitor(this);
 
         for (Message msg : packets) {
             // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
-            tokenDispatcher.processMessage(msg, this, token-> {
-                if ( token instanceof LoginAckToken ack ) {
-                    loginResponse.setSuccess(true);
-                    loginResponse.setDatabase(ack.getInitialDatabase());
-                    loginResponse.addEnvChange();
-                }
-                visitor.onToken(token);
-            });
+            tokenDispatcher.processMessage(msg, this, loginResponse);
 
             // Still handle reset flag separately (visitor doesn't cover message-level flags)
             if (msg.isResetConnection()) {
