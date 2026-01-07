@@ -9,10 +9,23 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 public class EnvChangeTokenVisitor {
     private static final Logger logger = LoggerFactory.getLogger(EnvChangeTokenVisitor.class);
     private final ConnectionContext connectionContext;
+
+    private static final Map<Integer, String> COMMON_SORTID_NAMES = new HashMap<>();
+    static {
+        COMMON_SORTID_NAMES.put(52, "SQL_Latin1_General_CP1_CI_AS (Sort Order 52)");
+        COMMON_SORTID_NAMES.put(51, "SQL_Latin1_General_CP1_CS_AS");
+        COMMON_SORTID_NAMES.put(54, "SQL_Latin1_General_CP850_CI_AS");
+        COMMON_SORTID_NAMES.put(53, "SQL_Latin1_General_CP1_CI_AI");
+        COMMON_SORTID_NAMES.put(55, "SQL_Latin1_General_CP850_CS_AS");
+        // You can add more legacy SQL collations from sys.collations where name LIKE 'SQL_%'
+        // Full list: https://learn.microsoft.com/en-us/sql/relational-databases/collations/sql-server-collations
+    }
 
     public EnvChangeTokenVisitor(ConnectionContext connectionContext) {
         this.connectionContext = connectionContext;
@@ -93,14 +106,41 @@ public class EnvChangeTokenVisitor {
                 // Store the new collation data raw (most clients do this)
                 connectionContext.setCollationBytes(newCollationData);
 
-                // Optional: log meaningful info (if you want to decode further)
+                // Decode and log meaningful collation info
                 if (newInfoLen >= 5) {
-                    // Minimal decoding example (LCID is first 4 bytes little-endian)
-                    int lcid = ByteBuffer.wrap(newCollationData, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-                    byte versionSortId = newCollationData[4]; // version + sort ID
-                    logger.debug("SQL Collation updated: LCID={}, versionSortId={}, length={} bytes", lcid, versionSortId, newInfoLen);
+                    ByteBuffer collationBuf = ByteBuffer.wrap(newCollationData).order(ByteOrder.LITTLE_ENDIAN);
+
+                    int fullLcid = collationBuf.getInt();           // bytes 0-3: LCID + flags
+                    byte verSortByte = collationBuf.get();          // byte 4: version (high nibble) + sort order (low nibble)
+
+                    int baseLcid = fullLcid & 0x000FFFFF;           // lower 20 bits = locale ID
+                    int flags = (fullLcid >>> 20) & 0xFF;           // upper 8 bits = sensitivity flags
+
+                    // Full sort order ID (unsigned 8-bit value) is what Microsoft calls "sortid" in docs
+                    int fullSortOrderId = verSortByte & 0xFF;       // 0-255
+                    int versionNibble = (fullSortOrderId >>> 4) & 0x0F;
+                    int sortNibble = fullSortOrderId & 0x0F;
+
+                    String friendlyName = COMMON_SORTID_NAMES.getOrDefault(
+                            fullSortOrderId,
+                            "Unknown legacy SQL collation (sort order " + fullSortOrderId + ")");
+
+                    // Build detailed flag description
+                    StringBuilder flagDesc = new StringBuilder();
+                    if ((flags & 0x01) != 0) flagDesc.append("CI, ");
+                    if ((flags & 0x02) != 0) flagDesc.append("AI, ");
+                    if ((flags & 0x04) != 0) flagDesc.append("WI, ");
+                    if ((flags & 0x08) != 0) flagDesc.append("KI, ");
+                    if ((flags & 0x10) != 0) flagDesc.append("BIN, ");
+                    if ((flags & 0x20) != 0) flagDesc.append("BIN2, ");
+                    if ((flags & 0x40) != 0) flagDesc.append("UTF8, ");
+                    String flagsStr = flagDesc.length() > 0 ? flagDesc.substring(0, flagDesc.length() - 2) : "none";
+
+                    logger.info("SQL Collation updated → {} (LCID={}, flags={}, ver={}, sortNibble={}, fullSortId={})",
+                            friendlyName, baseLcid, flagsStr, versionNibble, sortNibble, fullSortOrderId);
+
                 } else {
-                    logger.debug("SQL Collation updated (empty/new length: {})", newInfoLen);
+                    logger.debug("SQL Collation updated (empty or too short: {} bytes)", newInfoLen);
                 }
                 break;
 
@@ -125,5 +165,4 @@ public class EnvChangeTokenVisitor {
                 break;
         }
     }
-
 }
