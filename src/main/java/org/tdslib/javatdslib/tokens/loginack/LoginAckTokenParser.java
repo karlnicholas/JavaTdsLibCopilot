@@ -43,7 +43,8 @@ public class LoginAckTokenParser implements TokenParser {
 
         // Server version: 4-byte little-endian int
         int serverVersionValue = payload.getInt();
-        ServerVersion serverVersion = ServerVersion.fromValue(serverVersionValue);
+        bigEndianValue = Integer.reverseBytes(serverVersionValue); // to match your enum
+        ServerVersion serverVersion = ServerVersion.fromValue(bigEndianValue);
 
         return new LoginAckToken(interfaceType, tdsVersion, serverName, serverVersion);
     }

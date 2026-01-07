@@ -8,32 +8,37 @@ public enum ServerVersion {
     /**
      * SQL Server 2019 (15.0)
      */
-    SQL_SERVER_2019(0x0F000000), // 15.0.xxxx
+    SQL_SERVER_2019(0x0F000000),
 
     /**
      * SQL Server 2022 (16.0)
      */
-    SQL_SERVER_2022(0x10000000), // 16.0.xxxx
+    SQL_SERVER_2022(0x10000000),
+
+    /**
+     * SQL Server 2025 (17.0)  ← new
+     */
+    SQL_SERVER_2025(0x11000000),
 
     /**
      * SQL Server 2017 (14.0)
      */
-    SQL_SERVER_2017(0x0E000000), // 14.0.xxxx
+    SQL_SERVER_2017(0x0E000000),
 
     /**
      * SQL Server 2016 (13.0)
      */
-    SQL_SERVER_2016(0x0D000000), // 13.0.xxxx
+    SQL_SERVER_2016(0x0D000000),
 
     /**
      * SQL Server 2014 (12.0)
      */
-    SQL_SERVER_2014(0x0C000000), // 12.0.xxxx
+    SQL_SERVER_2014(0x0C000000),
 
     /**
      * SQL Server 2012 (11.0)
      */
-    SQL_SERVER_2012(0x0B000000), // 11.0.xxxx
+    SQL_SERVER_2012(0x0B000000),
 
     /**
      * Fallback/Unknown version

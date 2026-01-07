@@ -157,14 +157,18 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         this.connected = false;
     }
 
-    public void connect(String username, String password, String database, String appName) throws IOException {
+    public void connect(String hostname, String username, String password, String database, String appName, String serverName, String language) throws IOException {
         if (connected) {
             throw new IllegalStateException("Already connected");
         }
 
         preLoginInternal();
         transport.enableTls();
-        loginInternal(username, password, database, appName);
+        LoginResponse loginResponse = loginInternal(hostname, username, password, database, appName, serverName, language);
+
+        if (!loginResponse.isSuccess()) {
+            throw new IOException("Login failed: " + loginResponse.getErrorMessage());
+        }
 
         connected = true;
     }
@@ -190,8 +194,8 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         }
     }
 
-    private void loginInternal(String username, String password, String database, String appName) throws IOException {
-        ByteBuffer loginPayload = buildLogin7Payload(username, password, database, appName);
+    private LoginResponse loginInternal(String hostname, String username, String password, String database, String appName, String serverName, String language) throws IOException {
+        ByteBuffer loginPayload = buildLogin7Payload(hostname, username, password, database, appName, serverName, language);
 
         Message loginMsg = new Message(
                 (byte) 0x10, (byte) 0x01, loginPayload.capacity() + 8,
@@ -202,13 +206,8 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
         List<Message> responses = messageHandler.receiveFullResponse();
 
-        LoginResponse loginResponse = processLoginResponse(responses);
+        return processLoginResponse(responses);
 
-        if (!loginResponse.isSuccess()) {
-            throw new IOException("Login failed: " + loginResponse.getErrorMessage());
-        }
-
-        currentDatabase = loginResponse.getDatabase();
     }
 
     private ByteBuffer buildPreLoginPayload(boolean encryptIfNeeded, boolean supportMars) {
@@ -222,16 +221,16 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 //        return payload;
     }
 
-    private ByteBuffer buildLogin7Payload(String username, String password, String database, String appName) {
+    private ByteBuffer buildLogin7Payload(String hostname, String username, String password, String database, String appName, String serverName, String language) {
         // Implement your Login7 payload builder here
         Login7Payload login7Payload = new Login7Payload(new Login7Options());
-        login7Payload.hostname = "192.168.1.121";
-        login7Payload.serverName = "MyServerName";
-        login7Payload.appName = "MyAppName";
-        login7Payload.language = "us_english";
-        login7Payload.database = "master";
-        login7Payload.username = "reactnonreact";
-        login7Payload.password = "reactnonreact";
+        login7Payload.hostname = hostname;
+        login7Payload.serverName = serverName;
+        login7Payload.appName = appName;
+        login7Payload.language = language;
+        login7Payload.database = database;
+        login7Payload.username = username;
+        login7Payload.password = password;
 
 //        login7Payload..TypeFlags.AccessIntent = TypeFlags.OptionAccessIntent.READ_WRITE;
         return login7Payload.buildBuffer();
@@ -292,9 +291,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     private LoginResponse processLoginResponse(List<Message> packets) {
         LoginResponse loginResponse = new LoginResponse(this);
-
-        // Create the visitor once — it will apply changes to 'this' (TdsClient as ConnectionContext)
-//        ApplyingTokenVisitor visitor = new ApplyingTokenVisitor(this);
 
         for (Message msg : packets) {
             // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)

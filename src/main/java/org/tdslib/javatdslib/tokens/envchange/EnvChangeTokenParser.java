@@ -36,23 +36,6 @@ public class EnvChangeTokenParser implements TokenParser {
         return new EnvChangeToken(changeType, valueBytes);
     }
 
-    private void applyChange(EnvChangeType type, String newValue, ConnectionContext context) {
-        switch (type) {
-            case PACKET_SIZE, PACKET_SIZE_ALT:
-                int newSize = parseIntSafe(newValue);
-                if (newSize >= 512 && newSize <= 32767) {
-                    context.setPacketSize(newSize);
-                }
-                break;
-            case DATABASE:
-                context.setDatabase(newValue);
-                break;
-            case UNKNOWN:
-                // Log or ignore unknown types
-                break;
-        }
-    }
-
     private int parseIntSafe(String value) {
         try {
             return Integer.parseInt(value);
