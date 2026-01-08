@@ -309,4 +309,8 @@ public class TcpTransport implements AutoCloseable {
         if (!logger.isDebugEnabled()) return;
         // ... same as your original implementation ...
     }
+
+    public void disableTls() {
+        sslEngine = null;
+    }
 }

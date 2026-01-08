@@ -3,6 +3,7 @@
 
 package org.tdslib.javatdslib;
 
+import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.messages.Message;
 import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -39,6 +40,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     private boolean inTransaction = false;
     private String serverName = null;
     private String serverVersionString = null;
+    private int spid;
 
     private TdsVersion tdsVersion = TdsVersion.V7_4; // default
 
@@ -138,6 +140,14 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         this.serverVersionString = versionString;
     }
 
+    public int getSpid() {
+        return spid;
+    }
+
+    public void setSpid(int spid) {
+        this.spid = spid;
+    }
+
     @Override
     public void resetToDefaults() {
         currentDatabase = null;
@@ -146,6 +156,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         packetSize = 4096;
         currentCollationBytes = new byte[0];
         inTransaction = false;
+        spid = 0;
         // Do NOT reset tdsVersion, serverName, or serverVersionString (connection-level)
         System.out.println("Session state reset due to resetConnection flag");
     }
@@ -291,10 +302,12 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     private LoginResponse processLoginResponse(List<Message> packets) {
         LoginResponse loginResponse = new LoginResponse(this);
+        QueryContext queryContext = new QueryContext();
 
         for (Message msg : packets) {
+            setSpid(msg.getSpid());
             // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
-            tokenDispatcher.processMessage(msg, this, loginResponse);
+            tokenDispatcher.processMessage(msg, this, queryContext, loginResponse);
 
             // Still handle reset flag separately (visitor doesn't cover message-level flags)
             if (msg.isResetConnection()) {
@@ -336,25 +349,34 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
             throw new IllegalStateException("Not connected");
         }
 
+        transport.disableTls();
+
         return queryInternal().getQueryResponse();
     }
 
     private QueryResponseTokenVisitor queryInternal() throws IOException {
 
-// Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix for SQL_BATCH)
-        String sql = "SELECT @@VERSION";
-        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
+        // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix for SQL_BATCH)
+        String sql = "SELECT @@VERSION AS version, DB_NAME() AS db";
+//        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
+        byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
 
-        ByteBuffer queryPayload = ByteBuffer.wrap(sqlBytes);  // Direct wrap, no extra build method needed
+        byte[] allHeaders = AllHeaders.forAutoCommit().toBytes();
+
+        ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
+        payload.put(allHeaders);
+        payload.put(sqlBytes);
+
+        payload.flip();
 
 // Create SQL_BATCH message (type 0x01, EOM=0x01)
         Message queryMsg = new Message(
                 (byte) 0x01,  // Type: SQL_BATCH
                 (byte) 0x01,  // Status: EOM (end of message)
                 sqlBytes.length + 8,  // Total length (header 8 + payload)
-                (short) 0,    // SPID (0 for client)
+                (short) spid,    // SPID (0 for client)
                 (short) 1,    // Packet sequence (increment if multi-packet)
-                queryPayload,
+                payload,
                 System.nanoTime(),
                 null
         );
@@ -369,11 +391,11 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     private QueryResponseTokenVisitor processQueryResponse(List<Message> packets) {
-        QueryResponseTokenVisitor queryResponseTokenVisitor = new QueryResponseTokenVisitor(this, new QueryContext());
-
+        QueryResponseTokenVisitor queryResponseTokenVisitor = new QueryResponseTokenVisitor(this);
+        QueryContext queryContext = new QueryContext();
         for (Message msg : packets) {
             // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
-            tokenDispatcher.processMessage(msg, this, queryResponseTokenVisitor);
+            tokenDispatcher.processMessage(msg, this, queryContext, queryResponseTokenVisitor);
 
             // Still handle reset flag separately (visitor doesn't cover message-level flags)
             if (msg.isResetConnection()) {

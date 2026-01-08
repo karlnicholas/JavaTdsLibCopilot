@@ -6,6 +6,7 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
+import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.metadata.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
@@ -80,12 +81,20 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
                 break;
 
             case INFO:
-            case ERROR:
                 InfoToken info = (InfoToken) token;
                 logger.info("Server message [{}] (state {}): {}",
                         info.getNumber(), info.getState(), info.getMessage());
 
                 if (info.isError()) {
+                    hasError = true;
+                }
+                break;
+            case ERROR:
+                ErrorToken error = (ErrorToken) token;
+                logger.info("Server message [{}] (state {}): {}",
+                        error.getNumber(), error.getState(), error.getMessage());
+
+                if (error.isError()) {
                     hasError = true;
                 }
                 break;

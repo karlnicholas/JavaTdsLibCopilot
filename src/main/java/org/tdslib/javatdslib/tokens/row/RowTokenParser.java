@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens.row;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.metadata.ColMetaDataToken;
@@ -17,14 +18,8 @@ import java.util.List;
  */
 public class RowTokenParser implements TokenParser {
 
-    private final ColMetaDataToken lastMeta;  // pass from context or previous token
-
-    public RowTokenParser(ColMetaDataToken lastMeta) {
-        this.lastMeta = lastMeta;
-    }
-
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         if (tokenType != (byte) 0xD1) {
             throw new IllegalArgumentException("Expected ROW (0xD1), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }
@@ -32,7 +27,7 @@ public class RowTokenParser implements TokenParser {
         List<byte[]> columnData = new ArrayList<>();
 
         // For each column from previous metadata
-        for (ColumnMeta col : lastMeta.getColumns()) {
+        for (ColumnMeta col : queryContext.getColMetaDataToken().getColumns()) {
             byte dataType = col.dataType;
             byte[] data;
 

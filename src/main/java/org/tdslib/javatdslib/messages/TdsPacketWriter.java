@@ -23,6 +23,7 @@ public class TdsPacketWriter {
     public List<ByteBuffer> buildPackets(
             byte packetType,
             byte statusFlags,
+            int spid,
             ByteBuffer payload,
             short startingPacketId,
             int maxPacketSize) {
@@ -53,7 +54,7 @@ public class TdsPacketWriter {
             packet.put(packetType);                    // Byte 0: Type
             packet.put(thisStatus);                    // Byte 1: Status (EOM on last)
             packet.putShort((short) (8 + thisPayloadSize)); // Bytes 2-3: Length (BE)
-            packet.putShort((short) 0);                // Bytes 4-5: SPID (0 for client)
+            packet.putShort((short) spid);                // Bytes 4-5: SPID (0 for client)
             packet.put((byte) (packetId & 0xFF));      // Byte 6: Packet Number (1 byte)
             packet.put((byte) 0);                      // Byte 7: Window (always 0)
 

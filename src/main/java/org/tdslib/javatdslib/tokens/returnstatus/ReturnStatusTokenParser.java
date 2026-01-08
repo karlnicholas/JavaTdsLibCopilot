@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens.returnstatus;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -14,7 +15,7 @@ import java.nio.ByteBuffer;
 public class ReturnStatusTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         if (tokenType != TokenType.RETURN_STATUS.getValue()) {
             throw new IllegalArgumentException(
                     "Expected RETURN_STATUS token (0x79), got 0x" + Integer.toHexString(tokenType & 0xFF));

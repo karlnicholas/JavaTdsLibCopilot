@@ -3,6 +3,7 @@ package org.tdslib.javatdslib.tokens.loginack;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
@@ -18,7 +19,7 @@ public class LoginAckTokenParser implements TokenParser {
     private static final Logger logger = LoggerFactory.getLogger(LoginAckTokenParser.class);
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         if (tokenType != TokenType.LOGIN_ACK.getValue()) {
             throw new IllegalArgumentException("Expected LOGINACK (0xAD), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }

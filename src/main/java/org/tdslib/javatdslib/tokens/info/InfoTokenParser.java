@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens.info;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
@@ -16,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 public class InfoTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         if (tokenType != TokenType.INFO.getValue()) {
             throw new IllegalArgumentException("Expected INFO (0xAB), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }

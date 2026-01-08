@@ -3,6 +3,7 @@ package org.tdslib.javatdslib.tokens.envchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 
@@ -16,7 +17,7 @@ public class EnvChangeTokenParser implements TokenParser {
     private static final Logger logger = LoggerFactory.getLogger(EnvChangeTokenParser.class);
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         // Read the total EnvValueData length in bytes (USHORT after the token type 0xE3)
         int envDataLength = payload.getShort() & 0xFFFF;
 

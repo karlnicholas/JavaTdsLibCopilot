@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens.metadata;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 
@@ -15,7 +16,7 @@ import java.util.List;
 public class ColMetaDataTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
         if (tokenType != (byte) 0x81) {
             throw new IllegalArgumentException("Expected COL_METADATA (0x81), got 0x" + Integer.toHexString(tokenType & 0xFF));
         }
@@ -55,7 +56,9 @@ public class ColMetaDataTokenParser implements TokenParser {
             columns.add(new ColumnMeta(i + 1, name, dataType, maxLen, flags));
         }
 
-        return new ColMetaDataToken(tokenType, count, columns);
+        ColMetaDataToken colMetaDataToken = new ColMetaDataToken(tokenType, count, columns);
+        queryContext.setColMetaDataToken(colMetaDataToken);
+        return colMetaDataToken;
     }
 
     // Quick helper to skip/read basic TypeInfo length

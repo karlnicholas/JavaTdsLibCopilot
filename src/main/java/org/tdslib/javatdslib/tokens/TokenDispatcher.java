@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.messages.Message;
 import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;
@@ -10,6 +11,7 @@ import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
 import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.metadata.ColMetaDataTokenParser;
+import org.tdslib.javatdslib.tokens.row.RowTokenParser;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -34,6 +36,7 @@ public class TokenDispatcher {
          register(TokenType.DONE_IN_PROC, new DoneInProcTokenParser());
          register(TokenType.DONE_PROC,    new DoneProcTokenParser());
          register(TokenType.COL_METADATA, new ColMetaDataTokenParser());
+         register(TokenType.ROW,          new RowTokenParser());
         // For ROW, you may need to pass last ColMetaDataToken (store in context or use stateful parser)
         // etc.
     }
@@ -50,7 +53,7 @@ public class TokenDispatcher {
      * @param context  Connection context for state updates (e.g., packet size, database)
      * @param visitor  Callback to handle each parsed token
      */
-    public void processMessage(Message message, ConnectionContext context, TokenVisitor visitor) {
+    public void processMessage(Message message, ConnectionContext context, QueryContext queryContext, TokenVisitor visitor) {
         ByteBuffer payload = message.getPayload().order(ByteOrder.LITTLE_ENDIAN); // safe, independent copy
 
         while (payload.hasRemaining()) {
@@ -64,7 +67,7 @@ public class TokenDispatcher {
             }
 
             // Parser consumes exactly the bytes for this token
-            Token token = parser.parse(payload, tokenTypeByte, context);
+            Token token = parser.parse(payload, tokenTypeByte, context, queryContext);
 
             // Notify the visitor (caller decides what to do)
             visitor.onToken(token);

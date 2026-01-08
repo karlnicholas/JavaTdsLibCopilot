@@ -1,64 +1,69 @@
 package org.tdslib.javatdslib.tokens.error;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
+import org.tdslib.javatdslib.tokens.TokenType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Parser for ERROR token (0xAA).
- * Eagerly decodes the full error details.
- */
 public class ErrorTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context) {
-        // Length (2 bytes) - we ignore it since we parse sequentially
-        payload.getShort(); // skip length
+    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
+        if (tokenType != TokenType.ERROR.getValue()) {
+            throw new IllegalArgumentException("Wrong token type: 0x" + String.format("%02X", tokenType));
+        }
+
+        int start = payload.position();
+        int tokenLen = Short.toUnsignedInt(payload.getShort());
+
+        if (tokenLen < 11) throw new IllegalStateException("Token too short: " + tokenLen);
+
+        int end = payload.position() + tokenLen;
+        if (end > payload.limit()) throw new IllegalStateException("Token overflows buffer");
 
         long number = Integer.toUnsignedLong(payload.getInt());
         byte state = payload.get();
         byte severity = payload.get();
 
-        String message = readUsVarChar(payload);
-        String serverName = readBVarChar(payload);
-        String procName = readBVarChar(payload);
+        String message    = readUsVarChar(payload, end);
+        String serverName = readBVarChar(payload, end);
+        String procName   = readBVarChar(payload, end);
 
-        long lineNumber;
-        if (context != null && context.getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
-            lineNumber = Short.toUnsignedInt(payload.getShort());
-        } else {
-            lineNumber = Integer.toUnsignedLong(payload.getInt());
+        long lineNumber = (context != null && context.getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal())
+                ? Short.toUnsignedInt(payload.getShort())
+                : Integer.toUnsignedLong(payload.getInt());
+
+        int consumed = payload.position() - start;
+        if (consumed != 2 + tokenLen) {
+            System.err.printf("WARN: Length mismatch - claimed %d, consumed %d%n", tokenLen, consumed - 2);
         }
 
-        return new ErrorToken(
-                tokenType,
-                number,
-                state,
-                severity,
-                message,
-                serverName,
-                procName,
-                lineNumber
-        );
+        return new ErrorToken(tokenType, number, state, severity, message, serverName, procName, lineNumber);
     }
 
-    private static String readUsVarChar(ByteBuffer buf) {
-        int byteLen = Short.toUnsignedInt(buf.getShort());
-        if (byteLen == 0xFFFF || byteLen == 0) return "";
-        byte[] bytes = new byte[byteLen];
+    private String readUsVarChar(ByteBuffer buf, int end) {
+        int charCount = Short.toUnsignedInt(buf.getShort());
+
+        int byteCount = charCount * 2;  // always 2 bytes per char for UTF-16LE
+
+        byte[] bytes = new byte[byteCount];
         buf.get(bytes);
-        return new String(bytes, StandardCharsets.UTF_16LE).trim();
+        return new String(bytes, StandardCharsets.UTF_16LE);
     }
 
-    private static String readBVarChar(ByteBuffer buf) {
-        int len = Byte.toUnsignedInt(buf.get());
-        if (len == 0) return "";
-        byte[] bytes = new byte[len];
+    private String readBVarChar(ByteBuffer buf, int end) {
+        int charCount = Byte.toUnsignedInt(buf.get());
+
+        int byteCount = charCount * 2;
+
+        byte[] bytes = new byte[byteCount];
         buf.get(bytes);
-        return new String(bytes, StandardCharsets.US_ASCII).trim();
+        return new String(bytes, StandardCharsets.US_ASCII);
     }
+
 }

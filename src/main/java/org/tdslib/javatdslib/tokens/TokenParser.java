@@ -4,6 +4,7 @@
 package org.tdslib.javatdslib.tokens;
 
 import org.tdslib.javatdslib.ConnectionContext;
+import org.tdslib.javatdslib.QueryContext;
 
 import java.nio.ByteBuffer;
 
@@ -18,5 +19,5 @@ public interface TokenParser {
      * @param context     Access to connection state (for ENV_CHANGE, etc.)
      * @return            The parsed token object, or null if no object is needed
      */
-    Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context);
+    Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext);
 }

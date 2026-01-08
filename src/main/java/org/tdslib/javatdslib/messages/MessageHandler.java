@@ -47,6 +47,7 @@ public final class MessageHandler {
         List<ByteBuffer> packetBuffers = packetWriter.buildPackets(
                 message.getPacketType(),
                 message.getStatusFlags(),
+                message.getSpid(),
                 message.getPayload(),
                 (short) 1,
                 transport.getCurrentPacketSize()
