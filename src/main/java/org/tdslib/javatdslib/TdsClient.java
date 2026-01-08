@@ -361,7 +361,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 //        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
         byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
 
-        byte[] allHeaders = AllHeaders.forAutoCommit().toBytes();
+        byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
 
         ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
         payload.put(allHeaders);
