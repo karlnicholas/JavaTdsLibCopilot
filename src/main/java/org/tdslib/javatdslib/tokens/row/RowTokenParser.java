@@ -28,7 +28,7 @@ public class RowTokenParser implements TokenParser {
 
         // For each column from previous metadata
         for (ColumnMeta col : queryContext.getColMetaDataToken().getColumns()) {
-            byte dataType = col.dataType;
+            byte dataType = col.getDataType();
             byte[] data;
 
             if (isFixedLength(dataType)) {

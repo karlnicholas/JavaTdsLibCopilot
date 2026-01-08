@@ -9,7 +9,7 @@ public class ColMetaDataToken extends Token {
     private final short columnCount;
     private final List<ColumnMeta> columns;
 
-    public ColMetaDataToken(byte type, short columnCount, List<ColumnMeta> columns) {
+    public  ColMetaDataToken(byte type, short columnCount, List<ColumnMeta> columns) {
         super(TokenType.fromValue(type));
         this.columnCount = columnCount;
         this.columns = columns;
