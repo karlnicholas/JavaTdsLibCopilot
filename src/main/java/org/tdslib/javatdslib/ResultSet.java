@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.tokens.metadata.ColumnMeta;
+import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

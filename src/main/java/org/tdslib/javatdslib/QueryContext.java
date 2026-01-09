@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.tokens.metadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
 
 public class QueryContext {
     private ColMetaDataToken colMetaDataToken;

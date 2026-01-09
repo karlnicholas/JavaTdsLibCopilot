@@ -8,7 +8,7 @@ import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
-import org.tdslib.javatdslib.tokens.metadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
 
 import java.util.ArrayList;

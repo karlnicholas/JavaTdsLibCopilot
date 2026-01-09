@@ -4,8 +4,7 @@ import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
-import org.tdslib.javatdslib.tokens.metadata.ColMetaDataToken;
-import org.tdslib.javatdslib.tokens.metadata.ColumnMeta;
+import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -31,14 +30,28 @@ public class RowTokenParser implements TokenParser {
             byte dataType = col.getDataType();
             byte[] data;
 
-            if (isFixedLength(dataType)) {
-                data = new byte[getFixedLength(dataType)];
-                payload.get(data);
+            if (TdsDataTypes.isFixedLength(dataType)) {
+                int length = TdsDataTypes.getFixedLength(dataType);
+                if (length > 0) {
+                    data = new byte[length];
+                    payload.get(data);
+                } else {
+                    data = null; // Should not happen for fixed lengths
+                }
+            } else if (TdsDataTypes.isNullableFixedLength(dataType)) {
+                // For nullable types like INTN (0x26), etc.: BYTE length prefix
+                int len = payload.get() & 0xFF;
+                if (len == 0) {
+                    data = null; // NULL
+                } else {
+                    data = new byte[len];
+                    payload.get(data);
+                }
             } else {
                 // Variable length: USHORT length prefix (0xFFFF = NULL)
                 int len = payload.getShort() & 0xFFFF;
                 if (len == 0xFFFF) {
-                    data = null;  // NULL
+                    data = null; // NULL
                 } else {
                     data = new byte[len];
                     payload.get(data);
@@ -49,18 +62,5 @@ public class RowTokenParser implements TokenParser {
         }
 
         return new RowToken(tokenType, columnData);
-    }
-
-    private boolean isFixedLength(byte type) {
-        // Add more as needed
-        return type == 0x26 || type == 0x38 || type == 0x3E || type == 0x3F; // int, tinyint, float, etc.
-    }
-
-    private int getFixedLength(byte type) {
-        switch (type) {
-            case 0x26: return 4;  // int
-            // ...
-            default: return 0;
-        }
     }
 }

@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.tokens.metadata;
+package org.tdslib.javatdslib.tokens.colmetadata;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;

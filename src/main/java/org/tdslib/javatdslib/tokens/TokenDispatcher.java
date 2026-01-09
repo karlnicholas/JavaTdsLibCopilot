@@ -10,7 +10,7 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeTokenParser;
 import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
 import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
-import org.tdslib.javatdslib.tokens.metadata.ColMetaDataTokenParser;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.row.RowTokenParser;
 
 import java.nio.ByteBuffer;

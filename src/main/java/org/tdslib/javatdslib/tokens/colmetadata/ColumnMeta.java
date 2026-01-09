@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.tokens.metadata;
+package org.tdslib.javatdslib.tokens.colmetadata;
 
 /**
  * Optional: Enhanced ColumnMeta class with more fields.

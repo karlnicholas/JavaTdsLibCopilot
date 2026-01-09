@@ -208,10 +208,12 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     private LoginResponse loginInternal(String hostname, String username, String password, String database, String appName, String serverName, String language) throws IOException {
         ByteBuffer loginPayload = buildLogin7Payload(hostname, username, password, database, appName, serverName, language);
 
-        Message loginMsg = new Message(
-                (byte) 0x10, (byte) 0x01, loginPayload.capacity() + 8,
-                (short) 0, (short) 1, loginPayload, System.nanoTime(), null
-        );
+//        Message loginMsg = new Message(
+//                (byte) 0x10, (byte) 0x01, loginPayload.capacity() + 8,
+//                (short) 0, (short) 1, loginPayload, System.nanoTime(), null
+//        );
+        Message loginMsg = Message.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
+
 
         messageHandler.sendMessage(loginMsg);
 
@@ -351,13 +353,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
         transport.disableTls();
 
-        return queryInternal().getQueryResponse();
+        return queryInternal(sql).getQueryResponse();
     }
 
-    private QueryResponseTokenVisitor queryInternal() throws IOException {
+    private QueryResponseTokenVisitor queryInternal(String sql) throws IOException {
 
         // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix for SQL_BATCH)
-        String sql = "SELECT @@VERSION AS version, DB_NAME() AS db";
+//        String sql = "SELECT @@VERSION AS version, DB_NAME() AS db";
 //        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
         byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
 
@@ -370,16 +372,18 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         payload.flip();
 
 // Create SQL_BATCH message (type 0x01, EOM=0x01)
-        Message queryMsg = new Message(
-                (byte) 0x01,  // Type: SQL_BATCH
-                (byte) 0x01,  // Status: EOM (end of message)
-                sqlBytes.length + 8,  // Total length (header 8 + payload)
-                (short) spid,    // SPID (0 for client)
-                (short) 1,    // Packet sequence (increment if multi-packet)
-                payload,
-                System.nanoTime(),
-                null
-        );
+//        Message queryMsg = new Message(
+//                (byte) 0x01,  // Type: SQL_BATCH
+//                (byte) 0x01,  // Status: EOM (end of message)
+//                sqlBytes.length + 8,  // Total length (header 8 + payload)
+//                (short) spid,    // SPID (0 for client)
+//                (short) 1,    // Packet sequence (increment if multi-packet)
+//                payload,
+//                System.nanoTime(),
+//                null
+//        );
+        Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+
 
         messageHandler.sendMessage(queryMsg);
 
