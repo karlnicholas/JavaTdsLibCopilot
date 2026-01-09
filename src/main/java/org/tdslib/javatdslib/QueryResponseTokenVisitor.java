@@ -57,7 +57,7 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
                     return;
                 }
                 RowToken row = (RowToken) token;
-                currentResultSet.getRawRows().add(row.getColumnData());
+                currentResultSet.addRawRow(row.getColumnData());
                 logger.debug("Row added ({} columns)", row.getColumnData().size());
                 break;
 

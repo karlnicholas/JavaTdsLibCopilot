@@ -21,6 +21,10 @@ public class ResultSet {
         return new ArrayList<>(rawRows);
     }
 
+    public void addRawRow(List<byte[]> row) {
+        rawRows.add(row);
+    }
+
     public long getRowCount() {
         return rowCount >= 0 ? rowCount : rawRows.size();
     }
