@@ -10,17 +10,24 @@ public final class ReturnStatusToken extends Token {
 
     private final int value;
 
-    public ReturnStatusToken(byte tokenType, int value) {
+    /**
+     * Constructs a ReturnStatusToken.
+     *
+     * @param tokenType raw token type byte
+     * @param value     signed 4-byte return value
+     */
+    public ReturnStatusToken(final byte tokenType, final int value) {
         super(TokenType.fromValue(tokenType));
         this.value = value;
     }
 
+    /** Returns the return status value. */
     public int getValue() {
         return value;
     }
 
     @Override
     public String toString() {
-        return "ReturnStatusToken{value=" + value + "}";
+        return String.format("ReturnStatusToken{value=%d}", value);
     }
 }
