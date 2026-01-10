@@ -4,11 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
-import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
 
 import java.util.ArrayList;

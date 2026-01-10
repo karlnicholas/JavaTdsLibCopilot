@@ -3,6 +3,7 @@ package org.tdslib.javatdslib.tokens;
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneTokenParser;
@@ -10,7 +11,6 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeTokenParser;
 import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
 import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
-import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.row.RowTokenParser;
 
 import java.nio.ByteBuffer;

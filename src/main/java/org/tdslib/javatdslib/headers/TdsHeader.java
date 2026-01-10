@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.tds.headers;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 /**
  * Base class for individual TDS headers in ALL_HEADERS.
