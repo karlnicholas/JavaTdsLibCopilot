@@ -13,6 +13,14 @@ public abstract class AbstractDoneToken extends Token {
     private final int currentCommand;
     private final long rowCount;
 
+    /**
+     * Construct an AbstractDoneToken.
+     *
+     * @param type           raw token byte value
+     * @param status         DONE status flags (may be null)
+     * @param currentCommand command id associated with the token
+     * @param rowCount       row count reported by the token
+     */
     protected AbstractDoneToken(final byte type, final DoneStatus status,
             final int currentCommand, final long rowCount) {
         super(TokenType.fromValue(type));

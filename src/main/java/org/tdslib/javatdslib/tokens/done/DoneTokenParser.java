@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens.done;
 
+import java.nio.ByteBuffer;
+
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
@@ -7,15 +9,16 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.nio.ByteBuffer;
-
 /**
  * Parser for standard DONE token (0xFD).
  */
 public class DoneTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
+    public Token parse(final ByteBuffer payload,
+            final byte tokenType,
+            final ConnectionContext context,
+            final QueryContext queryContext) {
         if (tokenType != TokenType.DONE.getValue()) {
             throw new IllegalArgumentException("Expected DONE token, got 0x" + Integer.toHexString(tokenType & 0xFF));
         }

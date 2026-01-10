@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.tokens.done;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
@@ -7,17 +8,20 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
 
-import java.nio.ByteBuffer;
-
 /**
  * Parser for DONE_PROC token (0xFE).
  */
 public class DoneProcTokenParser implements TokenParser {
 
     @Override
-    public Token parse(ByteBuffer payload, byte tokenType, ConnectionContext context, QueryContext queryContext) {
+    public Token parse(final ByteBuffer payload,
+            final byte tokenType,
+            final ConnectionContext context,
+            final QueryContext queryContext) {
         if (tokenType != TokenType.DONE_PROC.getValue()) {
-            throw new IllegalArgumentException("Expected DONE_PROC token, got 0x" + Integer.toHexString(tokenType & 0xFF));
+            throw new IllegalArgumentException(
+                    "Expected DONE_PROC token, got 0x" + Integer.toHexString(tokenType & 0xFF)
+            );
         }
 
         int statusValue = Short.toUnsignedInt(payload.getShort());

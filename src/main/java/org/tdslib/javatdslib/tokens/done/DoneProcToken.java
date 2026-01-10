@@ -5,7 +5,18 @@ package org.tdslib.javatdslib.tokens.done;
  */
 public final class DoneProcToken extends AbstractDoneToken {
 
-    public DoneProcToken(byte type, DoneStatus status, int currentCommand, long rowCount) {
+    /**
+     * Construct a DONE_PROC token.
+     *
+     * @param type           raw token byte value
+     * @param status         DONE status flags
+     * @param currentCommand command id associated with the token
+     * @param rowCount       row count reported by the token
+     */
+    public DoneProcToken(final byte type,
+            final DoneStatus status,
+            final int currentCommand,
+            final long rowCount) {
         super(type, status, currentCommand, rowCount);
     }
 

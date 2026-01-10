@@ -18,10 +18,21 @@ public enum DoneStatus {
         this.value = value;
     }
 
+    /**
+     * Numeric value for this status flag.
+     *
+     * @return integer bitmask value
+     */
     public int getValue() {
         return value;
     }
 
+    /**
+     * Obtain a DoneStatus from a combined status value.
+     *
+     * @param value combined status bits
+     * @return matching DoneStatus or FINAL if none
+     */
     public static DoneStatus fromValue(int value) {
         for (DoneStatus s : values()) {
             if ((value & s.value) == s.value) {
@@ -31,6 +42,12 @@ public enum DoneStatus {
         return FINAL;
     }
 
+    /**
+     * Check whether this flag is set in a combined status value.
+     *
+     * @param combined combined status bits to test
+     * @return true when this flag is present
+     */
     public boolean isSet(int combined) {
         return (combined & value) != 0;
     }
