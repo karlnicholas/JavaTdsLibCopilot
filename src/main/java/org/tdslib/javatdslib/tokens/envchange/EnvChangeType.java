@@ -6,7 +6,7 @@ import java.util.Map;
 /**
  * Environment change subtypes for ENVCHANGE token (0xE3).
  *
- * Byte values are taken directly from the MS-TDS protocol specification.
+ * <p>Byte values are taken directly from the MS-TDS protocol specification.</p>
  *
  * @see <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/0b83e8c3-9d5e-4e2f-b8b5-8d4b8e4f8f0d">MS-TDS - ENVCHANGE</a>
  */
