@@ -14,7 +14,17 @@ public class LoginAckToken extends Token {
     private final String serverName;
     private final ServerVersion serverVersion;
 
-    public LoginAckToken(byte type, SqlInterfaceType interfaceType, TdsVersion tdsVersion, String serverName, ServerVersion serverVersion) {
+    /**
+     * Constructs a LoginAckToken.
+     *
+     * @param type          raw token byte
+     * @param interfaceType SQL interface type
+     * @param tdsVersion    negotiated TDS version
+     * @param serverName    reported server name
+     * @param serverVersion reported server product version
+     */
+    public LoginAckToken(final byte type, final SqlInterfaceType interfaceType, final TdsVersion tdsVersion,
+            final String serverName, final ServerVersion serverVersion) {
         super(TokenType.fromValue(type));
         this.interfaceType = interfaceType;
         this.tdsVersion = tdsVersion;
@@ -39,7 +49,7 @@ public class LoginAckToken extends Token {
     }
 
     /**
-     * Convenience method: returns the server version as string (e.g. "SQL Server 2022").
+     * Convenience method: returns the server version as string (e.g. "2022.0").
      */
     public String getServerVersionString() {
         return serverVersion.toVersionString();
@@ -47,11 +57,9 @@ public class LoginAckToken extends Token {
 
     @Override
     public String toString() {
-        return "LoginAckToken[" +
-                "InterfaceType=" + interfaceType +
-                ", TdsVersion=" + tdsVersion +
-                ", ServerName=" + serverName +
-                ", ServerVersion=" + serverVersion +
-                ']';
+        return String.format(
+                "LoginAckToken[InterfaceType=%s, TdsVersion=%s, ServerName=%s, ServerVersion=%s]",
+                interfaceType, tdsVersion, serverName, serverVersion
+        );
     }
 }
