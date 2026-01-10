@@ -11,7 +11,17 @@ public final class FeatureExtAckToken extends Token {
     private final byte featureId;
     private final byte[] data; // Raw data bytes following the ID
 
-    public FeatureExtAckToken(byte tokenType, byte featureId, byte[] data) {
+    /**
+     * Constructs a new FeatureExtAckToken.
+     *
+     * <p>Creates an immutable token instance with the provided token type,
+     * feature identifier and associated raw data.</p>
+     *
+     * @param tokenType the raw token type byte as received from the stream
+     * @param featureId the feature extension identifier
+     * @param data      the raw feature data bytes; may be {@code null}
+     */
+    public FeatureExtAckToken(final byte tokenType, final byte featureId, final byte[] data) {
         super(TokenType.fromValue(tokenType));
         this.featureId = featureId;
         this.data = data != null ? data.clone() : new byte[0];
@@ -33,9 +43,9 @@ public final class FeatureExtAckToken extends Token {
 
     @Override
     public String toString() {
-        return "FeatureExtAckToken{" +
-                "featureId=0x" + String.format("%02X", featureId) +
-                ", dataLength=" + data.length +
-                '}';
+        return String.format(
+                "FeatureExtAckToken{featureId=0x%02X, dataLength=%d}",
+                featureId & 0xFF, data.length
+        );
     }
 }
