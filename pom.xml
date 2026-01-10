@@ -38,15 +38,24 @@
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <version>3.6.0</version>
 
+                <dependencies>
+                    <!-- Use latest stable Checkstyle (supports SuppressWithNearbyTextFilter & modern google_checks.xml) -->
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>12.3.1</version>  <!-- or 12.3.1 if you prefer the last 12.x -->
+                    </dependency>
+                </dependencies>
+
                 <configuration>
-                    <configLocation>${project.basedir}/checkstyle.xml</configLocation>
-                    <inputEncoding>UTF-8</inputEncoding>  <!-- fixed here -->
+                    <configLocation>${project.basedir}/config/checkstyle/google_checks_custom.xml</configLocation>
+                    <inputEncoding>UTF-8</inputEncoding>
                     <consoleOutput>true</consoleOutput>
                     <failOnViolation>true</failOnViolation>
-                    <!-- optional but useful -->
                     <includeTestSourceDirectory>true</includeTestSourceDirectory>
                 </configuration>
 
+                        <!-- Your executions block here -->
                 <executions>
                     <execution>
                         <id>validate</id>

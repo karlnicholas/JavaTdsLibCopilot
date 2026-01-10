@@ -1,15 +1,5 @@
 package org.tdslib.javatdslib.transport;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -18,6 +8,15 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLEngineResult;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Low-level TCP transport for TDS communication.
@@ -25,7 +24,7 @@ import java.security.cert.X509Certificate;
  */
 public class TcpTransport implements AutoCloseable {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TcpTransport.class);
+    private static final Logger logger = LoggerFactory.getLogger(TcpTransport.class);
 
     private final SocketChannel socketChannel;
     private final String host;
@@ -71,23 +70,25 @@ public class TcpTransport implements AutoCloseable {
     public void enableTls() throws IOException {
         try {
             // 1. Trust All Certs (Explicitly requested)
-            final TrustManager[] trustAllCerts = new TrustManager[]{
-                    new X509TrustManager() {
-                        @Override
-                        public X509Certificate[] getAcceptedIssuers() {
-                            return new X509Certificate[0];
-                        }
-
-                        @Override
-                        public void checkClientTrusted(final X509Certificate[] certs, final String authType) {
-                            // Trust all
-                        }
-
-                        @Override
-                        public void checkServerTrusted(final X509Certificate[] certs, final String authType) {
-                            // Trust all
-                        }
+            final TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
                     }
+
+                    @Override
+                    public void checkClientTrusted(final X509Certificate[] certs,
+                                                   final String authType) {
+                        // Trust all
+                    }
+
+                    @Override
+                    public void checkServerTrusted(final X509Certificate[] certs,
+                                                   final String authType) {
+                        // Trust all
+                    }
+                }
             };
 
             // 2. Init SSLContext (TLSv1.2)
@@ -98,8 +99,7 @@ public class TcpTransport implements AutoCloseable {
             this.sslEngine.setUseClientMode(true);
 
             final SSLSession session = sslEngine.getSession();
-            // Allocate buffers.
-            // peerNetData needs to be large enough to hold TDS packets + TLS records.
+            // Allocate buffers. peerNetData must hold TDS packets + TLS records.
             final int bufferSize = Math.max(session.getPacketBufferSize(), 32768);
 
             myNetData = ByteBuffer.allocate(bufferSize);
@@ -122,7 +122,7 @@ public class TcpTransport implements AutoCloseable {
         SSLEngineResult.HandshakeStatus handshakeStatus = sslEngine.getHandshakeStatus();
         final ByteBuffer dummy = ByteBuffer.allocate(0);
 
-        // Helper buffer for reading the TDS Header during handshake
+        // Helper buffer for reading the TDS header during handshake
         final ByteBuffer headerBuf = ByteBuffer.allocate(TDS_HEADER_LENGTH);
 
         while (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED
@@ -130,23 +130,22 @@ public class TcpTransport implements AutoCloseable {
 
             switch (handshakeStatus) {
                 case NEED_UNWRAP:
-                    // HANDSHAKE PHASE: TLS Records are WRAPPED in TDS 0x12 Packets.
+                    // TLS records are wrapped inside TDS 0x12 packets.
 
-                    // Only read from network if we don't have remaining data in the buffer.
-                    // (This prevents overwriting a 'Finished' message if it came with the previous packet)
+                    // Only read from network if buffer has no remaining data.
                     if (!peerNetData.hasRemaining()) {
                         peerNetData.clear();
                         headerBuf.clear();
 
-                        // 1. Read TDS Header
+                        // 1. Read TDS header
                         readFully(headerBuf);
                         headerBuf.flip();
 
-                        // 2. Parse Length (Bytes 2-3 Big Endian)
+                        // 2. Parse length (bytes 2-3 big-endian)
                         final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
                         final int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
 
-                        // 3. Read the TLS Payload inside the TDS packet
+                        // 3. Read the TLS payload inside the TDS packet
                         peerNetData.limit(tlsDataLength);
                         readFully(peerNetData);
                         peerNetData.flip();
@@ -155,11 +154,11 @@ public class TcpTransport implements AutoCloseable {
                     try {
                         result = sslEngine.unwrap(peerNetData, peerAppData);
 
-                        // Handle Buffer Underflow (TLS Record split across TDS packets)
+                        // Handle BUFFER_UNDERFLOW (TLS record split across TDS packets)
                         if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
                             peerNetData.compact();
 
-                            // Read NEXT TDS Header
+                            // Read next TDS header
                             headerBuf.clear();
                             readFully(headerBuf);
                             headerBuf.flip();
@@ -167,7 +166,6 @@ public class TcpTransport implements AutoCloseable {
                             final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
                             final int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
 
-                            // Read NEXT Payload and append
                             final int limit = peerNetData.position() + tlsDataLength;
                             if (limit > peerNetData.capacity()) {
                                 throw new IOException("Buffer overflow while reading TLS payload");
@@ -185,7 +183,7 @@ public class TcpTransport implements AutoCloseable {
 
                 case NEED_WRAP:
                     myNetData.clear();
-                    // HANDSHAKE PHASE: Reserve 8 bytes for TDS Header
+                    // Reserve 8 bytes for TDS header
                     myNetData.position(TDS_HEADER_LENGTH);
 
                     try {
@@ -198,7 +196,7 @@ public class TcpTransport implements AutoCloseable {
                     myNetData.flip();
                     final int totalLength = myNetData.limit();
 
-                    // Add TDS Header (0x12 Pre-Login)
+                    // Add TDS header (0x12 Pre-Login)
                     myNetData.put(0, (byte) PRELOGIN_PACKET_TYPE);
                     myNetData.put(1, (byte) 0x01);
                     myNetData.putShort(2, (short) totalLength);
@@ -220,7 +218,8 @@ public class TcpTransport implements AutoCloseable {
                     break;
 
                 default:
-                    throw new IllegalStateException("Invalid TLS Handshake status: " + handshakeStatus);
+                    throw new IllegalStateException(
+                            "Invalid TLS Handshake status: " + handshakeStatus);
             }
         }
     }
@@ -337,7 +336,7 @@ public class TcpTransport implements AutoCloseable {
         try {
             socketChannel.socket().setSoTimeout(ms);
         } catch (final IOException e) {
-            LOGGER.warn("Failed to set socket timeout", e);
+            logger.warn("Failed to set socket timeout", e);
         }
     }
 
