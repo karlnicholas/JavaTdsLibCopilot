@@ -17,6 +17,18 @@ public class ErrorToken extends Token {
     private final String procName;
     private final long lineNumber;
 
+    /**
+     * Create a new ErrorToken.
+     *
+     * @param type       raw token byte
+     * @param number     error number
+     * @param state      state byte
+     * @param severity   severity byte
+     * @param message    error message (may be null)
+     * @param serverName server name (may be null)
+     * @param procName   procedure name (may be null)
+     * @param lineNumber line number associated with the error
+     */
     public ErrorToken(
             byte type,
             long number,
@@ -37,52 +49,73 @@ public class ErrorToken extends Token {
         this.lineNumber = lineNumber;
     }
 
+    /**
+     * Returns the error number reported by the server.
+     */
     public long getNumber() {
         return number;
     }
 
+    /**
+     * Returns the state byte for the error.
+     */
     public byte getState() {
         return state;
     }
 
+    /**
+     * Returns the severity level for this error.
+     */
     public byte getSeverity() {
         return severity;
     }
 
+    /**
+     * Returns the error message text (trimmed, never null).
+     */
     public String getMessage() {
         return message;
     }
 
+    /**
+     * Returns the server name reported with the error (may be empty).
+     */
     public String getServerName() {
         return serverName;
     }
 
+    /**
+     * Returns the stored procedure name reported with the error (may be empty).
+     */
     public String getProcName() {
         return procName;
     }
 
+    /**
+     * Returns the line number associated with the error, if any.
+     */
     public long getLineNumber() {
         return lineNumber;
     }
 
+    /**
+     * True if this token represents an informational message rather than an error.
+     */
     public boolean isInfoMessage() {
         return severity <= 10;
     }
 
+    /**
+     * True if this token represents an error (severity &gt; 10).
+     */
     public boolean isError() {
         return severity > 10;
     }
 
     @Override
     public String toString() {
-        return "ErrorToken{" +
-                "number=" + number +
-                ", severity=" + severity +
-                ", state=" + state +
-                ", message='" + message + '\'' +
-                ", server='" + serverName + '\'' +
-                ", proc='" + procName + '\'' +
-                ", line=" + lineNumber +
-                '}';
+        final String fmt = "ErrorToken{number=%d, severity=%d, state=%d, "
+                + "message='%s', server='%s', proc='%s', line=%d}";
+        return String.format(fmt, number, severity, state, message, serverName, procName, lineNumber);
     }
 }
