@@ -5,9 +5,10 @@ import java.util.Map;
 
 /**
  * TDS Protocol Token Types (as defined in the Tabular Data Stream protocol).
- * <p>
- * Each constant represents a specific token type identifier in the TDS data stream.
- * New token types may be added in future TDS versions — this enum is designed for easy extension.
+ *
+ * <p>Each constant represents a specific token type identifier in the TDS data
+ * stream. New token types may be added in future TDS versions — this enum is
+ * designed for easy extension.
  *
  * @see <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds">MS-TDS</a>
  */
@@ -59,8 +60,8 @@ public enum TokenType {
 
     /**
      * Checks if the given byte is a known token type.
-     * <p>
-     * This is faster than looping over values() for frequent checks.
+     *
+     * <p>This is faster than looping over values() for frequent checks.
      */
     public static boolean isDefined(byte value) {
         return fromValue(value) != null;
@@ -68,8 +69,8 @@ public enum TokenType {
 
     /**
      * Returns the TokenType for the given byte value, or {@code null} if unknown.
-     * <p>
-     * Uses a reverse lookup map internally for O(1) performance.
+     *
+     * <p>Uses a reverse lookup map internally for O(1) performance.
      */
     public static TokenType fromValue(byte value) {
         return Lookup.MAP.get(value);
@@ -84,7 +85,7 @@ public enum TokenType {
     }
 
     /**
-     * Internal static lookup for fast fromValue() — O(1) instead of O(n)
+     * Internal static lookup for fast fromValue() — O(1) instead of O(n).
      */
     private static final class Lookup {
         private static final Map<Byte, TokenType> MAP = new HashMap<>();

@@ -4,31 +4,45 @@
 package org.tdslib.javatdslib.tokens;
 
 /**
- * Token event.
+ * Wrapper representing a token event delivered to handlers.
  */
 public class TokenEvent {
     private Token token;
     private boolean exit;
 
     /**
-     * The token that was received.
+     * Returns the token that was received.
+     *
+     * @return the received token.
      */
     public Token getToken() {
         return token;
     }
 
-    public void setToken(Token token) {
+    /**
+     * Set the token for this event.
+     *
+     * @param token the token to set.
+     */
+    public void setToken(final Token token) {
         this.token = token;
     }
 
     /**
-     * Indicate if the token handler should stop receiving tokens.
+     * Indicates whether the token handler should stop receiving tokens.
+     *
+     * @return true to stop processing further tokens.
      */
     public boolean isExit() {
         return exit;
     }
 
-    public void setExit(boolean exit) {
+    /**
+     * Mark whether the handler should exit after this event.
+     *
+     * @param exit true to stop processing.
+     */
+    public void setExit(final boolean exit) {
         this.exit = exit;
     }
 }

@@ -13,39 +13,65 @@ public abstract class AbstractDoneToken extends Token {
     private final int currentCommand;
     private final long rowCount;
 
-    protected AbstractDoneToken(byte type, DoneStatus status, int currentCommand, long rowCount) {
+    protected AbstractDoneToken(final byte type, final DoneStatus status,
+            final int currentCommand, final long rowCount) {
         super(TokenType.fromValue(type));
         this.status = status != null ? status : DoneStatus.FINAL;
         this.currentCommand = currentCommand;
         this.rowCount = rowCount;
     }
 
+    /**
+     * Status flags for this DONE token.
+     *
+     * @return the DoneStatus for this token
+     */
     public DoneStatus getStatus() {
         return status;
     }
 
+    /**
+     * The current command number (1-based) this DONE refers to.
+     *
+     * @return current command id
+     */
     public int getCurrentCommand() {
         return currentCommand;
     }
 
+    /**
+     * Row count associated with this DONE token (if present).
+     *
+     * @return row count
+     */
     public long getRowCount() {
         return rowCount;
     }
 
+    /**
+     * Returns true if this token indicates final completion for the batch/statement.
+     *
+     * @return true when final
+     */
     public boolean isFinal() {
         return status == DoneStatus.FINAL || !DoneStatus.MORE.isSet(status.getValue());
     }
 
+    /**
+     * Returns true if this DONE token reports an error.
+     *
+     * @return true when an error flag is set
+     */
     public boolean hasError() {
         return DoneStatus.ERROR.isSet(status.getValue());
     }
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "{" +
-                "status=" + status +
-                ", cmd=" + currentCommand +
-                ", rows=" + rowCount +
-                '}';
+        return getClass().getSimpleName() + "{"
+                + "status=" + status
+                + ", cmd=" + currentCommand
+                + ", rows=" + rowCount
+                + '}';
     }
 }

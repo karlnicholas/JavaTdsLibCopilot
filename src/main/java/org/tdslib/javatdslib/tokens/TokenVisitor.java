@@ -7,9 +7,10 @@ package org.tdslib.javatdslib.tokens;
 public interface TokenVisitor {
 
     /**
-     * Called for every token that was successfully parsed from the message payload.
+     * Called for every token that was parsed from the message payload.
      *
-     * @param token the parsed token object (LoginAckToken, EnvChangeToken, ErrorToken, DoneToken, etc.)
+     * @param token the parsed token object. Examples: LoginAckToken,
+     *              EnvChangeToken, ErrorToken, DoneToken, etc.
      */
     void onToken(Token token);
 }
