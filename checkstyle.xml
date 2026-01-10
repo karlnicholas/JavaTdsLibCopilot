@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<module name="Checker">
+    <property name="severity" value="warning"/>
+
+    <!-- Most important part - LineLength check -->
+    <module name="LineLength">
+        <property name="max" value="120"/>
+        <property name="fileExtensions" value="java"/>   <!-- optional: only check .java files -->
+        <!-- optional: ignore imports, package, comments -->
+        <property name="ignorePattern" value="^package.*|^import.*|^\s*//.*|^\s*\*.*"/>
+    </module>
+
+    <!-- Add all your other checks here... -->
+    <!-- For example: -->
+    <module name="TreeWalker">
+        <module name="AvoidStarImport"/>
+        <module name="ConstantName"/>
+        <!-- ... etc ... -->
+    </module>
+
+</module>

@@ -25,7 +25,7 @@ import java.security.cert.X509Certificate;
  */
 public class TcpTransport implements AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(TcpTransport.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TcpTransport.class);
 
     private final SocketChannel socketChannel;
     private final String host;
@@ -337,7 +337,7 @@ public class TcpTransport implements AutoCloseable {
         try {
             socketChannel.socket().setSoTimeout(ms);
         } catch (final IOException e) {
-            logger.warn("Failed to set socket timeout", e);
+            LOGGER.warn("Failed to set socket timeout", e);
         }
     }
 
