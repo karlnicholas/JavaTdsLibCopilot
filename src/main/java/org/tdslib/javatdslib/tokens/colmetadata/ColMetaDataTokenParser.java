@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
@@ -20,7 +19,7 @@ public class ColMetaDataTokenParser implements TokenParser {
 
     @Override
     public Token parse(final ByteBuffer payload, final byte tokenType,
-            final ConnectionContext context, final QueryContext queryContext) {
+                       final ConnectionContext context, final QueryContext queryContext) {
         if (tokenType != (byte) 0x81) {
             throw new IllegalArgumentException(
                     "Expected COL_METADATA token (0x81), but got 0x"

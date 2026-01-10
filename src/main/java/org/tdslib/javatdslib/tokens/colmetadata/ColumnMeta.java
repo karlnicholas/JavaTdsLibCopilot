@@ -24,8 +24,8 @@ public class ColumnMeta {
      * @param collation    optional 5-byte collation (may be null)
      */
     public ColumnMeta(final int columnNumber, final String name,
-            final byte dataType, final int maxLength, final short flags,
-            final int userType, final byte[] collation) {
+                      final byte dataType, final int maxLength, final short flags,
+                      final int userType, final byte[] collation) {
         this.columnNumber = columnNumber;
         this.name = name;
         this.dataType = dataType;
@@ -91,11 +91,11 @@ public class ColumnMeta {
 
     @Override
     public String toString() {
-        return "Column " + columnNumber +
-                ": " + name +
-                " (type=0x" + Integer.toHexString(dataType & 0xFF) +
-                ", maxLen=" + maxLength +
-                ", nameLen=" + name.length() +
-                ")";
+        return "Column " + columnNumber
+                + ": " + name
+                + " (type=0x" + Integer.toHexString(dataType & 0xFF)
+                + ", maxLen=" + maxLength
+                + ", nameLen=" + name.length()
+                + ")";
     }
 }
