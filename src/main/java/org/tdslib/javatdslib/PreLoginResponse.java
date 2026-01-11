@@ -12,17 +12,33 @@ public class PreLoginResponse {
   private byte encryption = 0;          // 0=off, 1=on, 2=requested, 3=required
   private int negotiatedPacketSize = 4096; // default, updated if server specifies
 
-  // Setters (used during parsing)
+  /**
+   * Sets the parsed SQL Server version components.
+   *
+   * @param major major version number.
+   * @param minor minor version number.
+   * @param build build number.
+   */
   public void setVersion(int major, int minor, int build) {
     this.sqlVersionMajor = major;
     this.sqlVersionMinor = minor;
     this.sqlBuildNumber = build;
   }
 
+  /**
+   * Sets the encryption flag received from the server.
+   *
+   * @param enc encryption flag (0=off, 1=on, 2=requested, 3=required).
+   */
   public void setEncryption(byte enc) {
     this.encryption = enc;
   }
 
+  /**
+   * Sets the negotiated packet size if within allowed range.
+   *
+   * @param size negotiated packet size to apply.
+   */
   public void setNegotiatedPacketSize(int size) {
     if (size >= 512 && size <= 32767) {
       this.negotiatedPacketSize = size;
@@ -55,15 +71,19 @@ public class PreLoginResponse {
   }
 
   /**
-   * Does the server require or request encryption?
+   * Does the server require or request encryption.
    * Useful to decide whether to start TLS handshake.
+   *
+   * @return true if encryption is on or required.
    */
   public boolean requiresEncryption() {
     return encryption == 1 || encryption == 3; // on or required
   }
 
   /**
-   * Does the server support encryption (can be used if client wants it)?
+   * Does the server support encryption.
+   *
+   * @return true if encryption is anything except off.
    */
   public boolean supportsEncryption() {
     return encryption != 0; // anything except off
@@ -71,11 +91,11 @@ public class PreLoginResponse {
 
   @Override
   public String toString() {
-    return "PreLoginResponse{" +
-        "version=" + getVersionString() +
-        ", encryption=" + encryption +
-        ", packetSize=" + negotiatedPacketSize +
-        ", requiresEncryption=" + requiresEncryption() +
-        '}';
+    return "PreLoginResponse{"
+        + "version=" + getVersionString()
+        + ", encryption=" + encryption
+        + ", packetSize=" + negotiatedPacketSize
+        + ", requiresEncryption=" + requiresEncryption()
+        + '}';
   }
 }

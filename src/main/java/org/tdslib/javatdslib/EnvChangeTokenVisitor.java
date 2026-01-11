@@ -12,6 +12,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Visitor that applies ENVCHANGE tokens to a {@link ConnectionContext}.
+ *
+ * <p>Decodes token payloads correctly (char counts vs bytes, UTF-16LE vs ASCII)
+ * and updates the provided {@code ConnectionContext}.
+ */
 public class EnvChangeTokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(EnvChangeTokenVisitor.class);
   private final ConnectionContext connectionContext;
@@ -28,6 +34,11 @@ public class EnvChangeTokenVisitor {
     // Full list: https://learn.microsoft.com/en-us/sql/relational-databases/collations/sql-server-collations
   }
 
+  /**
+   * Creates a new visitor that will apply env changes to the given context.
+   *
+   * @param connectionContext target connection context to update
+   */
   public EnvChangeTokenVisitor(ConnectionContext connectionContext) {
     this.connectionContext = connectionContext;
   }
@@ -109,37 +120,63 @@ public class EnvChangeTokenVisitor {
 
         // Decode and log meaningful collation info
         if (newInfoLen >= 5) {
-          ByteBuffer collationBuf = ByteBuffer.wrap(newCollationData).order(ByteOrder.LITTLE_ENDIAN);
+          ByteBuffer collationBuf = ByteBuffer.wrap(newCollationData)
+              .order(ByteOrder.LITTLE_ENDIAN);
 
-          int fullLcid = collationBuf.getInt();           // bytes 0-3: LCID + flags
-          byte verSortByte = collationBuf.get();          // byte 4: version (high nibble) + sort order (low nibble)
+          final int fullLcid = collationBuf.getInt(); // bytes 0-3: LCID + flags
+          final byte verSortByte = collationBuf.get(); // byte 4: version+sort nibble
 
-          int baseLcid = fullLcid & 0x000FFFFF;           // lower 20 bits = locale ID
-          int flags = (fullLcid >>> 20) & 0xFF;           // upper 8 bits = sensitivity flags
+          final int flags = (fullLcid >>> 20) & 0xFF; // sensitivity flags
 
-          // Full sort order ID (unsigned 8-bit value) is what Microsoft calls "sortid" in docs
-          int fullSortOrderId = verSortByte & 0xFF;       // 0-255
-          int versionNibble = (fullSortOrderId >>> 4) & 0x0F;
-          int sortNibble = fullSortOrderId & 0x0F;
+          final int fullSortOrderId = verSortByte & 0xFF;
+          final int versionNibble = (fullSortOrderId >>> 4) & 0x0F;
+          final int sortNibble = fullSortOrderId & 0x0F;
 
-          String friendlyName = COMMON_SORTID_NAMES.getOrDefault(
+          final String friendlyName = COMMON_SORTID_NAMES.getOrDefault(
               fullSortOrderId,
-              "Unknown legacy SQL collation (sort order " + fullSortOrderId + ")");
+              "Unknown legacy SQL collation (sort order " + fullSortOrderId + ")"
+          );
 
           // Build detailed flag description
           StringBuilder flagDesc = new StringBuilder();
-          if ((flags & 0x01) != 0) flagDesc.append("CI, ");
-          if ((flags & 0x02) != 0) flagDesc.append("AI, ");
-          if ((flags & 0x04) != 0) flagDesc.append("WI, ");
-          if ((flags & 0x08) != 0) flagDesc.append("KI, ");
-          if ((flags & 0x10) != 0) flagDesc.append("BIN, ");
-          if ((flags & 0x20) != 0) flagDesc.append("BIN2, ");
-          if ((flags & 0x40) != 0) flagDesc.append("UTF8, ");
-          String flagsStr = flagDesc.length() > 0 ? flagDesc.substring(0, flagDesc.length() - 2) : "none";
+          if ((flags & 0x01) != 0) {
+            flagDesc.append("CI, ");
+          }
+          if ((flags & 0x02) != 0) {
+            flagDesc.append("AI, ");
+          }
+          if ((flags & 0x04) != 0) {
+            flagDesc.append("WI, ");
+          }
+          if ((flags & 0x08) != 0) {
+            flagDesc.append("KI, ");
+          }
+          if ((flags & 0x10) != 0) {
+            flagDesc.append("BIN, ");
+          }
+          if ((flags & 0x20) != 0) {
+            flagDesc.append("BIN2, ");
+          }
+          if ((flags & 0x40) != 0) {
+            flagDesc.append("UTF8, ");
+          }
 
-          logger.info("SQL Collation updated → {} (LCID={}, flags={}, ver={}, sortNibble={}, fullSortId={})",
-              friendlyName, baseLcid, flagsStr, versionNibble, sortNibble, fullSortOrderId);
+          final String flagsStr = flagDesc.length() > 0
+              ? flagDesc.substring(0, flagDesc.length() - 2)
+              : "none";
 
+          final int baseLcid = fullLcid & 0x000FFFFF; // lower 20 bits = locale ID
+
+          // Shortened log message to satisfy LineLength check
+          logger.info(
+              "SQL Collation updated: {} (LCID={}, flags={}, ver={}, sort={}, id={})",
+              friendlyName,
+              baseLcid,
+              flagsStr,
+              versionNibble,
+              sortNibble,
+              fullSortOrderId
+          );
         } else {
           logger.debug("SQL Collation updated (empty or too short: {} bytes)", newInfoLen);
         }

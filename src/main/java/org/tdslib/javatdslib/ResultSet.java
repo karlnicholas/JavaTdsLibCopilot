@@ -6,7 +6,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-// Simple inner class representing one result set
+/**
+ * Simple inner class representing one result set.
+ */
 public class ResultSet {
   private int columnCount = -1;
   private List<ColumnMeta> columns = new ArrayList<>();
@@ -17,10 +19,20 @@ public class ResultSet {
     return columnCount;
   }
 
+  /**
+   * Returns a defensive copy of the raw rows collected for this result set.
+   *
+   * @return copy of raw rows.
+   */
   public List<List<byte[]>> getRawRows() {
     return new ArrayList<>(rawRows);
   }
 
+  /**
+   * Adds a raw row to the result set.
+   *
+   * @param row raw row to append.
+   */
   public void addRawRow(List<byte[]> row) {
     rawRows.add(row);
   }
@@ -29,9 +41,15 @@ public class ResultSet {
     return rowCount >= 0 ? rowCount : rawRows.size();
   }
 
-  // Convenience: convert first column of first row to String
+  /**
+   * Convenience: convert first column of first row to String.
+   *
+   * @return String value of first column in first row, or null if none
+   */
   public String getSingleStringResult() {
-    if (rawRows.isEmpty() || rawRows.get(0).isEmpty()) return null;
+    if (rawRows.isEmpty() || rawRows.get(0).isEmpty()) {
+      return null;
+    }
     byte[] bytes = rawRows.get(0).get(0);
     return bytes != null ? new String(bytes, StandardCharsets.UTF_16LE).trim() : null;
   }

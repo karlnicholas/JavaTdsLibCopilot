@@ -31,16 +31,15 @@ public class LoginResponse implements TokenVisitor {
 
   // --- Mutators (used during token processing) ---
 
+  /**
+   * Create a LoginResponse that will apply tokens to the provided ConnectionContext.
+   *
+   * @param connectionContext target connection context to update
+   */
   public LoginResponse(ConnectionContext connectionContext) {
     this.connectionContext = connectionContext;
     this.envChangeTokenVisitor = new EnvChangeTokenVisitor(connectionContext);
   }
-
-//    private final ConnectionContext context;
-
-//    public ApplyingTokenVisitor(ConnectionContext context) {
-//        this.context = context;
-//    }
 
   @Override
   public void onToken(Token token) {
@@ -51,12 +50,26 @@ public class LoginResponse implements TokenVisitor {
       connectionContext.setServerName(ack.getServerName());
       connectionContext.setServerVersionString(ack.getServerVersionString());
       setSuccess(true);
-      logger.info("Login successful - TDS version: {}, Server name: {}, Server version: {}", ack.getTdsVersion(), ack.getServerName(), ack.getServerVersionString());
+      logger.info(
+          "Login successful - TDS version: {}, Server name: {}, Server version: {}",
+          ack.getTdsVersion(),
+          ack.getServerName(),
+          ack.getServerVersionString()
+      );
     } else if (token instanceof ErrorToken err) {
-      logger.warn("Server error [{}]: {}", err.getNumber(), err.getMessage());
+      logger.warn(
+          "Server error [{}]: {}",
+          err.getNumber(),
+          err.getMessage()
+      );
     } else if (token instanceof InfoToken info) {
       // Severity 0–10 = info, >10 = error (but INFO token is always <=10)
-      logger.info("Server info [{}] (state {}): {}", info.getNumber(), info.getState(), info.getMessage());
+      logger.info(
+          "Server info [{}] (state {}): {}",
+          info.getNumber(),
+          info.getState(),
+          info.getMessage()
+      );
     } else if (token instanceof DoneToken done) {
       if (done.hasError()) {
         logger.warn("Batch completed with error (status: {})", done.getStatus());
@@ -68,19 +81,39 @@ public class LoginResponse implements TokenVisitor {
     }
   }
 
+  /**
+   * Mark the login result as successful or not.
+   *
+   * @param success true if login succeeded
+   */
   public void setSuccess(boolean success) {
     this.success = success;
   }
 
+  /**
+   * Set an error message for the login result and mark as failed.
+   *
+   * @param errorMessage textual error description
+   */
   public void setErrorMessage(String errorMessage) {
     this.errorMessage = errorMessage;
     this.success = false; // error implies failure
   }
 
+  /**
+   * Record the negotiated/default database name.
+   *
+   * @param database database name
+   */
   public void setDatabase(String database) {
     this.database = database;
   }
 
+  /**
+   * Add an ENVCHANGE token to the recorded list (used for diagnostics).
+   *
+   * @param change the envchange token to record
+   */
   public void addEnvChange(EnvChangeToken change) {
     if (change != null) {
       envChanges.add(change);
@@ -117,11 +150,11 @@ public class LoginResponse implements TokenVisitor {
 
   @Override
   public String toString() {
-    return "LoginResponse{" +
-        "success=" + success +
-        ", errorMessage='" + errorMessage + '\'' +
-        ", database='" + database + '\'' +
-        ", envChanges=" + envChanges.size() + " item(s)" +
-        '}';
+    return "LoginResponse{"
+        + "success=" + success
+        + ", errorMessage='" + errorMessage + '\''
+        + ", database='" + database + '\''
+        + ", envChanges=" + envChanges.size() + " item(s)"
+        + '}';
   }
 }

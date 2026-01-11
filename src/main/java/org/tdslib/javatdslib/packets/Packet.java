@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /**
  * Represents a Packet in the TDS protocol.
+ *
+ * <p>Provides helpers to access header fields and payload slices.
  */
 public class Packet {
 
@@ -240,7 +242,8 @@ public class Packet {
     try {
       PacketType.valueOf(typeValue);
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException(String.format("Invalid packet type: 0x%02X", typeValue), e);
+      String msg = String.format("Invalid packet type: 0x%02X", typeValue);
+      throw new IllegalArgumentException(msg, e);
     }
 
     this.buffer = buffer;

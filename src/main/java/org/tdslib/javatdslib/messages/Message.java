@@ -164,6 +164,11 @@ public final class Message {
 
   // ── Utility ─────────────────────────────────────────────────────────────
 
+  /**
+   * Return a human-friendly packet type name for logging and diagnostics.
+   *
+   * @return descriptive packet type name
+   */
   public String getPacketTypeName() {
     return switch (packetType) {
       case 0x01 -> "SQL Batch";

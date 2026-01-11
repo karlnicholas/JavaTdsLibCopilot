@@ -31,6 +31,12 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
   private boolean hasError = false;
   // ------------------------------------------------
 
+  /**
+   * Create a new QueryResponseTokenVisitor that will apply ENVCHANGE tokens to
+   * the provided ConnectionContext and collect result sets produced by tokens.
+   *
+   * @param connectionContext connection context used for ENVCHANGE handling
+   */
   public QueryResponseTokenVisitor(ConnectionContext connectionContext) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     startNewResultSet();
@@ -110,18 +116,38 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
 
   // ------------------- Public API for caller -------------------
 
+  /**
+   * Returns a defensive copy of the collected result sets.
+   *
+   * @return list of collected {@link ResultSet} objects
+   */
   public List<ResultSet> getResultSets() {
     return new ArrayList<>(resultSets);
   }
 
+  /**
+   * Return the first result set, or {@code null} if none were produced.
+   *
+   * @return first {@link ResultSet} or {@code null}
+   */
   public ResultSet getFirstResultSet() {
     return resultSets.isEmpty() ? null : resultSets.get(0);
   }
 
+  /**
+   * Indicates whether any server error/info tokens flagged an error during processing.
+   *
+   * @return {@code true} if an error was observed
+   */
   public boolean hasError() {
     return hasError;
   }
 
+  /**
+   * Returns {@code true} if multiple result sets were observed or more are expected.
+   *
+   * @return {@code true} when multiple result sets are present or more are incoming
+   */
   public boolean hasMultipleResultSets() {
     return resultSets.size() > 1 || hasMoreResultSets;
   }
@@ -135,6 +161,12 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
     startNewResultSet(); // prepare for reuse
   }
 
+  /**
+   * Return a synthesized {@link QueryResponse} containing the collected
+   * result sets and error flag for callers.
+   *
+   * @return QueryResponse summarizing the parsed tokens
+   */
   QueryResponse getQueryResponse() {
     return new QueryResponse(getResultSets(), hasError());
   }

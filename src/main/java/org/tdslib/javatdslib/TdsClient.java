@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib;
 
 import org.tdslib.javatdslib.headers.AllHeaders;
@@ -94,6 +91,11 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     this.currentCharset = charset;
   }
 
+  /**
+   * Set the client packet size and propagate the value to the transport.
+   *
+   * @param size packet size in bytes
+   */
   @Override
   public void setPacketSize(int size) {
     this.packetSize = size;
@@ -107,7 +109,9 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
   @Override
   public void setCollationBytes(byte[] collationBytes) {
-    this.currentCollationBytes = collationBytes != null ? Arrays.copyOf(collationBytes, collationBytes.length) : new byte[0];
+    this.currentCollationBytes = collationBytes != null
+        ? Arrays.copyOf(collationBytes, collationBytes.length)
+        : new byte[0];
   }
 
   @Override
@@ -148,6 +152,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     this.spid = spid;
   }
 
+  /**
+   * Reset session-scoped state to library defaults.
+   *
+   * <p>This is called when the server signals a connection-level reset
+   * (resetConnection flag) to clear per-session settings while preserving
+   * connection-level information such as TDS version and server name.
+   */
   @Override
   public void resetToDefaults() {
     currentDatabase = null;
@@ -161,6 +172,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     System.out.println("Session state reset due to resetConnection flag");
   }
 
+  /**
+   * Create a new TdsClient backed by a TCP transport to the given host/port.
+   *
+   * @param host remote host name or IP
+   * @param port remote TCP port
+   * @throws IOException if the underlying transport cannot be created
+   */
   public TdsClient(String host, int port) throws IOException {
     this.transport = new TcpTransport(host, port);
     this.messageHandler = new MessageHandler(transport);
@@ -168,14 +186,29 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     this.connected = false;
   }
 
-  public void connect(String hostname, String username, String password, String database, String appName, String serverName, String language) throws IOException {
+  /**
+   * Connect to the server and perform prelogin + login.
+   *
+   * @param hostname   server host name for LOGIN payload
+   * @param username   login user
+   * @param password   login password
+   * @param database   initial database
+   * @param appName    application name
+   * @param serverName client-reported server name
+   * @param language   language name
+   * @throws IOException on IO errors or failed login
+   */
+  public void connect(String hostname, String username, String password, String database,
+                      String appName, String serverName, String language) throws IOException {
     if (connected) {
       throw new IllegalStateException("Already connected");
     }
 
     preLoginInternal();
     transport.enableTls();
-    LoginResponse loginResponse = loginInternal(hostname, username, password, database, appName, serverName, language);
+    LoginResponse loginResponse = loginInternal(
+        hostname, username, password, database, appName, serverName, language
+    );
 
     if (!loginResponse.isSuccess()) {
       throw new IOException("Login failed: " + loginResponse.getErrorMessage());
@@ -184,8 +217,16 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     connected = true;
   }
 
+  /**
+   * Perform the PreLogin exchange and apply negotiated options.
+   *
+   * @throws IOException on IO error
+   */
   private void preLoginInternal() throws IOException {
-    Message msg = Message.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload(false, false));
+    Message msg = Message.createRequest(
+        PacketType.PRE_LOGIN.getValue(),
+        buildPreLoginPayload(false, false)
+    );
 
     messageHandler.sendMessage(msg);
 
@@ -205,37 +246,47 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
   }
 
-  private LoginResponse loginInternal(String hostname, String username, String password, String database, String appName, String serverName, String language) throws IOException {
-    ByteBuffer loginPayload = buildLogin7Payload(hostname, username, password, database, appName, serverName, language);
+  /**
+   * Perform LOGIN7 exchange and return parsed result.
+   *
+   * @throws IOException on IO error
+   */
+  private LoginResponse loginInternal(String hostname, String username, String password,
+                                      String database, String appName, String serverName,
+                                      String language) throws IOException {
+    ByteBuffer loginPayload = buildLogin7Payload(
+        hostname, username, password, database, appName, serverName, language
+    );
 
-//        Message loginMsg = new Message(
-//                (byte) 0x10, (byte) 0x01, loginPayload.capacity() + 8,
-//                (short) 0, (short) 1, loginPayload, System.nanoTime(), null
-//        );
     Message loginMsg = Message.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
-
 
     messageHandler.sendMessage(loginMsg);
 
     List<Message> responses = messageHandler.receiveFullResponse();
 
     return processLoginResponse(responses);
-
   }
 
+  /**
+   * Build PreLogin payload. Placeholder builder using PreLoginPayload helper.
+   *
+   * @param encryptIfNeeded whether to request encryption
+   * @param supportMars     whether to advertise MARS support
+   * @return payload buffer
+   */
   private ByteBuffer buildPreLoginPayload(boolean encryptIfNeeded, boolean supportMars) {
-    // Implement your PreLogin payload builder here
-    // For now, placeholder
     PreLoginPayload preLoginPayload = new PreLoginPayload(false);
     return preLoginPayload.buildBuffer();
-
-//        ByteBuffer payload = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN);
-//        payload.flip();
-//        return payload;
   }
 
-  private ByteBuffer buildLogin7Payload(String hostname, String username, String password, String database, String appName, String serverName, String language) {
-    // Implement your Login7 payload builder here
+  /**
+   * Build LOGIN7 payload from provided fields.
+   *
+   * @return built login payload buffer
+   */
+  private ByteBuffer buildLogin7Payload(String hostname, String username, String password,
+                                        String database, String appName, String serverName,
+                                        String language) {
     Login7Payload login7Payload = new Login7Payload(new Login7Options());
     login7Payload.hostname = hostname;
     login7Payload.serverName = serverName;
@@ -245,25 +296,26 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     login7Payload.username = username;
     login7Payload.password = password;
 
-//        login7Payload..TypeFlags.AccessIntent = TypeFlags.OptionAccessIntent.READ_WRITE;
     return login7Payload.buildBuffer();
-
-//        Message login7Message = Message.createRequest(PacketType.LOGIN7.getValue(), );
-//
-//        payload.flip();
-//        return payload;
   }
 
+  /**
+   * Parse PreLogin response messages and return a consolidated response.
+   *
+   * @param packets messages returned from server for prelogin
+   * @return parsed PreLoginResponse
+   */
   private PreLoginResponse processPreLoginResponse(List<Message> packets) {
     ByteBuffer combined = combinePayloads(packets);
     PreLoginResponse response = new PreLoginResponse();
 
     // PreLogin is NOT token-based — it's a fixed option table
-    // Parse manually (simple loop over option list)
     if (combined.hasRemaining()) {
       while (combined.hasRemaining()) {
         byte option = combined.get();
-        if (option == (byte) 0xFF) break; // terminator
+        if (option == (byte) 0xFF) {
+          break; // terminator
+        }
 
         short offset = combined.getShort();
         short length = combined.getShort();
@@ -278,11 +330,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
             short build = combined.getShort();
             response.setVersion(major, minor, build);
             break;
+
           case 0x01: // ENCRYPTION
             byte enc = combined.get();
             response.setEncryption(enc);
             break;
-          case 0x04: // PACKETSIZE (optional in PreLogin, but some servers send it)
+
+          case 0x04: // PACKETSIZE (optional in PreLogin)
             // Read as B_VARCHAR (length byte + string)
             int psLen = combined.get() & 0xFF;
             byte[] psBytes = new byte[psLen];
@@ -290,10 +344,15 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
             String psStr = new String(psBytes, StandardCharsets.US_ASCII);
             try {
               response.setNegotiatedPacketSize(Integer.parseInt(psStr));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException e) {
+              // Log parsing failure so catch is not empty
+              System.err.println("Failed to parse negotiated packet size: " + psStr);
             }
             break;
-          // Add MARS, INSTANCE, etc. as needed
+
+          default:
+            // Unknown prelogin option, ignore safely
+            break;
         }
 
         combined.position(savedPos);
@@ -303,13 +362,19 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return response;
   }
 
+  /**
+   * Process the server's Login response messages and produce a LoginResponse.
+   *
+   * @param packets received messages that contain login-related tokens
+   * @return populated LoginResponse reflecting login tokens and errors
+   */
   private LoginResponse processLoginResponse(List<Message> packets) {
     LoginResponse loginResponse = new LoginResponse(this);
     QueryContext queryContext = new QueryContext();
 
     for (Message msg : packets) {
       setSpid(msg.getSpid());
-      // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
+      // Dispatch tokens to the visitor (which handles ENVCHANGE, LOGINACK, errors, etc.)
       tokenDispatcher.processMessage(msg, this, queryContext, loginResponse);
 
       // Still handle reset flag separately (visitor doesn't cover message-level flags)
@@ -319,34 +384,16 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     // Optional: After full login response, check if we have a successful LoginAck
-    // (you can add a flag or check in visitor if needed)
     return loginResponse;
   }
 
-  private void enableTls() throws IOException {
-    // Implement TLS handshake
-    throw new UnsupportedOperationException("TLS not yet implemented");
-  }
-
-  private ByteBuffer combinePayloads(List<Message> packets) {
-    int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
-    ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
-    for (Message m : packets) {
-      combined.put(m.getPayload().duplicate());
-    }
-    combined.flip();
-    return combined;
-  }
-
-  public void close() throws IOException {
-    messageHandler.close();
-    connected = false;
-  }
-
-  public boolean isConnected() {
-    return connected;
-  }
-
+  /**
+   * Execute a SQL query and return the high-level QueryResponse.
+   *
+   * @param sql SQL text to execute
+   * @return QueryResponse containing results or errors
+   * @throws IOException on I/O or transport errors
+   */
   public QueryResponse query(String sql) throws IOException {
     if (!connected) {
       throw new IllegalStateException("Not connected");
@@ -357,11 +404,78 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return queryInternal(sql).getQueryResponse();
   }
 
+  /**
+   * Process messages from a query response and return a token visitor that
+   * contains parsed results and metadata.
+   *
+   * @param packets messages received for the query
+   * @return QueryResponseTokenVisitor populated by token processing
+   */
+  private QueryResponseTokenVisitor processQueryResponse(List<Message> packets) {
+    QueryResponseTokenVisitor queryResponseTokenVisitor = new QueryResponseTokenVisitor(this);
+    QueryContext queryContext = new QueryContext();
+    for (Message msg : packets) {
+      // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
+      tokenDispatcher.processMessage(msg, this, queryContext, queryResponseTokenVisitor);
+
+      // Still handle reset flag separately (visitor doesn't cover message-level flags)
+      if (msg.isResetConnection()) {
+        resetToDefaults();
+      }
+    }
+
+    return queryResponseTokenVisitor;
+  }
+
+  /**
+   * Enable TLS on the transport (placeholder).
+   *
+   * @throws IOException when TLS setup fails or unsupported
+   */
+  private void enableTls() throws IOException {
+    // Implement TLS handshake
+    throw new UnsupportedOperationException("TLS not yet implemented");
+  }
+
+  /**
+   * Combine payload buffers from a list of messages into a single
+   * big\-endian ByteBuffer containing the concatenated payload bytes.
+   *
+   * @param packets messages whose payloads should be merged
+   * @return combined ByteBuffer ready for reading
+   */
+  private ByteBuffer combinePayloads(List<Message> packets) {
+    int total = packets.stream()
+        .mapToInt(m -> m.getPayload().remaining())
+        .sum();
+
+    ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
+    for (Message m : packets) {
+      combined.put(m.getPayload().duplicate());
+    }
+    combined.flip();
+    return combined;
+  }
+
+
+  /**
+   * Close the client and release underlying resources.
+   *
+   * @throws IOException when closing the underlying message handler fails.
+   */
+  @Override
+  public void close() throws IOException {
+    messageHandler.close();
+    connected = false;
+  }
+
+  public boolean isConnected() {
+    return connected;
+  }
+
   private QueryResponseTokenVisitor queryInternal(String sql) throws IOException {
 
-    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix for SQL_BATCH)
-//        String sql = "SELECT @@VERSION AS version, DB_NAME() AS db";
-//        byte[] sqlBytes = (sql + "\0").getBytes(StandardCharsets.UTF_16LE);
+    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
     byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
 
     byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
@@ -372,44 +486,14 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     payload.flip();
 
-// Create SQL_BATCH message (type 0x01, EOM=0x01)
-//        Message queryMsg = new Message(
-//                (byte) 0x01,  // Type: SQL_BATCH
-//                (byte) 0x01,  // Status: EOM (end of message)
-//                sqlBytes.length + 8,  // Total length (header 8 + payload)
-//                (short) spid,    // SPID (0 for client)
-//                (short) 1,    // Packet sequence (increment if multi-packet)
-//                payload,
-//                System.nanoTime(),
-//                null
-//        );
+    // Create SQL_BATCH message
     Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
-
 
     messageHandler.sendMessage(queryMsg);
 
-// Receive & process full response (same as login)
+    // Receive & process full response (same as login)
     List<Message> responses = messageHandler.receiveFullResponse();
 
     return processQueryResponse(responses);
-
-  }
-
-  private QueryResponseTokenVisitor processQueryResponse(List<Message> packets) {
-    QueryResponseTokenVisitor queryResponseTokenVisitor = new QueryResponseTokenVisitor(this);
-    QueryContext queryContext = new QueryContext();
-    for (Message msg : packets) {
-      // Dispatch tokens to the visitor (which handles applyEnvChange, login ack, errors, etc.)
-      tokenDispatcher.processMessage(msg, this, queryContext, queryResponseTokenVisitor);
-
-      // Still handle reset flag separately (visitor doesn't cover message-level flags)
-      if (msg.isResetConnection()) {
-        resetToDefaults();
-      }
-    }
-
-    // Optional: After full login response, check if we have a successful LoginAck
-    // (you can add a flag or check in visitor if needed)
-    return queryResponseTokenVisitor;
   }
 }

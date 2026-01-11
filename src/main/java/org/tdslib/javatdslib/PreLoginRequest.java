@@ -4,35 +4,71 @@ import org.tdslib.javatdslib.messages.Message;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
+/**
+ * Build a TDS PreLogin request message.
+ *
+ * <p>Supports setting common pre-login options such as encryption, trust of the
+ * server certificate, instance name, and MARS support. The {@link #toMessage()}
+ * method produces a framed {@link Message} containing the PreLogin payload.
+ */
 public class PreLoginRequest {
   private boolean encrypt = false;          // ENCRYPTION option
   private boolean trustServerCert = false;  // TRUSTSERVERCERTIFICATE
   private String instanceName = "";         // INSTANCE
   private boolean mars = false;             // MARS support
 
-  // Setters (fluent style)
+  /**
+   * Enable or disable encryption for the PreLogin request.
+   *
+   * @param encrypt true to enable encryption
+   * @return this request for chaining
+   */
   public PreLoginRequest withEncryption(boolean encrypt) {
     this.encrypt = encrypt;
     return this;
   }
 
+  /**
+   * Set whether to trust the server certificate (TRUSTSERVERCERTIFICATE).
+   *
+   * @param trust true to trust the server certificate
+   * @return this request for chaining
+   */
   public PreLoginRequest withTrustServerCertificate(boolean trust) {
     this.trustServerCert = trust;
     return this;
   }
 
+  /**
+   * Set the SQL Server instance name to include in the PreLogin payload.
+   *
+   * @param instance instance name, null treated as empty string
+   * @return this request for chaining
+   */
   public PreLoginRequest withInstance(String instance) {
     this.instanceName = Objects.requireNonNullElse(instance, "");
     return this;
   }
 
+  /**
+   * Enable or disable MARS (Multiple Active Result Sets) support.
+   *
+   * @param mars true to enable MARS
+   * @return this request for chaining
+   */
   public PreLoginRequest withMars(boolean mars) {
     this.mars = mars;
     return this;
   }
 
+  /**
+   * Construct the PreLogin message payload and wrap it into a {@link Message}.
+   *
+   * @return framed PreLogin {@link Message}
+   */
   public Message toMessage() {
     // PreLogin payload structure: option list + data block
     // Each option: byte type, short offset, short length
@@ -40,8 +76,8 @@ public class PreLoginRequest {
     ByteBuffer data = ByteBuffer.allocate(512).order(ByteOrder.LITTLE_ENDIAN);
 
     // We'll collect offsets while writing data
-    int[] offsets = new int[6];
-    int[] lengths = new int[6];
+    final int[] offsets = new int[6];
+    final int[] lengths = new int[6];
 
     // 0x01 - VERSION (always sent, fixed 6 bytes)
     offsets[0] = data.position();
@@ -57,7 +93,8 @@ public class PreLoginRequest {
     // 0x03 - INSTANCENAME (null-terminated string)
     offsets[2] = data.position();
     if (!instanceName.isEmpty()) {
-      byte[] bytes = (instanceName + "\0").getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+      byte[] bytes = (instanceName + "\0")
+          .getBytes(StandardCharsets.US_ASCII);
       data.put(bytes);
       lengths[2] = bytes.length;
     } else {
@@ -82,7 +119,8 @@ public class PreLoginRequest {
     int optionCount = 5; // VERSION + ENCRYPTION + INSTANCE + THREADID + MARS
     int headerSize = 2 + optionCount * 5 + 1; // 2-byte count + each 5 bytes + 0xFF
 
-    ByteBuffer payload = ByteBuffer.allocate(headerSize + data.position()).order(ByteOrder.LITTLE_ENDIAN);
+    int payloadSize = headerSize + data.position();
+    ByteBuffer payload = ByteBuffer.allocate(payloadSize).order(ByteOrder.LITTLE_ENDIAN);
 
     // Option count
     payload.putShort((short) optionCount);

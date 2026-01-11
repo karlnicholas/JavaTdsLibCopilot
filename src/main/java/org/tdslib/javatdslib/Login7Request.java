@@ -6,6 +6,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Build a TDS Login7 request message with common login fields.
+ * Provides fluent setters for user, password, database and application name.
+ */
 public class Login7Request {
   private String hostName = "";
   private String serverName = "";
@@ -16,27 +20,55 @@ public class Login7Request {
   private int packetSize = 4096;
   private int tdsVersion = 0x00000074; // TDS 7.4
 
-  // Fluent setters
+  /**
+   * Set the user name for the login request.
+   *
+   * @param userName user name
+   * @return this request for chaining
+   */
   public Login7Request withUserName(String userName) {
     this.userName = userName;
     return this;
   }
 
+  /**
+   * Set the password for the login request.
+   *
+   * @param password password
+   * @return this request for chaining
+   */
   public Login7Request withPassword(String password) {
     this.password = password;
     return this;
   }
 
+  /**
+   * Set the target database for the login request.
+   *
+   * @param database database name
+   * @return this request for chaining
+   */
   public Login7Request withDatabase(String database) {
     this.database = database;
     return this;
   }
 
+  /**
+   * Set the application name for the login request.
+   *
+   * @param appName application name
+   * @return this request for chaining
+   */
   public Login7Request withAppName(String appName) {
     this.appName = appName;
     return this;
   }
 
+  /**
+   * Build and return a TDS Login7 Message containing this request's data.
+   *
+   * @return Message ready to be sent over the transport
+   */
   public Message toMessage() {
     // Calculate total size (fixed part + variable strings)
     byte[] hostBytes = hostName.getBytes(StandardCharsets.UTF_16LE);
@@ -47,8 +79,12 @@ public class Login7Request {
     byte[] dbBytes = database.getBytes(StandardCharsets.UTF_16LE);
 
     int fixed = 94; // up to ClientProgVer
-    int variable = hostBytes.length + serverBytes.length + userBytes.length +
-        passBytes.length + appBytes.length + dbBytes.length;
+    int variable = hostBytes.length
+        + serverBytes.length
+        + userBytes.length
+        + passBytes.length
+        + appBytes.length
+        + dbBytes.length;
 
     int totalLength = fixed + variable;
 
