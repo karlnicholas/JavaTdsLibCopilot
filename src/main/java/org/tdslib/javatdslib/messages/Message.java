@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.messages;
 
 import java.nio.ByteBuffer;
@@ -26,8 +23,18 @@ public final class Message {
   private final long receivedAt;
   private final String traceContext;
 
-  // ── Full constructor (for incoming packets) ─────────────────────────────
-
+  /**
+   * Full constructor for incoming packets.
+   *
+   * @param packetType   TDS packet type byte
+   * @param statusFlags  Status flags byte
+   * @param packetLength Total packet length (header + payload)
+   * @param spid         Server process id (SPID)
+   * @param packetNumber Packet sequence number
+   * @param payload      Payload buffer (will be wrapped as read-only, little-endian)
+   * @param receivedAt   Timestamp marker (nanotime-based) when the packet was received, or 0
+   * @param traceContext Optional trace context string
+   */
   public Message(
       byte packetType,
       byte statusFlags,
@@ -67,13 +74,13 @@ public final class Message {
   public static Message createRequest(byte packetType, ByteBuffer payload) {
     return new Message(
         packetType,
-        (byte) 0x01,           // EOM = true (single packet request)
+        (byte) 0x01,                  // EOM = true (single packet request)
         payload.capacity() + 8,
-        (short) 0,             // Client sends SPID 0
-        (short) 1,             // First packet
+        (short) 0,                    // Client sends SPID 0
+        (short) 1,                    // First packet
         payload,
-        0L,                    // No receive time for outgoing
-        null                   // No trace for outgoing (can be set later)
+        0L,                           // No receive time for outgoing
+        null                          // No trace for outgoing (can be set later)
     );
   }
 
@@ -82,7 +89,12 @@ public final class Message {
    * The caller must manage packet number and status flags across packets.
    * Usually used via TdsPacketWriter, not directly.
    */
-  public static Message createMultiPacketPart(byte packetType, byte statusFlags, short packetNumber, ByteBuffer payload) {
+  public static Message createMultiPacketPart(
+      byte packetType,
+      byte statusFlags,
+      short packetNumber,
+      ByteBuffer payload) {
+
     return new Message(
         packetType,
         statusFlags,
@@ -138,7 +150,12 @@ public final class Message {
   }
 
   public Instant getReceivedInstant() {
-    return receivedAt > 0 ? Instant.ofEpochMilli(System.currentTimeMillis() - (System.nanoTime() - receivedAt) / 1_000_000L) : null;
+    if (receivedAt <= 0) {
+      return null;
+    }
+    long nowMillis = System.currentTimeMillis();
+    long elapsedMillis = (System.nanoTime() - receivedAt) / 1_000_000L;
+    return Instant.ofEpochMilli(nowMillis - elapsedMillis);
   }
 
   public String getTraceContext() {
@@ -163,11 +180,18 @@ public final class Message {
 
   @Override
   public String toString() {
+    String fmt = "Message{type=%s (0x%02X), packet=%d, length=%d, spid=%d,"
+        + " last=%b, reset=%b, payload=%d bytes}";
     return String.format(
-        "Message{type=%s (0x%02X), packet=%d, length=%d, spid=%d, last=%b, reset=%b, payload=%d bytes}",
-        getPacketTypeName(), packetType & 0xFF,
-        packetNumber, packetLength, spid,
-        isLastPacket, isResetConnection(), payload.remaining()
+        fmt,
+        getPacketTypeName(),
+        packetType & 0xFF,
+        packetNumber,
+        packetLength,
+        spid,
+        isLastPacket,
+        isResetConnection(),
+        payload.remaining()
     );
   }
 }

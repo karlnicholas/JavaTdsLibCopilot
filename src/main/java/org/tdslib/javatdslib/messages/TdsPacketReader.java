@@ -13,6 +13,11 @@ public class TdsPacketReader {
 
   private final TcpTransport transport;
 
+  /**
+   * Constructs a new TdsPacketReader bound to the provided transport.
+   *
+   * @param transport underlying TCP transport used to read bytes
+   */
   public TdsPacketReader(TcpTransport transport) {
     this.transport = transport;
   }
@@ -56,11 +61,11 @@ public class TdsPacketReader {
     ByteBuffer raw = readRawPacket();
     raw.mark();
 
-    byte type = raw.get();
-    byte status = raw.get();
-    int length = Short.toUnsignedInt(raw.getShort());
-    short spid = raw.getShort();
-    short packetId = raw.getShort();
+    final byte type = raw.get();
+    final byte status = raw.get();
+    final int length = Short.toUnsignedInt(raw.getShort());
+    final short spid = raw.getShort();
+    final short packetId = raw.getShort();
     raw.get(); // window
 
     raw.reset();

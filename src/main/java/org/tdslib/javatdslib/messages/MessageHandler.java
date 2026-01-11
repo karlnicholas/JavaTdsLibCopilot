@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.messages;
 
 import org.slf4j.Logger;
@@ -14,8 +11,8 @@ import java.util.List;
 
 /**
  * Handles sending and receiving complete TDS messages.
- * <p>
- * A TDS message may span multiple packets.
+ *
+ * <p>A TDS message may span multiple packets.
  * This class provides both low-level (single packet) and higher-level
  * (full logical message) send/receive operations.
  */
@@ -26,8 +23,13 @@ public final class MessageHandler {
   private final TdsPacketReader packetReader;
   private final TdsPacketWriter packetWriter;
 
-//    private short currentPacketNumber = 1;  // Increments per packet sent
+  //  private short currentPacketNumber = 1;  // Increments per packet sent
 
+  /**
+   * Constructs a MessageHandler bound to the provided transport.
+   *
+   * @param transport the underlying TCP transport
+   */
   public MessageHandler(TcpTransport transport) {
     this.transport = transport;
     this.packetReader = new TdsPacketReader(transport);
@@ -55,7 +57,7 @@ public final class MessageHandler {
 
     for (ByteBuffer buf : packetBuffers) {
       transport.write(buf);
-//            currentPacketNumber++;
+      //  currentPacketNumber++;
     }
 
     transport.flush();
@@ -63,7 +65,9 @@ public final class MessageHandler {
 
   // Helper for hex dumping
   private void logHex(String label, ByteBuffer buffer) {
-    if (!logger.isDebugEnabled()) return;
+    if (!logger.isDebugEnabled()) {
+      return;
+    }
 
     StringBuilder sb = new StringBuilder();
     sb.append(label).append(" (Length: ").append(buffer.remaining()).append(")\n");
@@ -73,7 +77,9 @@ public final class MessageHandler {
     while (buffer.hasRemaining()) {
       byte b = buffer.get();
       sb.append(String.format("%02X ", b));
-      if (++i % 16 == 0) sb.append("\n");
+      if (++i % 16 == 0) {
+        sb.append("\n");
+      }
     }
     sb.append("\n");
 
@@ -84,8 +90,8 @@ public final class MessageHandler {
 
   /**
    * Receives **one single TDS packet** and wraps it as a Message.
-   * <p>
-   * This is the most basic receive operation.
+   *
+   * <p>This is the most basic receive operation.
    * For full logical responses, the caller should loop until isLastPacket().
    *
    * @return one complete TDS packet as Message
@@ -97,11 +103,11 @@ public final class MessageHandler {
 
     // Parse header (first 8 bytes)
     rawPacket.mark();
-    byte type = rawPacket.get();
-    byte status = rawPacket.get();
-    int length = Short.toUnsignedInt(rawPacket.getShort());
-    short spid = rawPacket.getShort();
-    short packetId = rawPacket.getShort();
+    final byte type = rawPacket.get();
+    final byte status = rawPacket.get();
+    final int length = Short.toUnsignedInt(rawPacket.getShort());
+    final short spid = rawPacket.getShort();
+    final short packetId = rawPacket.getShort();
     rawPacket.get(); // window (usually 0)
 
     // Reset and slice payload
@@ -123,8 +129,8 @@ public final class MessageHandler {
 
   /**
    * Receives a **complete logical response** by reading packets until the last one (EOM).
-   * <p>
-   * Useful for simple request-response patterns.
+   *
+   * <p>Useful for simple request-response patterns.
    *
    * @return list of all packets that form the logical response
    * @throws IOException if any read fails
@@ -146,12 +152,12 @@ public final class MessageHandler {
     return messages;
   }
 
-  /**
-   * Resets the packet number counter (useful after login or connection reset).
-   */
-//    public void resetPacketNumbering() {
-//        currentPacketNumber = 1;
-//    }
+  //  /**
+  //   * Resets the packet number counter (useful after login or connection reset).
+  //   */
+  //  public void resetPacketNumbering() {
+  //    currentPacketNumber = 1;
+  //  }
 
   /**
    * Closes the underlying transport (socket).

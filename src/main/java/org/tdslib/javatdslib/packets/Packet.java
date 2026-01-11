@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.packets;
 
 import java.nio.ByteBuffer;
@@ -30,6 +27,11 @@ public class Packet {
 
   // --- Absolute Accessors ---
 
+  /**
+   * Returns the packet type as a {@link PacketType}.
+   *
+   * @return the packet type
+   */
   public PacketType getType() {
     int typeVal = Byte.toUnsignedInt(buffer.get(OFFSET_TYPE));
     try {
@@ -39,36 +41,78 @@ public class Packet {
     }
   }
 
+  /**
+   * Returns the raw status byte as an unsigned integer.
+   *
+   * @return status flags
+   */
   public int getStatus() {
     return Byte.toUnsignedInt(buffer.get(OFFSET_STATUS));
   }
 
-  public int getSPId() {
+  /**
+   * Returns the SPID (server process id) as an unsigned integer.
+   *
+   * Note: method name follows camelCase (\`getSpid\`) to satisfy style rules.
+   *
+   * @return SPID value
+   */
+  public int getSpid() {
     return Short.toUnsignedInt(buffer.getShort(OFFSET_SPID));
   }
 
+  /**
+   * Returns the packet sequence id.
+   *
+   * @return packet id (0-255)
+   */
   public int getId() {
     return Byte.toUnsignedInt(buffer.get(OFFSET_PACKET_ID));
   }
 
+  /**
+   * Sets the packet id (low 8 bits used).
+   *
+   * @param id packet id (0-255)
+   */
   public void setId(int id) {
     buffer.put(OFFSET_PACKET_ID, (byte) id);
   }
 
+  /**
+   * Returns the window byte.
+   *
+   * @return window value (0-255)
+   */
   public int getWindow() {
     return Byte.toUnsignedInt(buffer.get(OFFSET_WINDOW));
   }
 
+  /**
+   * Returns the full packet length (header + data).
+   *
+   * @return packet length
+   */
   public int getLength() {
     return Short.toUnsignedInt(buffer.getShort(OFFSET_LENGTH));
   }
 
   // --- Status Flags ---
 
+  /**
+   * Returns true when this packet has EOM (End Of Message).
+   *
+   * @return true if last packet in logical message
+   */
   public boolean isLast() {
     return (getStatus() & PacketStatus.EOM) == PacketStatus.EOM;
   }
 
+  /**
+   * Sets or clears the EOM flag.
+   *
+   * @param last whether this is the last packet
+   */
   public void setLast(boolean last) {
     int status = getStatus();
     if (last) {
@@ -79,10 +123,20 @@ public class Packet {
     buffer.put(OFFSET_STATUS, (byte) status);
   }
 
+  /**
+   * Returns true when IGNORE flag is set.
+   *
+   * @return true if IGNORE flag set
+   */
   public boolean isIgnore() {
     return (getStatus() & PacketStatus.IGNORE) == PacketStatus.IGNORE;
   }
 
+  /**
+   * Sets or clears the IGNORE flag.
+   *
+   * @param ignore whether to set IGNORE
+   */
   public void setIgnore(boolean ignore) {
     int status = getStatus();
     if (ignore) {
@@ -93,10 +147,20 @@ public class Packet {
     buffer.put(OFFSET_STATUS, (byte) status);
   }
 
+  /**
+   * Returns true when RESET_CONNECTION flag is set.
+   *
+   * @return true if RESET_CONNECTION flag set
+   */
   public boolean isResetConnection() {
     return (getStatus() & PacketStatus.RESET_CONNECTION) == PacketStatus.RESET_CONNECTION;
   }
 
+  /**
+   * Sets or clears the RESET_CONNECTION flag.
+   *
+   * @param resetConnection whether to set RESET_CONNECTION
+   */
   public void setResetConnection(boolean resetConnection) {
     int status = getStatus();
     if (resetConnection) {
@@ -110,6 +174,8 @@ public class Packet {
   /**
    * Returns a slice of the data portion.
    * CRITICAL: Forces Little Endian order for the payload.
+   *
+   * @return read-only little-endian view of payload bytes
    */
   public ByteBuffer getData() {
     if (buffer.capacity() <= HEADER_LENGTH) {
@@ -124,6 +190,8 @@ public class Packet {
   /**
    * Returns the full backing buffer (Header + Data).
    * Used when writing the packet to the network.
+   *
+   * @return duplicate of internal buffer positioned at start
    */
   public ByteBuffer getBuffer() {
     // Return a duplicate so the caller cannot mess up the position/limit
@@ -133,6 +201,11 @@ public class Packet {
 
   // --- Constructors ---
 
+  /**
+   * Creates a new empty packet with the provided type and default header fields.
+   *
+   * @param type packet type
+   */
   public Packet(PacketType type) {
     // Headers are always Big Endian
     this.buffer = ByteBuffer.allocate(HEADER_LENGTH).order(ByteOrder.BIG_ENDIAN);
@@ -145,6 +218,12 @@ public class Packet {
     updateLength();
   }
 
+  /**
+   * Wraps an existing buffer as a Packet. Validates header and byte order.
+   *
+   * @param buffer backing buffer (must be at least HEADER_LENGTH)
+   * @throws IllegalArgumentException when buffer is null, too small, or has invalid type
+   */
   public Packet(ByteBuffer buffer) {
     Objects.requireNonNull(buffer, "Buffer cannot be null");
 
@@ -167,14 +246,27 @@ public class Packet {
     this.buffer = buffer;
   }
 
+  /**
+   * Update the header length field to match the buffer capacity.
+   */
   private void updateLength() {
     buffer.putShort(OFFSET_LENGTH, (short) buffer.capacity());
   }
 
+  /**
+   * Sets the packet id using modulo 256 semantics.
+   *
+   * @param packetId desired packet id
+   */
   public void setPacketId(int packetId) {
     setId(packetId % 256);
   }
 
+  /**
+   * Appends data to the packet payload. If data is empty or null this is a no-op.
+   *
+   * @param data source buffer whose remaining bytes will be appended
+   */
   public void addData(ByteBuffer data) {
     if (data == null || !data.hasRemaining()) {
       return;
@@ -201,7 +293,17 @@ public class Packet {
 
   @Override
   public String toString() {
-    return String.format("Packet[Type=0x%02X(%s), Status=0x%02X, Length=%d, SPID=0x%04X, PacketId=%d, Window=0x%02X]",
-        getType().getValue(), getType(), getStatus(), getLength(), getSPId(), getId(), getWindow());
+    String fmtPart1 = "Packet[Type=0x%02X(%s), Status=0x%02X, Length=%d, ";
+    String fmtPart2 = "SPID=0x%04X, PacketId=%d, Window=0x%02X]";
+    return String.format(
+        fmtPart1 + fmtPart2,
+        getType().getValue(),
+        getType(),
+        getStatus(),
+        getLength(),
+        getSpid(),
+        getId(),
+        getWindow()
+    );
   }
 }
