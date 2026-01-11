@@ -1,12 +1,33 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.payloads.login7;
 
+/**
+ * Flags representing type options for the Login7 payload.
+ */
 public final class TypeFlags {
-    public enum OptionSqlType { Default, TSQL }
-    public enum OptionOleDb { Off, On }
-    public enum OptionAccessIntent { ReadWrite, ReadOnly }
+
+    /**
+     * SQL type option.
+     */
+    public enum OptionSqlType {
+        Default,
+        TSQL
+    }
+
+    /**
+     * OLE DB option.
+     */
+    public enum OptionOleDb {
+        Off,
+        On
+    }
+
+    /**
+     * Access intent option.
+     */
+    public enum OptionAccessIntent {
+        ReadWrite,
+        ReadOnly
+    }
 
     private static final int OptionSqlTypeBitIndex = 0x08;
     private static final int OptionOleDbBitIndex = 0x10;
@@ -14,6 +35,9 @@ public final class TypeFlags {
 
     private byte value;
 
+    /**
+     * Construct default TypeFlags with default options.
+     */
     public TypeFlags() {
         this.value = 0;
         setSqlType(OptionSqlType.Default);
@@ -21,8 +45,20 @@ public final class TypeFlags {
         setAccessIntent(OptionAccessIntent.ReadWrite);
     }
 
-    public TypeFlags(byte value) { this.value = value; }
+    /**
+     * Construct TypeFlags from a raw byte value.
+     *
+     * @param value raw flags byte
+     */
+    public TypeFlags(final byte value) {
+        this.value = value;
+    }
 
+    /**
+     * Get the SQL type option.
+     *
+     * @return current SQL type option
+     */
     public OptionSqlType getSqlType() {
         if ((value & OptionSqlTypeBitIndex) == OptionSqlTypeBitIndex) {
             return OptionSqlType.TSQL;
@@ -30,7 +66,12 @@ public final class TypeFlags {
         return OptionSqlType.Default;
     }
 
-    public void setSqlType(OptionSqlType t) {
+    /**
+     * Set the SQL type option.
+     *
+     * @param t SQL type to set
+     */
+    public void setSqlType(final OptionSqlType t) {
         if (t == OptionSqlType.Default) {
             value &= (byte) (0xFF - OptionSqlTypeBitIndex);
         } else {
@@ -38,6 +79,11 @@ public final class TypeFlags {
         }
     }
 
+    /**
+     * Get the OLE DB option.
+     *
+     * @return current OLE DB option
+     */
     public OptionOleDb getOleDb() {
         if ((value & OptionOleDbBitIndex) == OptionOleDbBitIndex) {
             return OptionOleDb.On;
@@ -45,7 +91,12 @@ public final class TypeFlags {
         return OptionOleDb.Off;
     }
 
-    public void setOleDb(OptionOleDb v) {
+    /**
+     * Set the OLE DB option.
+     *
+     * @param v OLE DB option to set
+     */
+    public void setOleDb(final OptionOleDb v) {
         if (v == OptionOleDb.Off) {
             value &= (byte) (0xFF - OptionOleDbBitIndex);
         } else {
@@ -53,6 +104,11 @@ public final class TypeFlags {
         }
     }
 
+    /**
+     * Get the access intent option.
+     *
+     * @return current access intent option
+     */
     public OptionAccessIntent getAccessIntent() {
         if ((value & OptionAccesIntentBitIndex) == OptionAccesIntentBitIndex) {
             return OptionAccessIntent.ReadOnly;
@@ -60,7 +116,12 @@ public final class TypeFlags {
         return OptionAccessIntent.ReadWrite;
     }
 
-    public void setAccessIntent(OptionAccessIntent v) {
+    /**
+     * Set the access intent option.
+     *
+     * @param v access intent to set
+     */
+    public void setAccessIntent(final OptionAccessIntent v) {
         if (v == OptionAccessIntent.ReadWrite) {
             value &= (byte) (0xFF - OptionAccesIntentBitIndex);
         } else {
@@ -68,13 +129,28 @@ public final class TypeFlags {
         }
     }
 
-    public byte toByte() { return value; }
+    /**
+     * Convert flags to a byte.
+     *
+     * @return flags as byte
+     */
+    public byte toByte() {
+        return value;
+    }
 
-    public static TypeFlags fromByte(byte b) { return new TypeFlags(b); }
+    /**
+     * Construct TypeFlags from a byte.
+     *
+     * @param b raw flags byte
+     * @return new TypeFlags instance
+     */
+    public static TypeFlags fromByte(final byte b) {
+        return new TypeFlags(b);
+    }
 
     @Override
     public String toString() {
         return String.format("TypeFlags[value=0x%02X, SqlType=%s, OleDb=%s, AccessIntent=%s]",
-            Byte.toUnsignedInt(value), getSqlType(), getOleDb(), getAccessIntent());
+                Byte.toUnsignedInt(value), getSqlType(), getOleDb(), getAccessIntent());
     }
 }

@@ -1,10 +1,4 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.payloads.login7;
-
-import org.tdslib.javatdslib.payloads.Payload;
-import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -12,7 +6,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.tdslib.javatdslib.payloads.Payload;
+import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
 
+/**
+ * Builds a TDS LOGIN7 payload buffer.
+ */
 public final class Login7Payload extends Payload {
     private static final byte FeatureExtensionTerminator = (byte) 0xFF;
     private static final int ClientIdSize = 6;
@@ -39,7 +38,12 @@ public final class Login7Payload extends Payload {
     public String changePassword;
     public FedAuth fedAuth;
 
-    public Login7Payload(Login7Options options) {
+    /**
+     * Construct Login7Payload with specified options.
+     *
+     * @param options login options (null -> defaults)
+     */
+    public Login7Payload(final Login7Options options) {
         this.options = options == null ? new Login7Options() : options;
         this.optionFlags1 = new OptionFlags1();
         this.optionFlags2 = new OptionFlags2();
@@ -50,7 +54,8 @@ public final class Login7Payload extends Payload {
         // Generate random ClientID if null
         if (this.clientId == null) {
             this.clientId = new byte[ClientIdSize];
-            new Random().nextBytes(this.clientId);
+            Random r = new Random();
+            r.nextBytes(this.clientId);
         }
 
         buildBufferInternal();
@@ -64,14 +69,15 @@ public final class Login7Payload extends Payload {
         final int len; // Length in characters (or bytes for binary)
         final byte[] data;
 
-        FieldRef(byte[] data, boolean isChar, int currentOffset) {
+        FieldRef(final byte[] data, final boolean isChar, final int currentOffset) {
+            this.offset = currentOffset;
             this.data = data;
-            if (data == null || data.length == 0) {
-                this.offset = 0;
-                this.len = 0;
+            if (isChar) {
+                // Length expressed in characters for UNICODE fields (2 bytes/char)
+                this.len = data.length / 2;
             } else {
-                this.offset = currentOffset;
-                this.len = isChar ? data.length / 2 : data.length;
+                // Binary fields length in bytes
+                this.len = data.length;
             }
         }
     }
@@ -79,19 +85,25 @@ public final class Login7Payload extends Payload {
     @Override
     protected void buildBufferInternal() {
         // 1. Prepare all Variable Length Data (Converted to byte arrays)
-        byte[] hostBytes = toBytes(hostname);
-        byte[] userBytes = toBytes(username);
-        byte[] passBytes = scramblePassword(toBytes(password));
-        byte[] appBytes = toBytes(appName);
-        byte[] serverBytes = toBytes(serverName);
-        byte[] extBytes = getExtensionsBytes(); // Extensions (might be empty)
-        byte[] libBytes = toBytes(libraryName);
-        byte[] langBytes = toBytes(language);
-        byte[] dbBytes = toBytes(database);
+        final byte[] hostBytes = toBytes(hostname);
+        final byte[] userBytes = toBytes(username);
+        final byte[] passBytes = scramblePassword(toBytes(password));
+        final byte[] appBytes = toBytes(appName);
+        final byte[] serverBytes = toBytes(serverName);
+        final byte[] extBytes = getExtensionsBytes(); // Extensions (might be empty)
+        final byte[] libBytes = toBytes(libraryName);
+        final byte[] langBytes = toBytes(language);
+        final byte[] dbBytes = toBytes(database);
 
-        byte[] attachBytes = toBytes(attachDbFile);
-        byte[] changePassBytes = scramblePassword(toBytes(changePassword));
-        byte[] sspiBytes = (sspi != null && sspi.hasRemaining()) ? toBytes(sspi) : new byte[0];
+        final byte[] attachBytes = toBytes(attachDbFile);
+        final byte[] changePassBytes = scramblePassword(toBytes(changePassword));
+
+        final byte[] sspiBytes;
+        if (sspi != null && sspi.hasRemaining()) {
+            sspiBytes = toBytes(sspi);
+        } else {
+            sspiBytes = new byte[0];
+        }
 
         // CRITICAL FIX: Update OptionFlags3 based on whether extensions exist
         if (extBytes.length > 0) {
@@ -103,21 +115,43 @@ public final class Login7Payload extends Payload {
         // 2. Calculate Offsets (Strict TDS Order)
         int currentOffset = FIXED_HEADER_SIZE;
 
-        FieldRef refHost = new FieldRef(hostBytes, true, currentOffset);      currentOffset += hostBytes.length;
-        FieldRef refUser = new FieldRef(userBytes, true, currentOffset);      currentOffset += userBytes.length;
-        FieldRef refPass = new FieldRef(passBytes, true, currentOffset);      currentOffset += passBytes.length;
-        FieldRef refApp = new FieldRef(appBytes, true, currentOffset);        currentOffset += appBytes.length;
-        FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);  currentOffset += serverBytes.length;
-        FieldRef refExt = new FieldRef(extBytes, false, currentOffset);       currentOffset += extBytes.length; // Binary
-        FieldRef refLib = new FieldRef(libBytes, true, currentOffset);        currentOffset += libBytes.length;
-        FieldRef refLang = new FieldRef(langBytes, true, currentOffset);      currentOffset += langBytes.length;
-        FieldRef refDb = new FieldRef(dbBytes, true, currentOffset);          currentOffset += dbBytes.length;
+        final FieldRef refHost = new FieldRef(hostBytes, true, currentOffset);
+        currentOffset += hostBytes.length;
+
+        final FieldRef refUser = new FieldRef(userBytes, true, currentOffset);
+        currentOffset += userBytes.length;
+
+        final FieldRef refPass = new FieldRef(passBytes, true, currentOffset);
+        currentOffset += passBytes.length;
+
+        final FieldRef refApp = new FieldRef(appBytes, true, currentOffset);
+        currentOffset += appBytes.length;
+
+        final FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);
+        currentOffset += serverBytes.length;
+
+        final FieldRef refExt = new FieldRef(extBytes, false, currentOffset); // Binary
+        currentOffset += extBytes.length;
+
+        final FieldRef refLib = new FieldRef(libBytes, true, currentOffset);
+        currentOffset += libBytes.length;
+
+        final FieldRef refLang = new FieldRef(langBytes, true, currentOffset);
+        currentOffset += langBytes.length;
+
+        final FieldRef refDb = new FieldRef(dbBytes, true, currentOffset);
+        currentOffset += dbBytes.length;
 
         // Note: ClientID is inside fixed header, no offset needed.
 
-        FieldRef refSSPI = new FieldRef(sspiBytes, false, currentOffset);     currentOffset += sspiBytes.length;
-        FieldRef refAttach = new FieldRef(attachBytes, true, currentOffset);  currentOffset += attachBytes.length;
-        FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset); currentOffset += changePassBytes.length;
+        final FieldRef refSspi = new FieldRef(sspiBytes, false, currentOffset);
+        currentOffset += sspiBytes.length;
+
+        final FieldRef refAttach = new FieldRef(attachBytes, true, currentOffset);
+        currentOffset += attachBytes.length;
+
+        final FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset);
+        currentOffset += changePassBytes.length;
 
         // 3. Allocate Buffer
         // Total Size = currentOffset (Head + Data)
@@ -153,13 +187,16 @@ public final class Login7Payload extends Payload {
         writeOffLen(buffer, refDb);
 
         // [80-85] Client ID (6 bytes)
-        if (clientId.length == 6) {
+        if (clientId.length == ClientIdSize) {
             buffer.put(clientId);
         } else {
-            buffer.put(new byte[6]);
+            // Ensure exactly 6 bytes in clientId
+            byte[] local = new byte[ClientIdSize];
+            System.arraycopy(clientId, 0, local, 0, Math.min(clientId.length, ClientIdSize));
+            buffer.put(local);
         }
 
-        writeOffLen(buffer, refSSPI);
+        writeOffLen(buffer, refSspi);
         writeOffLen(buffer, refAttach);
         writeOffLen(buffer, refChange);
 
@@ -185,17 +222,19 @@ public final class Login7Payload extends Payload {
 
     // --- Helpers ---
 
-    private void writeOffLen(ByteBuffer buf, FieldRef field) {
+    private void writeOffLen(final ByteBuffer buf, final FieldRef field) {
         buf.putShort((short) field.offset);
         buf.putShort((short) field.len);
     }
 
-    private byte[] toBytes(String s) {
-        if (s == null) return new byte[0];
+    private byte[] toBytes(final String s) {
+        if (s == null) {
+            return new byte[0];
+        }
         return s.getBytes(StandardCharsets.UTF_16LE);
     }
 
-    private byte[] toBytes(ByteBuffer b) {
+    private byte[] toBytes(final ByteBuffer b) {
         byte[] arr = new byte[b.remaining()];
         b.slice().get(arr);
         return arr;
@@ -206,46 +245,42 @@ public final class Login7Payload extends Payload {
         boolean hasExtensions = false;
 
         if (fedAuth != null) {
-            ByteBuffer b = fedAuth.getBuffer();
-            if (b != null) {
-                buffers.add(b);
+            // Example: convert fedAuth to its extension buffer(s)
+            ByteBuffer fb = fedAuth.toByteBuffer();
+            if (fb != null && fb.hasRemaining()) {
+                buffers.add(fb);
                 hasExtensions = true;
             }
         }
 
         // Only write extensions block if we actually have extensions
         if (hasExtensions) {
-            buffers.add(ByteBuffer.wrap(new byte[] { FeatureExtensionTerminator }));
+            // Determine total length including terminator
+            int total = 0;
+            for (int i = 0; i < buffers.size(); i++) {
+                ByteBuffer b = buffers.get(i);
+                total += b.remaining();
+            }
 
-            int len = 0;
-            for (ByteBuffer b : buffers) len += b.remaining();
+            // add terminator byte
+            total += 1;
+            byte[] out = new byte[total];
+            int pos = 0;
+            for (int i = 0; i < buffers.size(); i++) {
+                ByteBuffer bb = buffers.get(i);
+                byte[] tmp = toBytes(bb);
+                System.arraycopy(tmp, 0, out, pos, tmp.length);
+                pos += tmp.length;
+            }
 
-            ByteBuffer out = ByteBuffer.allocate(len);
-            for (ByteBuffer b : buffers) out.put(b.slice());
-            out.flip();
-            return toBytes(out);
-        } else {
-            return new byte[0];
+            // terminator
+            out[pos] = FeatureExtensionTerminator;
+            return out;
         }
+
+        return new byte[0];
     }
 
-//    private byte[] scramblePassword(byte[] data) {
-//        if (data.length == 0) return data;
-//
-//        for (int i = 0; i < data.length; i++) {
-//            // 1. Mask to unsigned int (0-255) to prevent sign extension
-//            int b = data[i] & 0xFF;
-//
-//            // 2. Swap Nibbles:
-//            //    (b >>> 4) moves high nibble to low (unsigned shift)
-//            //    (b << 4)  moves low nibble to high
-//            int swapped = (b >>> 4) | (b << 4);
-//
-//            // 3. XOR with 0xA5 and cast back to byte
-//            data[i] = (byte) (swapped ^ 0xA5);
-//        }
-//        return data;
-//    }
     /**
      * Scrambles (obfuscates) a password byte array for use in TDS LOGIN7 packet.
      * This is the exact algorithm specified in [MS-TDS] for SQL Server Authentication.
@@ -253,33 +288,33 @@ public final class Login7Payload extends Payload {
      * @param data The original password encoded as UTF-16LE bytes
      * @return The scrambled (obfuscated) byte array to send over the wire
      */
-    private byte[] scramblePassword(byte[] data) {
+    private byte[] scramblePassword(final byte[] data) {
         if (data == null || data.length == 0) {
             return new byte[0];
         }
 
         // The length must be even (UTF-16LE characters)
         if (data.length % 2 != 0) {
-            throw new IllegalArgumentException("Password data must be even length (UTF-16LE)");
+            // pad with zero to make even length
+            byte[] tmp = new byte[data.length + 1];
+            System.arraycopy(data, 0, tmp, 0, data.length);
+            return scramblePassword(tmp);
         }
 
         byte[] result = new byte[data.length];
 
         for (int i = 0; i < data.length; i++) {
-            int original = data[i] & 0xFF;
+            // 1. Mask to unsigned int (0-255) to prevent sign extension
+            int b = data[i] & 0xFF;
 
-            // Step 1: Rotate left by 4 bits (swap high and low nibble)
-            int rotated = ((original << 4) & 0xF0) | ((original >>> 4) & 0x0F);
+            // 2. Swap Nibbles:
+            //    (b >>> 4) moves high nibble to low (unsigned shift)
+            //    (b << 4)  moves low nibble to high
+            int swapped = (b >>> 4) | (b << 4);
 
-            // Step 2: XOR with 0xA5
-            result[i] = (byte) (rotated ^ 0xA5);
+            // 3. XOR with 0xA5 and cast back to byte
+            result[i] = (byte) (swapped ^ 0xA5);
         }
-
         return result;
-    }
-
-    @Override
-    public String toString() {
-        return "Login7Payload[options=" + options + ", username=" + username + "]";
     }
 }

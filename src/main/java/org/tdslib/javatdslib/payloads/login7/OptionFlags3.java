@@ -1,10 +1,17 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.payloads.login7;
 
+/**
+ * Flags for Login7 option set 3.
+ */
 public final class OptionFlags3 {
-    public enum OptionChangePassword { No, Yes }
+
+    /**
+     * Whether the client is requesting a password change.
+     */
+    public enum OptionChangePassword {
+        No,
+        Yes
+    }
 
     private static final int OptionChangePasswordBitIndex = 0x01;
     private static final int OptionBinaryXmlBitIndex = 0x02;
@@ -14,42 +21,160 @@ public final class OptionFlags3 {
 
     private byte value;
 
+    /**
+     * Construct default OptionFlags3 with sane defaults.
+     */
     public OptionFlags3() {
+        this.value = 0;
         setChangePassword(OptionChangePassword.No);
         setBinaryXml(false);
         setSpawnUserInstance(false);
         setUnknownCollationHandling(true);
-        // FIXED: Default to FALSE. Only enable if we actually have extensions.
+        // Default to FALSE. Only enable if we actually have extensions.
         setExtensionUsed(false);
     }
 
-    // ... (Keep existing getters/setters and bit logic) ...
-    public OptionFlags3(byte value) { this.value = value; }
+    /**
+     * Construct OptionFlags3 from a raw byte value.
+     *
+     * @param value raw flags byte
+     */
+    public OptionFlags3(final byte value) {
+        this.value = value;
+    }
 
+    /**
+     * Get the change-password option.
+     *
+     * @return current change-password option
+     */
     public OptionChangePassword getChangePassword() {
-        if ((value & OptionChangePasswordBitIndex) == OptionChangePasswordBitIndex) return OptionChangePassword.Yes;
+        if ((value & OptionChangePasswordBitIndex) == OptionChangePasswordBitIndex) {
+            return OptionChangePassword.Yes;
+        }
         return OptionChangePassword.No;
     }
 
-    public void setChangePassword(OptionChangePassword v) {
-        if (v == OptionChangePassword.No) value &= (byte) (0xFF - OptionChangePasswordBitIndex);
-        else value |= OptionChangePasswordBitIndex;
+    /**
+     * Set the change-password option.
+     *
+     * @param v option to set
+     */
+    public void setChangePassword(final OptionChangePassword v) {
+        if (v == OptionChangePassword.No) {
+            value &= (byte) (0xFF - OptionChangePasswordBitIndex);
+        } else {
+            value |= OptionChangePasswordBitIndex;
+        }
     }
 
-    public boolean isBinaryXml() { return (value & OptionBinaryXmlBitIndex) == OptionBinaryXmlBitIndex; }
-    public void setBinaryXml(boolean v) { if (v) value |= OptionBinaryXmlBitIndex; else value &= (byte) (0xFF - OptionBinaryXmlBitIndex); }
+    /**
+     * Whether Binary XML is enabled.
+     *
+     * @return true when Binary XML bit is set
+     */
+    public boolean isBinaryXml() {
+        return (value & OptionBinaryXmlBitIndex) == OptionBinaryXmlBitIndex;
+    }
 
-    public boolean isSpawnUserInstance() { return (value & OptionSpawnUserInstanceBitIndex) == OptionSpawnUserInstanceBitIndex; }
-    public void setSpawnUserInstance(boolean v) { if (v) value |= OptionSpawnUserInstanceBitIndex; else value &= (byte) (0xFF - OptionSpawnUserInstanceBitIndex); }
+    /**
+     * Set Binary XML flag.
+     *
+     * @param v true to enable Binary XML
+     */
+    public void setBinaryXml(final boolean v) {
+        if (v) {
+            value |= OptionBinaryXmlBitIndex;
+        } else {
+            value &= (byte) (0xFF - OptionBinaryXmlBitIndex);
+        }
+    }
 
-    public boolean isUnknownCollationHandling() { return (value & OptionUnkownCollationHandlingBitIndex) == OptionUnkownCollationHandlingBitIndex; }
-    public void setUnknownCollationHandling(boolean v) { if (v) value |= OptionUnkownCollationHandlingBitIndex; else value &= (byte) (0xFF - OptionUnkownCollationHandlingBitIndex); }
+    /**
+     * Whether spawn user instance is requested.
+     *
+     * @return true when spawn user instance bit is set
+     */
+    public boolean isSpawnUserInstance() {
+        return (value & OptionSpawnUserInstanceBitIndex) == OptionSpawnUserInstanceBitIndex;
+    }
 
-    public boolean isExtensionUsed() { return (value & OptionExtensionUsedBitIndex) == OptionExtensionUsedBitIndex; }
-    public void setExtensionUsed(boolean v) { if (v) value |= OptionExtensionUsedBitIndex; else value &= (byte) (0xFF - OptionExtensionUsedBitIndex); }
+    /**
+     * Set spawn user instance flag.
+     *
+     * @param v true to enable spawn user instance
+     */
+    public void setSpawnUserInstance(final boolean v) {
+        if (v) {
+            value |= OptionSpawnUserInstanceBitIndex;
+        } else {
+            value &= (byte) (0xFF - OptionSpawnUserInstanceBitIndex);
+        }
+    }
 
-    public byte toByte() { return value; }
-    public static OptionFlags3 fromByte(byte b) { return new OptionFlags3(b); }
+    /**
+     * Whether unknown collation handling is enabled.
+     *
+     * @return true when unknown collation handling bit is set
+     */
+    public boolean isUnknownCollationHandling() {
+        return (value & OptionUnkownCollationHandlingBitIndex)
+                == OptionUnkownCollationHandlingBitIndex;
+    }
+
+    /**
+     * Set unknown collation handling flag.
+     *
+     * @param v true to enable unknown collation handling
+     */
+    public void setUnknownCollationHandling(final boolean v) {
+        if (v) {
+            value |= OptionUnkownCollationHandlingBitIndex;
+        } else {
+            value &= (byte) (0xFF - OptionUnkownCollationHandlingBitIndex);
+        }
+    }
+
+    /**
+     * Whether extension features are used.
+     *
+     * @return true when extension-used bit is set
+     */
+    public boolean isExtensionUsed() {
+        return (value & OptionExtensionUsedBitIndex) == OptionExtensionUsedBitIndex;
+    }
+
+    /**
+     * Set extension-used flag.
+     *
+     * @param v true to indicate extensions are used
+     */
+    public void setExtensionUsed(final boolean v) {
+        if (v) {
+            value |= OptionExtensionUsedBitIndex;
+        } else {
+            value &= (byte) (0xFF - OptionExtensionUsedBitIndex);
+        }
+    }
+
+    /**
+     * Convert flags to a byte.
+     *
+     * @return flags as a raw byte
+     */
+    public byte toByte() {
+        return value;
+    }
+
+    /**
+     * Construct OptionFlags3 from a byte.
+     *
+     * @param b raw flags byte
+     * @return new OptionFlags3 instance
+     */
+    public static OptionFlags3 fromByte(final byte b) {
+        return new OptionFlags3(b);
+    }
 
     @Override
     public String toString() {
