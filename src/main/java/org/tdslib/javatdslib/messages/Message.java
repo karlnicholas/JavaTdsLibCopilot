@@ -149,6 +149,13 @@ public final class Message {
     return receivedAt;
   }
 
+  /**
+   * Returns the approximate Instant when this message was received.
+   * The value is derived from the stored nanotime marker and system clock.
+   *
+   * @return {@link Instant} representing the receive time, or {@code null}
+   *         when no receive timestamp is available
+   */
   public Instant getReceivedInstant() {
     if (receivedAt <= 0) {
       return null;
@@ -158,6 +165,11 @@ public final class Message {
     return Instant.ofEpochMilli(nowMillis - elapsedMillis);
   }
 
+  /**
+   * Optional tracing context associated with this message, or null.
+   *
+   * @return trace context string or null
+   */
   public String getTraceContext() {
     return traceContext;
   }

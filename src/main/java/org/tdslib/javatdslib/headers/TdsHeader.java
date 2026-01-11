@@ -10,6 +10,11 @@ public abstract class TdsHeader {
 
   protected final short type;  // e.g., 0x0002 for TransactionDescriptor
 
+  /**
+   * Construct a TdsHeader with the given header type code.
+   *
+   * @param type header type identifier
+   */
   public TdsHeader(short type) {
     this.type = type;
   }
@@ -24,4 +29,3 @@ public abstract class TdsHeader {
    */
   public abstract void write(ByteBuffer buffer);
 }
-

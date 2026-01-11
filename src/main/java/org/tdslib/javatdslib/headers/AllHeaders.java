@@ -11,6 +11,11 @@ public class AllHeaders {
 
   private final org.tdslib.javatdslib.tds.headers.TdsHeader[] headers;
 
+  /**
+   * Create an AllHeaders container wrapping the supplied TDS headers.
+   *
+   * @param headers zero or more TdsHeader instances to include
+   */
   public AllHeaders(org.tdslib.javatdslib.tds.headers.TdsHeader... headers) {
     this.headers = headers;
   }

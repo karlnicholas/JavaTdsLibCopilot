@@ -55,7 +55,7 @@ public class Packet {
   /**
    * Returns the SPID (server process id) as an unsigned integer.
    *
-   * Note: method name follows camelCase (\`getSpid\`) to satisfy style rules.
+   * <p>Note: method name follows camelCase (`getSpid`) to satisfy style rules.
    *
    * @return SPID value
    */

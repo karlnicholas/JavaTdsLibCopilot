@@ -152,6 +152,9 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
     return resultSets.size() > 1 || hasMoreResultSets;
   }
 
+  /**
+   * Reset internal state clearing collected result sets and prepare for reuse.
+   */
   public void clear() {
     resultSets.clear();
     currentMetadata = null;
