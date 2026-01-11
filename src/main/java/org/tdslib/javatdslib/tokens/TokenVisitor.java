@@ -6,11 +6,11 @@ package org.tdslib.javatdslib.tokens;
 @FunctionalInterface
 public interface TokenVisitor {
 
-    /**
-     * Called for every token that was parsed from the message payload.
-     *
-     * @param token the parsed token object. Examples: LoginAckToken,
-     *              EnvChangeToken, ErrorToken, DoneToken, etc.
-     */
-    void onToken(Token token);
+  /**
+   * Called for every token that was parsed from the message payload.
+   *
+   * @param token the parsed token object. Examples: LoginAckToken,
+   *              EnvChangeToken, ErrorToken, DoneToken, etc.
+   */
+  void onToken(Token token);
 }

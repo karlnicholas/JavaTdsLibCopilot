@@ -9,12 +9,12 @@ import java.nio.ByteBuffer;
  * Raw payload.
  */
 public class RawPayload extends Payload {
-    public RawPayload(ByteBuffer buffer) {
-        this.buffer = buffer;
-    }
+  public RawPayload(ByteBuffer buffer) {
+    this.buffer = buffer;
+  }
 
-    @Override
-    protected void buildBufferInternal() {
-        // Already built
-    }
+  @Override
+  protected void buildBufferInternal() {
+    // Already built
+  }
 }

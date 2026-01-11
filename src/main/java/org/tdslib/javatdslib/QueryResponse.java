@@ -10,21 +10,23 @@ import java.util.List;
  * from a SQL batch execution.
  */
 public class QueryResponse {
-    private static final Logger logger = LoggerFactory.getLogger(QueryResponse.class);
+  private static final Logger logger = LoggerFactory.getLogger(QueryResponse.class);
 
-    // ------------------- State -------------------
-    private final List<ResultSet> resultSets;  // one per result set
-    private final boolean hasError;
-    // ------------------------------------------------
+  // ------------------- State -------------------
+  private final List<ResultSet> resultSets;  // one per result set
+  private final boolean hasError;
+  // ------------------------------------------------
 
-    public QueryResponse(List<ResultSet> resultSets, boolean hasError ) {
-        this.resultSets = resultSets;
-        this.hasError = hasError;
-    }
-    public List<ResultSet> getResultSets() {
-        return resultSets;
-    }
-    public boolean hasError() {
-        return hasError;
-    }
+  public QueryResponse(List<ResultSet> resultSets, boolean hasError) {
+    this.resultSets = resultSets;
+    this.hasError = hasError;
+  }
+
+  public List<ResultSet> getResultSets() {
+    return resultSets;
+  }
+
+  public boolean hasError() {
+    return hasError;
+  }
 }

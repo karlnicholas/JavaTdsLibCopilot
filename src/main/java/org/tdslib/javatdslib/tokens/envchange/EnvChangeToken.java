@@ -15,48 +15,48 @@ import org.tdslib.javatdslib.tokens.TokenType;
  */
 public class EnvChangeToken extends Token {
 
-    private final EnvChangeType changeType;
-    private final byte[] valueBytes; // All data after the change type byte
+  private final EnvChangeType changeType;
+  private final byte[] valueBytes; // All data after the change type byte
 
-    /**
-     * Create an EnvChangeToken.
-     *
-     * @param type       raw token byte value
-     * @param changeType parsed change type
-     * @param valueBytes raw value bytes (may be empty)
-     */
-    public EnvChangeToken(final byte type, final EnvChangeType changeType,
-            final byte[] valueBytes) {
-        super(TokenType.fromValue(type));
-        this.changeType = changeType != null ? changeType : EnvChangeType.UNKNOWN;
-        this.valueBytes = valueBytes != null ? valueBytes.clone() : new byte[0];
-    }
+  /**
+   * Create an EnvChangeToken.
+   *
+   * @param type       raw token byte value
+   * @param changeType parsed change type
+   * @param valueBytes raw value bytes (may be empty)
+   */
+  public EnvChangeToken(final byte type, final EnvChangeType changeType,
+                        final byte[] valueBytes) {
+    super(TokenType.fromValue(type));
+    this.changeType = changeType != null ? changeType : EnvChangeType.UNKNOWN;
+    this.valueBytes = valueBytes != null ? valueBytes.clone() : new byte[0];
+  }
 
-    public EnvChangeType getChangeType() {
-        return changeType;
-    }
+  public EnvChangeType getChangeType() {
+    return changeType;
+  }
 
-    public byte[] getValueBytes() {
-        return valueBytes.clone();
-    }
+  public byte[] getValueBytes() {
+    return valueBytes.clone();
+  }
 
-    @Override
-    public String toString() {
-        return "EnvChangeToken{type=" + changeType
-                + ", valueBytes=" + bytesToHex(valueBytes)
-                + "}";
-    }
+  @Override
+  public String toString() {
+    return "EnvChangeToken{type=" + changeType
+        + ", valueBytes=" + bytesToHex(valueBytes)
+        + "}";
+  }
 
-    private static String bytesToHex(final byte[] bytes) {
-        if (bytes.length == 0) {
-            return "[]";
-        }
-        final StringBuilder sb = new StringBuilder("[");
-        for (final byte b : bytes) {
-            sb.append(String.format("%02X ", b));
-        }
-        sb.setLength(sb.length() - 1);
-        sb.append("]");
-        return sb.toString();
+  private static String bytesToHex(final byte[] bytes) {
+    if (bytes.length == 0) {
+      return "[]";
     }
+    final StringBuilder sb = new StringBuilder("[");
+    for (final byte b : bytes) {
+      sb.append(String.format("%02X ", b));
+    }
+    sb.setLength(sb.length() - 1);
+    sb.append("]");
+    return sb.toString();
+  }
 }

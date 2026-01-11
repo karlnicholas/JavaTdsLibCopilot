@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib.tokens.done;
 
 import java.nio.ByteBuffer;
+
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
@@ -13,28 +14,28 @@ import org.tdslib.javatdslib.tokens.TokenType;
  */
 public class DoneTokenParser implements TokenParser {
 
-    @Override
-    public Token parse(final ByteBuffer payload,
-                       final byte tokenType,
-                       final ConnectionContext context,
-                       final QueryContext queryContext) {
-        if (tokenType != TokenType.DONE.getValue()) {
-            String hex = Integer.toHexString(tokenType & 0xFF);
-            throw new IllegalArgumentException("Expected DONE token, got 0x" + hex);
-        }
-
-        int statusValue = Short.toUnsignedInt(payload.getShort());
-        DoneStatus status = DoneStatus.fromValue(statusValue);
-
-        int currentCommand = Short.toUnsignedInt(payload.getShort());
-
-        long rowCount;
-        if (context.getTdsVersion().ordinal() >= TdsVersion.V7_2.ordinal()) {
-            rowCount = payload.getLong();
-        } else {
-            rowCount = Integer.toUnsignedLong(payload.getInt());
-        }
-
-        return new DoneToken(tokenType, status, currentCommand, rowCount);
+  @Override
+  public Token parse(final ByteBuffer payload,
+                     final byte tokenType,
+                     final ConnectionContext context,
+                     final QueryContext queryContext) {
+    if (tokenType != TokenType.DONE.getValue()) {
+      String hex = Integer.toHexString(tokenType & 0xFF);
+      throw new IllegalArgumentException("Expected DONE token, got 0x" + hex);
     }
+
+    int statusValue = Short.toUnsignedInt(payload.getShort());
+    DoneStatus status = DoneStatus.fromValue(statusValue);
+
+    int currentCommand = Short.toUnsignedInt(payload.getShort());
+
+    long rowCount;
+    if (context.getTdsVersion().ordinal() >= TdsVersion.V7_2.ordinal()) {
+      rowCount = payload.getLong();
+    } else {
+      rowCount = Integer.toUnsignedLong(payload.getInt());
+    }
+
+    return new DoneToken(tokenType, status, currentCommand, rowCount);
+  }
 }

@@ -19,22 +19,22 @@ import java.util.List;
  * Collects success/failure status and any side-effects (environment changes, errors).
  */
 public class LoginResponse implements TokenVisitor {
-    private static final Logger logger = LoggerFactory.getLogger(LoginResponse.class);
+  private static final Logger logger = LoggerFactory.getLogger(LoginResponse.class);
 
-    private boolean success = false;
-    private String errorMessage = null;
-    private String database = null;
-    private final ConnectionContext connectionContext;
-    private final EnvChangeTokenVisitor envChangeTokenVisitor;
+  private boolean success = false;
+  private String errorMessage = null;
+  private String database = null;
+  private final ConnectionContext connectionContext;
+  private final EnvChangeTokenVisitor envChangeTokenVisitor;
 
-    private final List<EnvChangeToken> envChanges = new ArrayList<>();
+  private final List<EnvChangeToken> envChanges = new ArrayList<>();
 
-    // --- Mutators (used during token processing) ---
+  // --- Mutators (used during token processing) ---
 
-    public LoginResponse(ConnectionContext connectionContext) {
-        this.connectionContext = connectionContext;
-        this.envChangeTokenVisitor = new EnvChangeTokenVisitor(connectionContext);
-    }
+  public LoginResponse(ConnectionContext connectionContext) {
+    this.connectionContext = connectionContext;
+    this.envChangeTokenVisitor = new EnvChangeTokenVisitor(connectionContext);
+  }
 
 //    private final ConnectionContext context;
 
@@ -42,86 +42,86 @@ public class LoginResponse implements TokenVisitor {
 //        this.context = context;
 //    }
 
-    @Override
-    public void onToken(Token token) {
-        if (token instanceof EnvChangeToken envChange) {
-            envChangeTokenVisitor.applyEnvChange(envChange);
-        } else if (token instanceof LoginAckToken ack) {
-            connectionContext.setTdsVersion(ack.getTdsVersion());
-            connectionContext.setServerName(ack.getServerName());
-            connectionContext.setServerVersionString(ack.getServerVersionString());
-            setSuccess(true);
-            logger.info("Login successful - TDS version: {}, Server name: {}, Server version: {}", ack.getTdsVersion(), ack.getServerName(), ack.getServerVersionString());
-        } else if (token instanceof ErrorToken err) {
-            logger.warn("Server error [{}]: {}", err.getNumber(), err.getMessage());
-        } else if (token instanceof InfoToken info) {
-            // Severity 0–10 = info, >10 = error (but INFO token is always <=10)
-            logger.info("Server info [{}] (state {}): {}", info.getNumber(), info.getState(), info.getMessage());
-        } else if (token instanceof DoneToken done) {
-            if (done.hasError()) {
-                logger.warn("Batch completed with error (status: {})", done.getStatus());
-            } else {
-                logger.debug("Batch completed successfully (status: {})", done.getStatus());
-            }
-        } else {
-            logger.debug("Unhandled token type: {}", token.getType());
-        }
+  @Override
+  public void onToken(Token token) {
+    if (token instanceof EnvChangeToken envChange) {
+      envChangeTokenVisitor.applyEnvChange(envChange);
+    } else if (token instanceof LoginAckToken ack) {
+      connectionContext.setTdsVersion(ack.getTdsVersion());
+      connectionContext.setServerName(ack.getServerName());
+      connectionContext.setServerVersionString(ack.getServerVersionString());
+      setSuccess(true);
+      logger.info("Login successful - TDS version: {}, Server name: {}, Server version: {}", ack.getTdsVersion(), ack.getServerName(), ack.getServerVersionString());
+    } else if (token instanceof ErrorToken err) {
+      logger.warn("Server error [{}]: {}", err.getNumber(), err.getMessage());
+    } else if (token instanceof InfoToken info) {
+      // Severity 0–10 = info, >10 = error (but INFO token is always <=10)
+      logger.info("Server info [{}] (state {}): {}", info.getNumber(), info.getState(), info.getMessage());
+    } else if (token instanceof DoneToken done) {
+      if (done.hasError()) {
+        logger.warn("Batch completed with error (status: {})", done.getStatus());
+      } else {
+        logger.debug("Batch completed successfully (status: {})", done.getStatus());
+      }
+    } else {
+      logger.debug("Unhandled token type: {}", token.getType());
     }
+  }
 
-    public void setSuccess(boolean success) {
-        this.success = success;
+  public void setSuccess(boolean success) {
+    this.success = success;
+  }
+
+  public void setErrorMessage(String errorMessage) {
+    this.errorMessage = errorMessage;
+    this.success = false; // error implies failure
+  }
+
+  public void setDatabase(String database) {
+    this.database = database;
+  }
+
+  public void addEnvChange(EnvChangeToken change) {
+    if (change != null) {
+      envChanges.add(change);
     }
+  }
 
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-        this.success = false; // error implies failure
-    }
+  // --- Accessors ---
 
-    public void setDatabase(String database) {
-        this.database = database;
-    }
+  public boolean isSuccess() {
+    return success;
+  }
 
-    public void addEnvChange(EnvChangeToken change) {
-        if (change != null) {
-            envChanges.add(change);
-        }
-    }
+  public String getErrorMessage() {
+    return errorMessage;
+  }
 
-    // --- Accessors ---
+  public String getDatabase() {
+    return database;
+  }
 
-    public boolean isSuccess() {
-        return success;
-    }
+  /**
+   * Returns an unmodifiable view of the collected environment changes.
+   */
+  public List<EnvChangeToken> getEnvChanges() {
+    return Collections.unmodifiableList(envChanges);
+  }
 
-    public String getErrorMessage() {
-        return errorMessage;
-    }
+  /**
+   * Convenience: returns true if any ENVCHANGE tokens were received.
+   */
+  public boolean hasEnvChanges() {
+    return !envChanges.isEmpty();
+  }
 
-    public String getDatabase() {
-        return database;
-    }
-
-    /**
-     * Returns an unmodifiable view of the collected environment changes.
-     */
-    public List<EnvChangeToken> getEnvChanges() {
-        return Collections.unmodifiableList(envChanges);
-    }
-
-    /**
-     * Convenience: returns true if any ENVCHANGE tokens were received.
-     */
-    public boolean hasEnvChanges() {
-        return !envChanges.isEmpty();
-    }
-
-    @Override
-    public String toString() {
-        return "LoginResponse{" +
-                "success=" + success +
-                ", errorMessage='" + errorMessage + '\'' +
-                ", database='" + database + '\'' +
-                ", envChanges=" + envChanges.size() + " item(s)" +
-                '}';
-    }
+  @Override
+  public String toString() {
+    return "LoginResponse{" +
+        "success=" + success +
+        ", errorMessage='" + errorMessage + '\'' +
+        ", database='" + database + '\'' +
+        ", envChanges=" + envChanges.size() + " item(s)" +
+        '}';
+  }
 }

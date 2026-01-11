@@ -8,20 +8,20 @@ import java.nio.ByteBuffer;
  */
 public abstract class TdsHeader {
 
-    protected final short type;  // e.g., 0x0002 for TransactionDescriptor
+  protected final short type;  // e.g., 0x0002 for TransactionDescriptor
 
-    public TdsHeader(short type) {
-        this.type = type;
-    }
+  public TdsHeader(short type) {
+    this.type = type;
+  }
 
-    /**
-     * Returns the total length of this header (including HeaderLength + HeaderType + data).
-     */
-    public abstract int getLength();
+  /**
+   * Returns the total length of this header (including HeaderLength + HeaderType + data).
+   */
+  public abstract int getLength();
 
-    /**
-     * Writes the header to the buffer (little-endian).
-     */
-    public abstract void write(ByteBuffer buffer);
+  /**
+   * Writes the header to the buffer (little-endian).
+   */
+  public abstract void write(ByteBuffer buffer);
 }
 

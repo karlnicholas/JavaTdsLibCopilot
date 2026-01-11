@@ -9,41 +9,41 @@ import java.nio.ByteOrder;
  */
 public class AllHeaders {
 
-    private final org.tdslib.javatdslib.tds.headers.TdsHeader[] headers;
+  private final org.tdslib.javatdslib.tds.headers.TdsHeader[] headers;
 
-    public AllHeaders(org.tdslib.javatdslib.tds.headers.TdsHeader... headers) {
-        this.headers = headers;
+  public AllHeaders(org.tdslib.javatdslib.tds.headers.TdsHeader... headers) {
+    this.headers = headers;
+  }
+
+  /**
+   * Builds the ALL_HEADERS bytes (ready to prepend before SQL text).
+   */
+  public byte[] toBytes() {
+    int dataLength = 0;
+    for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
+      dataLength += h.getLength();
     }
 
-    /**
-     * Builds the ALL_HEADERS bytes (ready to prepend before SQL text).
-     */
-    public byte[] toBytes() {
-        int dataLength = 0;
-        for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
-            dataLength += h.getLength();
-        }
+    int totalLength = 4 + dataLength;  // TotalLength DWORD + headers
 
-        int totalLength = 4 + dataLength;  // TotalLength DWORD + headers
+    ByteBuffer buffer = ByteBuffer.allocate(totalLength);
+    buffer.order(ByteOrder.LITTLE_ENDIAN);
 
-        ByteBuffer buffer = ByteBuffer.allocate(totalLength);
-        buffer.order(ByteOrder.LITTLE_ENDIAN);
+    buffer.putInt(totalLength);  // TotalLength (includes itself)
 
-        buffer.putInt(totalLength);  // TotalLength (includes itself)
-
-        for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
-            h.write(buffer);
-        }
-
-        return buffer.array();
+    for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
+      h.write(buffer);
     }
 
-    /**
-     * Convenience factory for the most common case: auto-commit simple query.
-     */
-    public static AllHeaders forAutoCommit(int outstandingRequestCount) {
-        return new AllHeaders(
-                new TransactionDescriptorHeader(0L, outstandingRequestCount)  // or 1L, 1 – both work
-        );
-    }
+    return buffer.array();
+  }
+
+  /**
+   * Convenience factory for the most common case: auto-commit simple query.
+   */
+  public static AllHeaders forAutoCommit(int outstandingRequestCount) {
+    return new AllHeaders(
+        new TransactionDescriptorHeader(0L, outstandingRequestCount)  // or 1L, 1 – both work
+    );
+  }
 }
