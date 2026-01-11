@@ -10,6 +10,7 @@ public final class PreLoginOption {
     public static final byte THREADID = 0x03;
     public static final byte MARS = 0x04;
     public static final byte FEDAUTH = 0x06;
-    public static final byte TERMINATOR = (byte)0xFF;
+    public static final byte TERMINATOR = (byte) 0xFF;
+
     private PreLoginOption() {}
 }

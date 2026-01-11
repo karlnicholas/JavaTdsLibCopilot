@@ -26,16 +26,31 @@ public enum EncryptionType {
 
     private final byte value;
 
-    EncryptionType(int value) {
+    EncryptionType(final int value) {
         this.value = (byte) value;
     }
 
+    /**
+     * Get the byte value representing this encryption type.
+     *
+     * @return byte representation of the enum value
+     */
     public byte getValue() {
         return value;
     }
-    public static EncryptionType fromValue(byte value) {
+
+    /**
+     * Resolve an {@link EncryptionType} from a raw byte value.
+     * Unknown values default to {@link #OFF}.
+     *
+     * @param value raw byte value
+     * @return corresponding EncryptionType or OFF if unknown
+     */
+    public static EncryptionType fromValue(final byte value) {
         for (EncryptionType t : values()) {
-            if (t.value == value) return t;
+            if (t.value == value) {
+                return t;
+            }
         }
         return OFF;
     }
