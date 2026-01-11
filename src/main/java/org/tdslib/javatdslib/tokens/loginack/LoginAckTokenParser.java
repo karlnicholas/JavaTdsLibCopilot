@@ -25,6 +25,8 @@ public class LoginAckTokenParser implements TokenParser {
             throw new IllegalArgumentException("Expected LOGINACK (0xAD), got 0x" + hex);
         }
 
+        // Skip total length if not needed (or read it for validation)
+        Short.toUnsignedInt(payload.getShort());
 
         // Interface type
         final byte interfaceTypeByte = payload.get();

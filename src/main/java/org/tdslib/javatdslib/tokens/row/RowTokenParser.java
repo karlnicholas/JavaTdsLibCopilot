@@ -3,7 +3,6 @@ package org.tdslib.javatdslib.tokens.row;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
@@ -20,9 +19,9 @@ public class RowTokenParser implements TokenParser {
 
     @Override
     public Token parse(final ByteBuffer payload,
-            final byte tokenType,
-            final ConnectionContext context,
-            final QueryContext queryContext) {
+                       final byte tokenType,
+                       final ConnectionContext context,
+                       final QueryContext queryContext) {
         if (tokenType != (byte) 0xD1) {
             final String hex = Integer.toHexString(tokenType & 0xFF);
             throw new IllegalArgumentException("Expected ROW (0xD1), got 0x" + hex);

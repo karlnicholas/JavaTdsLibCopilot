@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.tokens.row;
 
 import java.util.List;
-
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
