@@ -1,9 +1,4 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 package org.tdslib.javatdslib.payloads.prelogin;
-
-import org.tdslib.javatdslib.payloads.Payload;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -11,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.tdslib.javatdslib.payloads.Payload;
 
 /**
  * PreLogin payload.
@@ -24,25 +20,61 @@ public class PreLoginPayload extends Payload {
     private byte fedAuth;
 
     // --- Getters / Setters ---
-    public EncryptionType getEncryption() { return encryption; }
-    public void setEncryption(EncryptionType encryption) { this.encryption = encryption; }
 
-    public SqlVersion getVersion() { return version; }
-    public void setVersion(SqlVersion version) { this.version = version; }
+    public EncryptionType getEncryption() {
+        return encryption;
+    }
 
-    public byte getInstance() { return instance; }
-    public void setInstance(byte instance) { this.instance = instance; }
+    public void setEncryption(final EncryptionType encryption) {
+        this.encryption = encryption;
+    }
 
-    public long getThreadId() { return threadId; }
-    public void setThreadId(long threadId) { this.threadId = threadId; }
+    public SqlVersion getVersion() {
+        return version;
+    }
 
-    public byte getMars() { return mars; }
-    public void setMars(byte mars) { this.mars = mars; }
+    public void setVersion(final SqlVersion version) {
+        this.version = version;
+    }
 
-    public byte getFedAuth() { return fedAuth; }
-    public void setFedAuth(byte fedAuth) { this.fedAuth = fedAuth; }
+    public byte getInstance() {
+        return instance;
+    }
 
-    public PreLoginPayload(boolean encrypt) {
+    public void setInstance(final byte instance) {
+        this.instance = instance;
+    }
+
+    public long getThreadId() {
+        return threadId;
+    }
+
+    public void setThreadId(final long threadId) {
+        this.threadId = threadId;
+    }
+
+    public byte getMars() {
+        return mars;
+    }
+
+    public void setMars(final byte mars) {
+        this.mars = mars;
+    }
+
+    public byte getFedAuth() {
+        return fedAuth;
+    }
+
+    public void setFedAuth(final byte fedAuth) {
+        this.fedAuth = fedAuth;
+    }
+
+    /**
+     * Construct a PreLoginPayload to send.
+     *
+     * @param encrypt whether to request encryption
+     */
+    public PreLoginPayload(final boolean encrypt) {
         this.encryption = encrypt ? EncryptionType.ON : EncryptionType.OFF;
         this.version = new SqlVersion(16, 0, 0, 0);
         this.instance = 0;
@@ -52,7 +84,12 @@ public class PreLoginPayload extends Payload {
         buildBufferInternal();
     }
 
-    public PreLoginPayload(ByteBuffer buffer) {
+    /**
+     * Construct a PreLoginPayload from an existing buffer.
+     *
+     * @param buffer source buffer containing PreLogin payload
+     */
+    public PreLoginPayload(final ByteBuffer buffer) {
         this.buffer = buffer;
         extractBufferData();
     }
@@ -61,11 +98,15 @@ public class PreLoginPayload extends Payload {
     protected void buildBufferInternal() {
         // 1. Prepare Data Blocks (Little Endian)
         byte[] versionBytes = version != null ? version.toBytes() : new byte[6];
-        byte[] encryptionBytes = new byte[] { encryption != null ? encryption.getValue() : (byte)0 };
+        final byte encryptionValue = encryption != null ? encryption.getValue() : (byte) 0;
+        final byte[] encryptionBytes = new byte[] { encryptionValue };
         byte[] instanceBytes = new byte[] { instance };
 
         byte[] threadIdBytes = new byte[4];
-        ByteBuffer.wrap(threadIdBytes).order(ByteOrder.LITTLE_ENDIAN).putInt((int) threadId);
+        // Write ThreadID as little-endian into a 4-byte array
+        ByteBuffer tmp = ByteBuffer.wrap(threadIdBytes);
+        tmp.order(ByteOrder.LITTLE_ENDIAN);
+        tmp.putInt((int) threadId);
 
         byte[] marsBytes = new byte[] { mars };
         byte[] fedAuthBytes = new byte[] { fedAuth };
@@ -74,12 +115,12 @@ public class PreLoginPayload extends Payload {
         // Using a dynamic list ensures header count matches actual data written
         List<Object[]> options = new ArrayList<>();
 
-        options.add(new Object[] { (byte)0x00, versionBytes });    // Version
-        options.add(new Object[] { (byte)0x01, encryptionBytes }); // Encryption
-//        options.add(new Object[] { (byte)0x02, instanceBytes });   // Instance
-//        options.add(new Object[] { (byte)0x03, threadIdBytes });   // ThreadID
-//        options.add(new Object[] { (byte)0x04, marsBytes });       // MARS
-//        options.add(new Object[] { (byte)0x06, fedAuthBytes });    // FedAuth
+        options.add(new Object[] { (byte) 0x00, versionBytes });    // Version
+        options.add(new Object[] { (byte) 0x01, encryptionBytes }); // Encryption
+        //        options.add(new Object[] { (byte) 0x02, instanceBytes });   // Instance
+        //        options.add(new Object[] { (byte) 0x03, threadIdBytes });   // ThreadID
+        //        options.add(new Object[] { (byte) 0x04, marsBytes });       // MARS
+        //        options.add(new Object[] { (byte) 0x06, fedAuthBytes });    // FedAuth
 
         // 3. Calculate Sizes
         // Header is: (5 bytes * count) + 1 byte for Terminator
@@ -87,7 +128,7 @@ public class PreLoginPayload extends Payload {
 
         int dataLen = 0;
         for (Object[] opt : options) {
-            dataLen += ((byte[])opt[1]).length;
+            dataLen += ((byte[]) opt[1]).length;
         }
 
         ByteBuffer buf = ByteBuffer.allocate(headerLen + dataLen);
@@ -120,7 +161,9 @@ public class PreLoginPayload extends Payload {
     }
 
     private void extractBufferData() {
-        if (buffer == null) return;
+        if (buffer == null) {
+            return;
+        }
 
         int oldPos = buffer.position();
 
@@ -153,7 +196,9 @@ public class PreLoginPayload extends Payload {
                 lengths.put(tag, length);
             }
 
-            if (headerEnd < 0) return;
+            if (headerEnd < 0) {
+                return;
+            }
 
             // 2. Read Values
             // For reading the data payload (like ThreadID), we want Little Endian.
@@ -169,15 +214,20 @@ public class PreLoginPayload extends Payload {
                 switch (tag) {
                     case 0x00: // Version
                         if (len == 6) {
-                            byte[] v = new byte[6]; buffer.get(v);
+                            byte[] v = new byte[6];
+                            buffer.get(v);
                             this.version = SqlVersion.fromBytes(v);
                         }
                         break;
                     case 0x01: // Encryption
-                        if (len == 1) this.encryption = EncryptionType.fromValue(buffer.get());
+                        if (len == 1) {
+                            this.encryption = EncryptionType.fromValue(buffer.get());
+                        }
                         break;
                     case 0x02: // Instance
-                        if (len == 1) this.instance = buffer.get();
+                        if (len == 1) {
+                            this.instance = buffer.get();
+                        }
                         break;
                     case 0x03: // ThreadId
                         if (len == 4) {
@@ -186,10 +236,17 @@ public class PreLoginPayload extends Payload {
                         }
                         break;
                     case 0x04: // Mars
-                        if (len == 1) this.mars = buffer.get();
+                        if (len == 1) {
+                            this.mars = buffer.get();
+                        }
                         break;
                     case 0x06: // FedAuth
-                        if (len == 1) this.fedAuth = buffer.get();
+                        if (len == 1) {
+                            this.fedAuth = buffer.get();
+                        }
+                        break;
+                    default:
+                        // Unknown option: ignore
                         break;
                 }
             }

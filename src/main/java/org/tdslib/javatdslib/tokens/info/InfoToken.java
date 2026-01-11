@@ -92,9 +92,17 @@ public final class InfoToken extends Token {
 
     @Override
     public String toString() {
+        final String fmt = "InfoToken{number=%d, severity=%d, state=%d, "
+                + "message='%s', server='%s', proc='%s', line=%d}";
         return String.format(
-                "InfoToken{number=%d, severity=%d, state=%d, message='%s', server='%s', proc='%s', line=%d}",
-                number, severity, state, message, serverName, procName, lineNumber
+                fmt,
+                number,
+                severity,
+                state,
+                message,
+                serverName,
+                procName,
+                lineNumber
         );
     }
 }

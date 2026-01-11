@@ -74,8 +74,8 @@ public class TokenDispatcher {
             final TokenParser parser = parsers.get(tokenTypeByte);
             if (parser == null) {
                 // Unknown token: throw or skip (throw is safer during dev)
-                final String err = "No parser registered for token type 0x" +
-                        Integer.toHexString(tokenTypeByte & 0xFF);
+                final String err = "No parser registered for token type 0x"
+                        + Integer.toHexString(tokenTypeByte & 0xFF);
                 throw new IllegalStateException(err);
             }
 

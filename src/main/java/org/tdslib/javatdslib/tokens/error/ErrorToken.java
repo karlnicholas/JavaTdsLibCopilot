@@ -116,6 +116,15 @@ public class ErrorToken extends Token {
     public String toString() {
         final String fmt = "ErrorToken{number=%d, severity=%d, state=%d, "
                 + "message='%s', server='%s', proc='%s', line=%d}";
-        return String.format(fmt, number, severity, state, message, serverName, procName, lineNumber);
+        return String.format(
+                fmt,
+                number,
+                severity,
+                state,
+                message,
+                serverName,
+                procName,
+                lineNumber
+        );
     }
 }

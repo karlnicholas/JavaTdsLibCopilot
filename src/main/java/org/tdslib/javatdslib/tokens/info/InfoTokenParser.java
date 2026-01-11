@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens.info;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
@@ -19,9 +18,9 @@ public class InfoTokenParser implements TokenParser {
 
     @Override
     public Token parse(final ByteBuffer payload,
-            final byte tokenType,
-            final ConnectionContext context,
-            final QueryContext queryContext) {
+                       final byte tokenType,
+                       final ConnectionContext context,
+                       final QueryContext queryContext) {
         if (tokenType != TokenType.INFO.getValue()) {
             final String hex = Integer.toHexString(tokenType & 0xFF);
             throw new IllegalArgumentException("Expected INFO (0xAB), got 0x" + hex);
@@ -63,13 +62,23 @@ public class InfoTokenParser implements TokenParser {
 
         // Line number: 2 or 4 bytes depending on TDS version
         final long lineNumber;
-        if (context != null && context.getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
+        if (context != null
+                && context.getTdsVersion().ordinal() < TdsVersion.V7_2.ordinal()) {
             lineNumber = Short.toUnsignedInt(payload.getShort());
         } else {
             lineNumber = Integer.toUnsignedLong(payload.getInt());
         }
 
-        return new InfoToken(tokenType, number, state, severity, message, serverName, procName, lineNumber);
+        return new InfoToken(
+                tokenType,
+                number,
+                state,
+                severity,
+                message,
+                serverName,
+                procName,
+                lineNumber
+        );
     }
 
     private static String readUsVarChar(final ByteBuffer buf) {
