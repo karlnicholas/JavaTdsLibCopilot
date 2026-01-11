@@ -39,6 +39,14 @@ public enum ServerVersion {
         return value;
     }
 
+    /**
+     * Returns the {@link ServerVersion} corresponding to the given 32-bit little-endian
+     * value from the wire. The lookup masks to the major.minor portion (high 16 bits)
+     * and returns UNKNOWN if no known version matches.
+     *
+     * @param value 32-bit version value (little-endian) as read from LOGINACK
+     * @return matching ServerVersion or UNKNOWN if not recognized
+     */
     public static ServerVersion fromValue(final int value) {
         // Mask to major.minor only (high 16 bits)
         final int majorMinor = value & 0xFFFF0000;

@@ -23,8 +23,11 @@ public class LoginAckToken extends Token {
      * @param serverName    reported server name
      * @param serverVersion reported server product version
      */
-    public LoginAckToken(final byte type, final SqlInterfaceType interfaceType, final TdsVersion tdsVersion,
-            final String serverName, final ServerVersion serverVersion) {
+    public LoginAckToken(final byte type,
+                         final SqlInterfaceType interfaceType,
+                         final TdsVersion tdsVersion,
+                         final String serverName,
+                         final ServerVersion serverVersion) {
         super(TokenType.fromValue(type));
         this.interfaceType = interfaceType;
         this.tdsVersion = tdsVersion;

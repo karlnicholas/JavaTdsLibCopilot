@@ -13,6 +13,14 @@ public enum SqlInterfaceType {
         this.value = value;
     }
 
+    /**
+     * Returns the {@link SqlInterfaceType} corresponding to the given raw byte
+     * value from the LOGINACK payload. If the value is unrecognized, this method
+     * returns {@code SQL_DFLT} as a safe fallback.
+     *
+     * @param b raw interface type byte from LOGINACK
+     * @return matching SqlInterfaceType, or SQL_DFLT if not recognized
+     */
     public static SqlInterfaceType fromByte(final byte b) {
         for (final SqlInterfaceType t : values()) {
             if (t.value == b) {
