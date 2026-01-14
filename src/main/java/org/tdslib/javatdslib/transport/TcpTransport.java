@@ -3,11 +3,16 @@ package org.tdslib.javatdslib.transport;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
@@ -18,6 +23,7 @@ import javax.net.ssl.X509TrustManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.messages.Message;
 
 /**
  * Low-level TCP transport for TDS communication.
@@ -43,6 +49,16 @@ public class TcpTransport implements AutoCloseable {
   private int readTimeoutMs = 60_000;
   private int packetSize = 4096;  // Default TDS packet size, updated via ENVCHANGE
 
+  private volatile boolean asyncMode = false;
+  private Selector selector;           // will be set when entering async mode
+  private SelectionKey selectionKey;
+
+  // ── Read state (packet framing) ───────────────────────
+  private ByteBuffer readBuffer = ByteBuffer.allocate(32768);
+
+  private volatile boolean running = true;
+  private volatile Consumer<Message> messageHandler;   // callback from TdsClient
+
   /**
    * Opens a new TCP connection to the given host and port.
    *
@@ -63,6 +79,194 @@ public class TcpTransport implements AutoCloseable {
     }
   }
 
+  /**
+   * Switch to non-blocking mode and start delivering complete TDS Messages
+   */
+  public void enterAsyncMode(Selector selector, Consumer<Message> handler) throws IOException {
+    if (this.messageHandler != null) {
+      throw new IllegalStateException("Already in async mode");
+    }
+
+    this.selector = selector;
+    this.messageHandler = handler;
+
+    socketChannel.configureBlocking(false);
+    this.selectionKey = socketChannel.register(selector, SelectionKey.OP_READ, this);
+
+    // Optional: initial interest in reading
+    selectionKey.interestOps(SelectionKey.OP_READ);
+
+    asyncMode = true;
+
+    // Optional: clear any leftover TLS buffers to help GC
+    myNetData = null;
+    peerNetData = null;
+    peerAppData = null;
+    sslEngine = null;
+  }
+
+
+  /**
+   * Writes the provided buffer to the transport. The buffer's position will be advanced.
+   *
+   * @param buffer data to write
+   * @throws IOException on I/O error
+   */
+  public void write(ByteBuffer buffer) throws IOException {
+    if (!asyncMode) {
+      // Old blocking path (used during connect/login)
+      if (sslEngine != null) {
+        writeEncrypted(buffer);
+      } else {
+        while (buffer.hasRemaining()) {
+          socketChannel.write(buffer);
+        }
+      }
+    } else {
+      // In async mode we DON'T write directly from this method!
+      // → The caller (usually event loop / selector thread) should do it
+      throw new IllegalStateException(
+              "Direct write not allowed in async mode - use queue + selector");
+    }
+  }
+//  public void write(ByteBuffer buffer) throws IOException {
+//    while (buffer.hasRemaining()) {
+//      socketChannel.write(buffer);
+//    }
+//  }
+//
+  public void onReadable() throws IOException {
+    if (!running || messageHandler == null) return;
+
+    while (true) {
+      int read = socketChannel.read(readBuffer);
+      if (read == -1) {
+        // Connection closed by peer
+        running = false;
+        messageHandler.accept(createEofMessage());
+        return;
+      }
+      if (read == 0) {
+        break; // nothing more to read right now
+      }
+
+      readBuffer.flip();
+
+      while (readBuffer.remaining() >= 8) { // at least header size
+        int start = readBuffer.position();
+
+        // Parse minimal header to get length
+        byte type = readBuffer.get(start);
+        byte status = readBuffer.get(start + 1);
+        int length = Short.toUnsignedInt(readBuffer.getShort(start + 2));
+
+        if (readBuffer.remaining() < length) {
+          // Incomplete packet - wait for more data
+          break;
+        }
+
+        // We have a complete packet → slice it
+        ByteBuffer packet = readBuffer.slice(start, length);
+        packet.position(0); // ready to read from beginning
+
+        Message message = buildMessageFromPacket(packet);
+        messageHandler.accept(message);
+
+        // Advance buffer past this packet
+        readBuffer.position(start + length);
+      }
+
+      // Prepare buffer for next read
+      readBuffer.compact();
+    }
+  }
+
+  private Message buildMessageFromPacket(ByteBuffer packet) {
+    packet.mark();
+
+    final byte type   = packet.get();
+    final byte status = packet.get();
+    final int length  = Short.toUnsignedInt(packet.getShort());
+    final short spid  = packet.getShort();
+    final byte packetId = packet.get(); // actually a byte, not short
+    final byte window = packet.get();   // usually 0
+
+    packet.reset();
+    packet.position(8);
+
+    ByteBuffer payload = packet.slice();
+    payload.limit(length - 8);
+
+    return new Message(
+            type,
+            status,
+            length,
+            spid,
+            packetId,
+            payload,
+            System.nanoTime(),
+            null   // trace context
+    );
+  }
+
+  // Optional: special message for EOF / connection close
+  private Message createEofMessage() {
+    return new Message(
+            (byte) 0xFF, // special marker
+            (byte) 0x00,
+            0,
+            (short) 0,
+            (byte) 0,
+            ByteBuffer.allocate(0),
+            System.nanoTime(),
+            null
+    );
+  }
+
+//  @Override
+//  public void close() throws IOException {
+//    running = false;
+//    if (selectionKey != null) selectionKey.cancel();
+//    if (socketChannel != null) socketChannel.close();
+//    if (selector != null) selector.close();
+//  }
+
+  // Optional helpers
+  public boolean isConnected() {
+    return socketChannel.isConnected();
+  }
+
+  public SocketChannel getChannel() {
+    return socketChannel;
+  }
+
+  public void onWritable() throws IOException {
+    // Handle pending outgoing data if you have a write queue
+  }
+
+  public boolean isAsyncMode() {
+    return asyncMode;
+  }
+
+  // Very important cleanup
+  @Override
+  public void close() throws IOException {
+    asyncMode = false;
+    if (selectionKey != null) {
+      selectionKey.cancel();
+    }
+    if (selector != null) {
+      selector.close();
+    }
+    if (sslEngine != null) {
+      try {
+        sslEngine.closeOutbound();
+      } catch (Exception ignored) {}
+    }
+    socketChannel.close();
+  }
+
+  // ... rest of your existing methods ...
   /**
    * Enable TLS on the existing connection and perform the TLS handshake.
    *
@@ -234,22 +438,6 @@ public class TcpTransport implements AutoCloseable {
     return sslEngine != null;
   }
 
-  /**
-   * Writes the provided buffer to the transport. The buffer's position will be advanced.
-   *
-   * @param buffer data to write
-   * @throws IOException on I/O error
-   */
-  public void write(final ByteBuffer buffer) throws IOException {
-    if (sslEngine != null) {
-      writeEncrypted(buffer);
-    } else {
-      while (buffer.hasRemaining()) {
-        socketChannel.write(buffer);
-      }
-    }
-  }
-
   private void writeEncrypted(final ByteBuffer appData) throws IOException {
     while (appData.hasRemaining()) {
       myNetData.clear();
@@ -360,24 +548,14 @@ public class TcpTransport implements AutoCloseable {
     return packetSize;
   }
 
-  @Override
-  public void close() throws IOException {
-    if (sslEngine != null) {
-      try {
-        sslEngine.closeOutbound();
-      } catch (final Exception e) {
-        throw new IOException(e.getMessage());
-      }
-    }
-    if (socketChannel != null) {
-      socketChannel.close();
-    }
-  }
-
   /**
    * Disable TLS mode (does not close connection).
    */
   public void disableTls() {
     sslEngine = null;
+  }
+
+  public String getHost() {
+    return host;
   }
 }

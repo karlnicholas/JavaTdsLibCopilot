@@ -97,35 +97,35 @@ public final class MessageHandler {
    * @return one complete TDS packet as Message
    * @throws IOException if reading fails
    */
-  public Message receiveSinglePacket() throws IOException {
-    // The packet reader handles header + payload reading
-    ByteBuffer rawPacket = packetReader.readRawPacket();
-
-    // Parse header (first 8 bytes)
-    rawPacket.mark();
-    final byte type = rawPacket.get();
-    final byte status = rawPacket.get();
-    final int length = Short.toUnsignedInt(rawPacket.getShort());
-    final short spid = rawPacket.getShort();
-    final short packetId = rawPacket.getShort();
-    rawPacket.get(); // window (usually 0)
-
-    // Reset and slice payload
-    rawPacket.reset();
-    rawPacket.position(8);
-    ByteBuffer payload = rawPacket.slice().limit(length - 8);
-
-    return new Message(
-        type,
-        status,
-        length,
-        spid,
-        packetId,
-        payload,
-        System.nanoTime(),
-        null  // trace context - can be injected later
-    );
-  }
+//  public Message receiveSinglePacket() throws IOException {
+//    // The packet reader handles header + payload reading
+//    ByteBuffer rawPacket = packetReader.readRawPacket();
+//
+//    // Parse header (first 8 bytes)
+//    rawPacket.mark();
+//    final byte type = rawPacket.get();
+//    final byte status = rawPacket.get();
+//    final int length = Short.toUnsignedInt(rawPacket.getShort());
+//    final short spid = rawPacket.getShort();
+//    final short packetId = rawPacket.getShort();
+//    rawPacket.get(); // window (usually 0)
+//
+//    // Reset and slice payload
+//    rawPacket.reset();
+//    rawPacket.position(8);
+//    ByteBuffer payload = rawPacket.slice().limit(length - 8);
+//
+//    return new Message(
+//        type,
+//        status,
+//        length,
+//        spid,
+//        packetId,
+//        payload,
+//        System.nanoTime(),
+//        null  // trace context - can be injected later
+//    );
+//  }
 
   /**
    * Receives a **complete logical response** by reading packets until the last one (EOM).
@@ -135,22 +135,22 @@ public final class MessageHandler {
    * @return list of all packets that form the logical response
    * @throws IOException if any read fails
    */
-  public List<Message> receiveFullResponse() throws IOException {
-    List<Message> messages = new ArrayList<>();
-
-    Message packet;
-    do {
-      packet = receiveSinglePacket();
-      messages.add(packet);
-
-      // Optional: handle reset connection flag as soon as we see it
-      if (packet.isResetConnection()) {
-        // Can notify upper layers immediately if needed
-      }
-    } while (!packet.isLastPacket());
-
-    return messages;
-  }
+//  public List<Message> receiveFullResponse() throws IOException {
+//    List<Message> messages = new ArrayList<>();
+//
+//    Message packet;
+//    do {
+//      packet = receiveSinglePacket();
+//      messages.add(packet);
+//
+//      // Optional: handle reset connection flag as soon as we see it
+//      if (packet.isResetConnection()) {
+//        // Can notify upper layers immediately if needed
+//      }
+//    } while (!packet.isLastPacket());
+//
+//    return messages;
+//  }
 
   //  /**
   //   * Resets the packet number counter (useful after login or connection reset).

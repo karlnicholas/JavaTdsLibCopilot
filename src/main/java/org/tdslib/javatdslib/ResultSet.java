@@ -54,6 +54,10 @@ public class ResultSet {
     return bytes != null ? new String(bytes, StandardCharsets.UTF_16LE).trim() : null;
   }
 
+  public List<ColumnMeta> getColumns() {
+    return columns;
+  }
+
   public void setColumnCount(int columnCount) {
     this.columnCount = columnCount;
   }

@@ -8,14 +8,21 @@ import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.transport.ResponseHandler;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.ClosedSelectorException;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * High-level TDS client facade.
@@ -40,6 +47,15 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   private int spid;
 
   private TdsVersion tdsVersion = TdsVersion.V7_4; // default
+
+  // Add field for async control
+  private Selector selector;  // can be shared among many connections
+
+  // ── Async related state ───────────────────────────────────────
+  private volatile CompletableFuture<QueryResponseTokenVisitor> currentQueryFuture;
+  private final ByteBuffer readBuffer = ByteBuffer.allocate(32768); // initial size
+  private final List<Message> currentResponseMessages = new ArrayList<>();
+  private boolean expectingResponse = false;
 
   @Override
   public TdsVersion getTdsVersion() {
@@ -184,7 +200,10 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     this.messageHandler = new MessageHandler(transport);
     this.tokenDispatcher = new TokenDispatcher();
     this.connected = false;
-  }
+
+    // Create one selector per client (simple approach)
+    // In production → better to have shared selector pool
+    this.selector = Selector.open();  }
 
   /**
    * Connect to the server and perform prelogin + login.
@@ -213,6 +232,11 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     if (!loginResponse.isSuccess()) {
       throw new IOException("Login failed: " + loginResponse.getErrorMessage());
     }
+
+// Switch socket to non-blocking + register to selector
+    transport.enterAsyncMode(selector, this::onMessagesReceived);
+    // Start event loop right here (or in separate method)
+    startEventLoop();           // ← most common place
 
     connected = true;
   }
@@ -394,16 +418,117 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-  public QueryResponse query(String sql) throws IOException {
-    if (!connected) {
-      throw new IllegalStateException("Not connected");
+//  public QueryResponse query(String sql) throws IOException {
+//    if (!connected) {
+//      throw new IllegalStateException("Not connected");
+//    }
+//
+//    transport.disableTls();
+//
+//    return queryInternal(sql).getQueryResponse();
+//  }
+//
+  // Query becomes async-friendly
+  public CompletableFuture<QueryResponse> queryAsync(String sql) {
+    if (!connected || !transport.isAsyncMode()) {
+      return CompletableFuture.failedFuture(
+              new IllegalStateException("Not connected or not in async mode"));
     }
 
-    transport.disableTls();
+    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
+    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
 
-    return queryInternal(sql).getQueryResponse();
+    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
+
+    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
+    payload.put(allHeaders);
+    payload.put(sqlBytes);
+
+    payload.flip();
+
+    // Create SQL_BATCH message
+    Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+
+    // 2. Instead of blocking send/receive:
+    //    → queue the message, register OP_WRITE if needed
+    //    → return future that will be completed from selector loop
+
+    return sendAsync(queryMsg);
   }
 
+  // Very simplified placeholder - real version needs queue + correlation
+  private CompletableFuture<QueryResponse> sendAsync(Message msg) {
+// Create new future
+    CompletableFuture<QueryResponseTokenVisitor> future = new CompletableFuture<>();
+    currentQueryFuture = future;
+
+    currentResponseMessages.clear();
+    readBuffer.clear();
+    expectingResponse = true;
+
+    // Try to write immediately
+    try {
+      this.messageHandler.sendMessage(msg);
+//      transport.write(msg.toFullMessageBuffer()); // ← you'll need helper to serialize full message
+      // If write completes fully → we just wait for response
+    } catch (IOException e) {
+      future.completeExceptionally(e);
+      currentQueryFuture = null;
+      expectingResponse = false;
+      return future.thenApply(QueryResponseTokenVisitor::getQueryResponse);
+    }
+
+    // Enable OP_WRITE only if needed (if buffer wasn't fully written)
+    // For simplicity we assume small messages fit in one write
+
+    return future.thenApply(QueryResponseTokenVisitor::getQueryResponse);
+  }
+
+  public void onMessagesReceived(Message message) {
+    // This is called from selector thread when full response arrives
+    try {
+      QueryResponseTokenVisitor visitor = processQueryResponse(messages);
+      if (currentQueryFuture != null) {
+        currentQueryFuture.complete(visitor);
+        currentQueryFuture = null;
+      }
+    } catch (Exception e) {
+      if (currentQueryFuture != null) {
+        currentQueryFuture.completeExceptionally(e);
+        currentQueryFuture = null;
+      }
+    }
+  }
+
+//  private void finishCurrentResponse() {
+//    if (currentQueryFuture == null) return;
+//
+//    try {
+//      QueryResponseTokenVisitor visitor = processQueryResponse(currentResponseMessages);
+//      currentQueryFuture.complete(visitor);
+//    } catch (Exception e) {
+//      currentQueryFuture.completeExceptionally(e);
+//    } finally {
+//      currentQueryFuture = null;
+//      expectingResponse = false;
+//      currentResponseMessages.clear();
+//    }
+//  }
+
+  private void completeCurrentQueryExceptionally(Throwable t) {
+    if (currentQueryFuture != null && !currentQueryFuture.isDone()) {
+      currentQueryFuture.completeExceptionally(t);
+    }
+    currentQueryFuture = null;
+    expectingResponse = false;
+    currentResponseMessages.clear();
+  }
+
+  // Helper - you'll probably need this
+  // (or move serialization to Message class)
+  // ByteBuffer toFullMessageBuffer() {
+  //     ...
+  // }
   /**
    * Process messages from a query response and return a token visitor that
    * contains parsed results and metadata.
@@ -425,6 +550,48 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     return queryResponseTokenVisitor;
+  }
+
+  private void startEventLoop() {
+    Thread eventLoopThread = new Thread(() -> {
+      try {
+        while (!Thread.currentThread().isInterrupted() && connected) {
+          if (selector.select(1000) == 0) {   // 1s timeout to allow shutdown check
+            continue;
+          }
+
+          Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+          while (iterator.hasNext()) {
+            SelectionKey key = iterator.next();
+            iterator.remove();
+
+            if (!key.isValid()) continue;
+
+            TcpTransport transport = (TcpTransport) key.attachment();
+
+            try {
+              if (key.isReadable()) {
+                transport.onReadable();
+              }
+              if (key.isWritable()) {
+                transport.onWritable();
+              }
+            } catch (IOException e) {
+              // Close connection, notify listeners/futures, etc.
+              key.cancel();
+              transport.close();
+            }
+          }
+        }
+      } catch (ClosedSelectorException e) {
+        // Normal shutdown
+      } catch (Exception e) {
+        // Log catastrophic failure
+      }
+    }, "TDS-EventLoop-" + transport.getHost());
+
+    eventLoopThread.setDaemon(true); // ← very important for clean JVM exit
+    eventLoopThread.start();
   }
 
   /**
@@ -466,6 +633,10 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   @Override
   public void close() throws IOException {
     messageHandler.close();
+    if (selector != null) {
+      selector.close();
+    }
+    transport.close();
     connected = false;
   }
 
@@ -473,27 +644,27 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return connected;
   }
 
-  private QueryResponseTokenVisitor queryInternal(String sql) throws IOException {
-
-    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
-    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
-
-    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
-
-    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
-    payload.put(allHeaders);
-    payload.put(sqlBytes);
-
-    payload.flip();
-
-    // Create SQL_BATCH message
-    Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
-
-    messageHandler.sendMessage(queryMsg);
-
-    // Receive & process full response (same as login)
-    List<Message> responses = messageHandler.receiveFullResponse();
-
-    return processQueryResponse(responses);
-  }
+//  private QueryResponseTokenVisitor queryInternal(String sql) throws IOException {
+//
+//    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
+//    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
+//
+//    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
+//
+//    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
+//    payload.put(allHeaders);
+//    payload.put(sqlBytes);
+//
+//    payload.flip();
+//
+//    // Create SQL_BATCH message
+//    Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+//
+//    messageHandler.sendMessage(queryMsg);
+//
+//    // Receive & process full response (same as login)
+//    List<Message> responses = messageHandler.receiveFullResponse();
+//
+//    return processQueryResponse(responses);
+//  }
 }
