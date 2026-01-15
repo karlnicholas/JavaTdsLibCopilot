@@ -2,6 +2,7 @@ package org.tdslib.javatdslib;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.messages.Message;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
@@ -10,18 +11,22 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
+import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Flow;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
  * from a SQL batch execution.
  */
-public class QueryResponseTokenVisitor implements TokenVisitor {
+public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata>, TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
 
   private final EnvChangeTokenVisitor envChangeVisitor;
+  private final TcpTransport transport;
+  private final Message queryMessage;
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
@@ -37,8 +42,10 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
    *
    * @param connectionContext connection context used for ENVCHANGE handling
    */
-  public QueryResponseTokenVisitor(ConnectionContext connectionContext) {
+  public QueryResponseTokenVisitor(ConnectionContext connectionContext, Message queryMessage, TcpTransport transport) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
+    this.transport = transport;
+    this.queryMessage = queryMessage;
     startNewResultSet();
   }
 
@@ -172,5 +179,32 @@ public class QueryResponseTokenVisitor implements TokenVisitor {
    */
   QueryResponse getQueryResponse() {
     return new QueryResponse(getResultSets(), hasError());
+  }
+
+  private Flow.Subscriber<? super RowWithMetadata> subscriber;
+  @Override
+  public void subscribe(Flow.Subscriber<? super RowWithMetadata> subscriber) {
+    // Validate subscriber
+    if (subscriber == null) {
+      throw new NullPointerException("Subscriber cannot be null");
+    }
+
+    this.subscriber = subscriber;
+    subscriber.onSubscribe(new Flow.Subscription() {
+
+      @Override
+      public void request(long n) {
+        if (n > 0) {
+          transport.queryMessage(queryMessage);
+        }
+
+      }
+
+      @Override
+      public void cancel() {
+
+      }
+    });
+    // Store the current subscriber for use in the response handling
   }
 }

@@ -4,9 +4,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Flow;
 
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
+import org.tdslib.javatdslib.RowWithMetadata;
 import org.tdslib.javatdslib.messages.Message;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;

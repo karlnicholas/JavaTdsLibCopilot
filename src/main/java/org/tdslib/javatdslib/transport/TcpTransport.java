@@ -3,6 +3,7 @@ package org.tdslib.javatdslib.transport;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -11,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.net.ssl.SSLContext;
@@ -82,12 +84,12 @@ public class TcpTransport implements AutoCloseable {
   /**
    * Switch to non-blocking mode and start delivering complete TDS Messages
    */
-  public void enterAsyncMode(Selector selector, Consumer<Message> handler) throws IOException {
+  public void enterAsyncMode(Consumer<Message> handler) throws IOException {
     if (this.messageHandler != null) {
       throw new IllegalStateException("Already in async mode");
     }
 
-    this.selector = selector;
+    this.selector = Selector.open();  ;
     this.messageHandler = handler;
 
     socketChannel.configureBlocking(false);
@@ -103,8 +105,87 @@ public class TcpTransport implements AutoCloseable {
     peerNetData = null;
     peerAppData = null;
     sslEngine = null;
+
+    startEventLoop();
   }
 
+  private void startEventLoop() {
+    Thread eventLoopThread = new Thread(() -> {
+      try {
+        while (!Thread.currentThread().isInterrupted()) {
+          // Use a reasonable timeout (1s is fine for most cases)
+          if (selector.select(1000) == 0) {
+            // Idle timeout - can add health checks here if needed
+            continue;
+          }
+
+          Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+          while (iterator.hasNext()) {
+            SelectionKey key = iterator.next();
+            iterator.remove(); // MUST be called
+
+            if (!key.isValid()) {
+              continue;
+            }
+
+            TcpTransport transport = (TcpTransport) key.attachment();
+            if (transport == null) {
+              key.cancel(); // orphan key - clean up
+              continue;
+            }
+
+            try {
+              if (key.isReadable()) {
+                transport.onReadable();
+              }
+
+              // Writable is rare in TDS client (mostly read-heavy)
+              // but good to handle for large sends
+              if (key.isWritable()) {
+                transport.onWritable();
+              }
+
+              // Optional: re-evaluate interest ops after processing
+              // (some drivers dynamically adjust OP_READ/OP_WRITE)
+              // key.interestOps(SelectionKey.OP_READ);
+
+            } catch (IOException e) {
+              // Most common error: connection reset / broken pipe
+              logger.warn("I/O error on transport {}: {}", transport, e.getMessage());
+              cleanupKeyAndTransport(key, transport);
+            } catch (Exception e) {
+              // Unexpected protocol / parsing error
+              logger.error("Unexpected error processing key for {}", transport, e);
+              cleanupKeyAndTransport(key, transport);
+            }
+          }
+        }
+      } catch (ClosedSelectorException e) {
+        logger.debug("Selector closed normally during shutdown");
+      } catch (Exception e) {
+        logger.error("Catastrophic failure in TDS event loop", e);
+        // Optional: notify all transports of fatal error
+      } finally {
+        // Final cleanup (good practice)
+        try {
+          selector.close();
+        } catch (Exception ignored) {}
+      }
+    }, "TDS-EventLoop-" + host + ":" + port);
+
+    eventLoopThread.setDaemon(true);
+    eventLoopThread.start();
+  }
+
+  // Helper method for clean shutdown
+  private void cleanupKeyAndTransport(SelectionKey key, TcpTransport transport) {
+    try {
+      key.cancel();
+      transport.close();
+    } catch (Exception e) {
+      logger.warn("Failed to clean up key/transport", e);
+    }
+  }
 
   /**
    * Writes the provided buffer to the transport. The buffer's position will be advanced.
@@ -129,55 +210,66 @@ public class TcpTransport implements AutoCloseable {
               "Direct write not allowed in async mode - use queue + selector");
     }
   }
-//  public void write(ByteBuffer buffer) throws IOException {
-//    while (buffer.hasRemaining()) {
-//      socketChannel.write(buffer);
-//    }
-//  }
-//
   public void onReadable() throws IOException {
-    if (!running || messageHandler == null) return;
+    if (!running || messageHandler == null) {
+      logger.debug("Skipping read - transport not running or no handler");
+      return;
+    }
 
     while (true) {
+      // 1. Read as much as possible in one go
       int read = socketChannel.read(readBuffer);
+
       if (read == -1) {
-        // Connection closed by peer
+        logger.info("Connection closed by server (EOF)");
         running = false;
-        messageHandler.accept(createEofMessage());
+        if (messageHandler != null) {
+          messageHandler.accept(createEofMessage());
+        }
         return;
       }
+
       if (read == 0) {
-        break; // nothing more to read right now
+        break;  // nothing available right now
       }
+
+      logger.trace("Read {} bytes (total: {})", read, readBuffer.position());
 
       readBuffer.flip();
 
-      while (readBuffer.remaining() >= 8) { // at least header size
+      // 2. Process all complete packets in this read
+      while (readBuffer.remaining() >= TDS_HEADER_LENGTH) {  // use constant
         int start = readBuffer.position();
 
-        // Parse minimal header to get length
-        byte type = readBuffer.get(start);
-        byte status = readBuffer.get(start + 1);
+        // Quick peek at length without advancing position
         int length = Short.toUnsignedInt(readBuffer.getShort(start + 2));
 
         if (readBuffer.remaining() < length) {
-          // Incomplete packet - wait for more data
+          // Not enough for full packet → wait for next read
           break;
         }
 
-        // We have a complete packet → slice it
+        // 3. Extract complete packet
         ByteBuffer packet = readBuffer.slice(start, length);
-        packet.position(0); // ready to read from beginning
+        packet.position(0);
 
-        Message message = buildMessageFromPacket(packet);
-        messageHandler.accept(message);
+        try {
+          Message message = buildMessageFromPacket(packet);
+          if (messageHandler != null) {
+            messageHandler.accept(message);
+          }
+        } catch (Exception e) {
+          logger.error("Failed to build message from packet", e);
+          // Optional: signal error upstream or close connection
+          // subscriber.onError(e);  // if using reactive
+          running = false;
+          return;
+        }
 
-        // Advance buffer past this packet
         readBuffer.position(start + length);
       }
 
-      // Prepare buffer for next read
-      readBuffer.compact();
+      readBuffer.compact();  // shift remaining bytes to front
     }
   }
 
@@ -557,5 +649,8 @@ public class TcpTransport implements AutoCloseable {
 
   public String getHost() {
     return host;
+  }
+
+  public void queryMessage(Message queryMessage) {
   }
 }
