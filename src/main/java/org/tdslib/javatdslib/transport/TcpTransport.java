@@ -3,7 +3,6 @@ package org.tdslib.javatdslib.transport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.messages.Message;
-import org.tdslib.javatdslib.messages.MessageHandler;
 
 import javax.net.ssl.*;
 import java.io.IOException;
