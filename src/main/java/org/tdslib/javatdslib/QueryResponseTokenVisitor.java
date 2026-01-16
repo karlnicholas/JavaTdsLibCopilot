@@ -16,8 +16,11 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
