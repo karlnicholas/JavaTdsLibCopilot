@@ -1,5 +1,11 @@
 package org.tdslib.javatdslib.transport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.messages.MessageHandler;
+
+import javax.net.ssl.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -11,21 +17,8 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.function.Consumer;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.messages.Message;
 
 /**
  * Low-level TCP transport for TDS communication.
@@ -651,6 +644,4 @@ public class TcpTransport implements AutoCloseable {
     return host;
   }
 
-  public void queryMessage(Message queryMessage) {
-  }
 }

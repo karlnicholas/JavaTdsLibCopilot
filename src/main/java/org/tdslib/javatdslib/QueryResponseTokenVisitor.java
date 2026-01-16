@@ -3,6 +3,7 @@ package org.tdslib.javatdslib;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
@@ -13,6 +14,7 @@ import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Flow;
@@ -42,7 +44,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    *
    * @param connectionContext connection context used for ENVCHANGE handling
    */
-  public QueryResponseTokenVisitor(ConnectionContext connectionContext, Message queryMessage, TcpTransport transport) {
+  public QueryResponseTokenVisitor(ConnectionContext connectionContext, TcpTransport transport, Message queryMessage) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     this.transport = transport;
     this.queryMessage = queryMessage;
@@ -194,8 +196,10 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       @Override
       public void request(long n) {
-        if (n > 0) {
-          transport.queryMessage(queryMessage);
+        try {
+          new MessageHandler(transport).sendMessage(queryMessage);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
         }
 
       }

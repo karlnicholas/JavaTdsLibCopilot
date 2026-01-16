@@ -1,11 +1,11 @@
 package org.tdslib.javatdslib.tokens.envchange;
 
-import java.nio.ByteBuffer;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
+
+import java.nio.ByteBuffer;
 
 /**
  * Parser for ENVCHANGE token (0xE3).

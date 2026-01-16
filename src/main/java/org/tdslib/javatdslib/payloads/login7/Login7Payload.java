@@ -1,14 +1,14 @@
 package org.tdslib.javatdslib.payloads.login7;
 
+import org.tdslib.javatdslib.payloads.Payload;
+import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-
-import org.tdslib.javatdslib.payloads.Payload;
-import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
 
 /**
  * Builds a TDS LOGIN7 payload buffer.

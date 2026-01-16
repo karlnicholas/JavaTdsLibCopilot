@@ -1,12 +1,12 @@
 package org.tdslib.javatdslib.tokens.featureextack;
 
-import java.nio.ByteBuffer;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.nio.ByteBuffer;
 
 /**
  * Parser for FEATURE_EXT_ACK token (0xAE).

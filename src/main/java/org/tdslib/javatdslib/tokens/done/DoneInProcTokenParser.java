@@ -1,13 +1,13 @@
 package org.tdslib.javatdslib.tokens.done;
 
-import java.nio.ByteBuffer;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.nio.ByteBuffer;
 
 /**
  * Parser for DONE_IN_PROC token (0xFF).

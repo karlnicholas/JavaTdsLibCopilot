@@ -1,9 +1,9 @@
 package org.tdslib.javatdslib.tokens.row;
 
-import java.util.List;
-
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.util.List;
 
 /**
  * ROW token - contains raw column data for a single row.

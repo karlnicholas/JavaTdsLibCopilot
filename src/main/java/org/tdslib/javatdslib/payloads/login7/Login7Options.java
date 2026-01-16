@@ -1,10 +1,10 @@
 package org.tdslib.javatdslib.payloads.login7;
 
-import java.time.Instant;
-import java.time.ZoneId;
-
 import org.tdslib.javatdslib.TdsConstants;
 import org.tdslib.javatdslib.TdsVersion;
+
+import java.time.Instant;
+import java.time.ZoneId;
 
 /**
  * Configuration options used when building a TDS LOGIN7 payload.

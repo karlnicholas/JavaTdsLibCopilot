@@ -1,9 +1,9 @@
 package org.tdslib.javatdslib.tokens.colmetadata;
 
-import java.util.List;
-
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
+
+import java.util.List;
 
 /**
  * Token representing column metadata (COLMETADATA token, 0x81).

@@ -8,25 +8,15 @@ import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
-import org.tdslib.javatdslib.transport.ResponseHandler;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.ClosedSelectorException;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * High-level TDS client facade.
@@ -423,7 +413,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 //  }
 //
   // Query becomes async-friendly
-  public Flow.Publisher<RowWithMetadata> queryAsync(String sql) {
+  public Flow.Publisher<RowWithMetadata> queryAsync(String sql) throws IOException {
     if (!connected || !transport.isAsyncMode()) {
       throw new IllegalStateException("Not connected or not in async mode");
     }
@@ -446,14 +436,15 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-    currentPublisher = queryStream(queryMsg);
+    currentPublisher = queryReactive(queryMsg);
 
+    messageHandler.sendMessage(queryMsg);
     return currentPublisher;
   }
 
-  public QueryResponseTokenVisitor queryStream(Message queryMsg) {
+  private QueryResponseTokenVisitor queryReactive(Message queryMsg) {
 
-    return new QueryResponseTokenVisitor(this, queryMsg, transport);
+    return new QueryResponseTokenVisitor(this, transport, queryMsg);
   }
 
 //  // This is the callback — called asynchronously from ResultProducer thread

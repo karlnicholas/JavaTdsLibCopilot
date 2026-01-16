@@ -3,10 +3,10 @@
 
 package org.tdslib.javatdslib.tokens;
 
-import java.nio.ByteBuffer;
-
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
+
+import java.nio.ByteBuffer;
 
 /**
  * Parser contract for a single token type. Implementations parse one token
