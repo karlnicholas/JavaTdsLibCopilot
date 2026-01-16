@@ -24,7 +24,7 @@ public abstract class AbstractDoneToken extends Token {
   protected AbstractDoneToken(final byte type, final DoneStatus status,
                               final int currentCommand, final long rowCount) {
     super(TokenType.fromValue(type));
-    this.status = status != null ? status : DoneStatus.FINAL;
+    this.status = status;
     this.currentCommand = currentCommand;
     this.rowCount = rowCount;
   }
@@ -54,24 +54,6 @@ public abstract class AbstractDoneToken extends Token {
    */
   public long getRowCount() {
     return rowCount;
-  }
-
-  /**
-   * Returns true if this token indicates final completion for the batch/statement.
-   *
-   * @return true when final
-   */
-  public boolean isFinal() {
-    return status == DoneStatus.FINAL || !DoneStatus.MORE.isSet(status.getValue());
-  }
-
-  /**
-   * Returns true if this DONE token reports an error.
-   *
-   * @return true when an error flag is set
-   */
-  public boolean hasError() {
-    return DoneStatus.ERROR.isSet(status.getValue());
   }
 
   @Override

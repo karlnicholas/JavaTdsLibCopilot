@@ -71,11 +71,7 @@ public class LoginResponse implements TokenVisitor {
           info.getMessage()
       );
     } else if (token instanceof DoneToken done) {
-      if (done.hasError()) {
-        logger.warn("Batch completed with error (status: {})", done.getStatus());
-      } else {
-        logger.debug("Batch completed successfully (status: {})", done.getStatus());
-      }
+      logger.debug("Batch completed (status: {})", done.getStatus());
     } else {
       logger.debug("Unhandled token type: {}", token.getType());
     }

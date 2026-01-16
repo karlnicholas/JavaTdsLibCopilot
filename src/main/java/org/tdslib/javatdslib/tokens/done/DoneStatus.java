@@ -1,59 +1,46 @@
 package org.tdslib.javatdslib.tokens.done;
 
 /**
- * Status flags for DONE family tokens.
+ * Wraps the raw status bits of a DONE token and provides safe accessors.
  */
-public enum DoneStatus {
-  FINAL(0x0000),
-  MORE(0x0001),
-  ERROR(0x0002),
-  IN_XACT(0x0004),
-  COUNT(0x0010),
-  ATTN(0x0020),
-  SERVER_ERROR(0x0100);
+public class DoneStatus {
 
-  private final int value;
+    private final int value;
 
-  DoneStatus(int value) {
-    this.value = value;
-  }
+    // Constants for internal bitwise logic
+    private static final int BIT_MORE    = 0x0001;
+    private static final int BIT_ERROR   = 0x0002;
+    private static final int BIT_IN_XACT = 0x0004;
+    private static final int BIT_COUNT   = 0x0010;
+    private static final int BIT_ATTN    = 0x0020;
 
-  /**
-   * Numeric value for this status flag.
-   *
-   * @return integer bitmask value
-   */
-  public int getValue() {
-    return value;
-  }
-
-  /**
-   * Obtain a DoneStatus from a combined status value.
-   *
-   * @param value combined status bits
-   * @return matching DoneStatus or FINAL if none
-   */
-  public static DoneStatus fromValue(int value) {
-    for (DoneStatus s : values()) {
-      if ((value & s.value) == s.value) {
-        return s;
-      }
+    public DoneStatus(int value) {
+        this.value = value;
     }
-    return FINAL;
-  }
 
-  /**
-   * Check whether this flag is set in a combined status value.
-   *
-   * @param combined combined status bits to test
-   * @return true when this flag is present
-   */
-  public boolean isSet(int combined) {
-    return (combined & value) != 0;
-  }
+    public boolean hasMoreResults() {
+        return (value & BIT_MORE) != 0;
+    }
 
-  @Override
-  public String toString() {
-    return name() + " (0x" + Integer.toHexString(value) + ")";
-  }
+    public boolean hasError() {
+        return (value & BIT_ERROR) != 0;
+    }
+
+    public boolean isValidRowCount() {
+        return (value & BIT_COUNT) != 0;
+    }
+
+    public boolean isTransactionInProgress() {
+        return (value & BIT_IN_XACT) != 0;
+    }
+
+    public boolean isFinal() {
+        // Technically "Final" just means the MORE bit is NOT set
+        return !hasMoreResults();
+    }
+
+    @Override
+    public String toString() {
+        return "DoneStatus(raw=" + Integer.toHexString(value) + ")";
+    }
 }

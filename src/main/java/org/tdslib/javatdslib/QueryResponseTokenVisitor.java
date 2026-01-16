@@ -7,6 +7,7 @@ import org.tdslib.javatdslib.messages.MessageHandler;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.done.DoneStatus;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
@@ -36,7 +37,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
 //  private final List<ResultSet> resultSets = new ArrayList<>();  // one per result set
 //  private ResultSet currentResultSet;                // currently building
-  private boolean hasMoreResultSets = false;
+//  private boolean hasMoreResultSets = false;
   private boolean hasError = false;
   // ------------------------------------------------
 
@@ -50,13 +51,13 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     this.transport = transport;
     this.queryMessage = queryMessage;
-    startNewResultSet();
+//    startNewResultSet();
   }
 
-  private void startNewResultSet() {
-//    currentResultSet = new ResultSet();
-//    resultSets.add(currentResultSet);
-  }
+//  private void startNewResultSet() {
+////    currentResultSet = new ResultSet();
+////    resultSets.add(currentResultSet);
+//  }
 
   @Override
   public void onToken(Token token) {
@@ -82,19 +83,17 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       case DONE_IN_PROC:
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
-        subscriber.onComplete();
-//        currentResultSet.setRowCount(done.getRowCount());  // now long → long
+        DoneStatus status = done.getStatus(); // Assuming DoneToken wraps the short in DoneStatus
 
-        // Assuming DoneToken.getStatus() returns DoneStatus enum with getValue() method
-        int statusValue = done.getStatus().getValue();  // adjust if your enum is different
+//        // 1. Handle Row Count if valid (Mask 0x10)
+//        if (status.isValidRowCount()) {
+//          currentResultSet.setRowCount(done.getRowCount());
+//        }
 
-        logger.info("Result set done: {} rows, status=0x{:02X}",
-            done.getRowCount(), statusValue);
-
-        // Bit 4 (0x10) = more result sets coming
-        if ((statusValue & 0x10) != 0) {
-          hasMoreResultSets = true;
-          startNewResultSet();
+        // 2. Check for More Result Sets (Mask 0x01)
+        if (!status.hasMoreResults()) {
+          // No more results = truly done
+          subscriber.onComplete();
         }
         break;
 

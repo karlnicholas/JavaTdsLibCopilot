@@ -26,7 +26,7 @@ public class DoneInProcTokenParser implements TokenParser {
     }
 
     int statusValue = Short.toUnsignedInt(payload.getShort());
-    DoneStatus status = DoneStatus.fromValue(statusValue);
+    DoneStatus status = new DoneStatus(statusValue);
 
     int currentCommand = Short.toUnsignedInt(payload.getShort());
 
