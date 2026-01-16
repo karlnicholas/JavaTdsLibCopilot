@@ -3,9 +3,14 @@ package org.tdslib.javatdslib.transport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.messages.Message;
-import org.tdslib.javatdslib.messages.MessageHandler;
 
-import javax.net.ssl.*;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLEngineResult;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -77,7 +82,7 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
-   * Switch to non-blocking mode and start delivering complete TDS Messages
+   * Switch to non-blocking mode and start delivering complete TDS Messages.
    */
   public void enterAsyncMode(Consumer<Message> handler) throws IOException {
     if (this.messageHandler != null) {
@@ -104,6 +109,11 @@ public class TcpTransport implements AutoCloseable {
     startEventLoop();
   }
 
+  /**
+   * Start the selector event loop on a background daemon thread.
+   * The loop waits for selector events and dispatches readable/writable
+   * notifications to the attached transport instance.
+   */
   private void startEventLoop() {
     Thread eventLoopThread = new Thread(() -> {
       try {
@@ -164,7 +174,9 @@ public class TcpTransport implements AutoCloseable {
         // Final cleanup (good practice)
         try {
           selector.close();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+          logger.warn("Failed to close selector", ignored);
+        }
       }
     }, "TDS-EventLoop-" + host + ":" + port);
 
@@ -172,7 +184,13 @@ public class TcpTransport implements AutoCloseable {
     eventLoopThread.start();
   }
 
-  // Helper method for clean shutdown
+  /**
+   * Cancel the provided selection key and close the associated transport.
+   * Exceptions during cleanup are logged and suppressed to avoid crashing the event loop.
+   *
+   * @param key       the selection key to cancel
+   * @param transport the transport to close
+   */
   private void cleanupKeyAndTransport(SelectionKey key, TcpTransport transport) {
     try {
       key.cancel();
@@ -231,7 +249,7 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
-   * Called from event loop when key.isWritable()
+   * Called from event loop when key.isWritable().
    */
   public void onWritable() throws IOException {
     synchronized (writeLock) {
@@ -260,6 +278,14 @@ public class TcpTransport implements AutoCloseable {
     }
   }
 
+  /**
+   * Handle readable selector events: read available bytes, assemble full TDS packets,
+   * convert them into Message objects and deliver to the registered message handler.
+   * This method will emit an EOF message and stop the transport if the remote closes
+   * the connection, and will stop delivering messages on unrecoverable parse errors.
+   *
+   * @throws IOException on I/O error while reading from the socket
+   */
   public void onReadable() throws IOException {
     if (!running || messageHandler == null) {
       logger.debug("Skipping read - transport not running or no handler");
@@ -365,14 +391,6 @@ public class TcpTransport implements AutoCloseable {
     );
   }
 
-//  @Override
-//  public void close() throws IOException {
-//    running = false;
-//    if (selectionKey != null) selectionKey.cancel();
-//    if (socketChannel != null) socketChannel.close();
-//    if (selector != null) selector.close();
-//  }
-
   // Optional helpers
   public boolean isConnected() {
     return socketChannel.isConnected();
@@ -399,7 +417,9 @@ public class TcpTransport implements AutoCloseable {
     if (sslEngine != null) {
       try {
         sslEngine.closeOutbound();
-      } catch (Exception ignored) {}
+      } catch (Exception ignored) {
+        logger.warn("Error during SSL engine close", ignored);
+      }
     }
     socketChannel.close();
   }

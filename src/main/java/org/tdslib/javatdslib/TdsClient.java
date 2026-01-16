@@ -186,10 +186,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     this.messageHandler = new MessageHandler(transport);
     this.tokenDispatcher = new TokenDispatcher();
     this.connected = false;
-
-    // Create one selector per client (simple approach)
-    // In production → better to have shared selector pool
-    }
+  }
 
   /**
    * Connect to the server and perform prelogin + login.
@@ -219,7 +216,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
       throw new IOException("Login failed: " + loginResponse.getErrorMessage());
     }
 
-// Switch socket to non-blocking + register to selector
+    // Switch socket to non-blocking + register to selector
     transport.enterAsyncMode(this::onMessagesReceived);
 
     connected = true;
@@ -402,17 +399,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-//  public QueryResponse query(String sql) throws IOException {
-//    if (!connected) {
-//      throw new IllegalStateException("Not connected");
-//    }
-//
-//    transport.disableTls();
-//
-//    return queryInternal(sql).getQueryResponse();
-//  }
-//
-  // Query becomes async-friendly
   public Flow.Publisher<RowWithMetadata> queryAsync(String sql) throws IOException {
     if (!connected || !transport.isAsyncMode()) {
       throw new IllegalStateException("Not connected or not in async mode");
@@ -447,88 +433,19 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return new QueryResponseTokenVisitor(this, transport, queryMsg);
   }
 
-//  // This is the callback — called asynchronously from ResultProducer thread
-//  private void responseReceived (Message message){
-//    if (cancelled || subscriber == null) return;
-//
-//    boolean sentinelFound = false;
-//    for (Integer value : batch) {
-//      if (cancelled) break;
-//
-//      if (value < 0) {
-//        subscriber.onComplete();
-//        sentinelFound = true;
-//        break;
-//      }
-//
-//      subscriber.onNext(value);
-//    }
-//
-//    if (sentinelFound || cancelled) {
-//      cancelled = true;
-//    }
-//  }
-  // Inner class managing one query stream
-//  private class QuerySubscription implements Flow.Subscription {
-//    private final Flow.Subscriber<? super Row> subscriber;
-//    private final AtomicLong requested = new AtomicLong(0);  // backpressure counter
-//    private final AtomicBoolean cancelled = new AtomicBoolean(false);
-//    private volatile boolean completed = false;
-//
-//    QuerySubscription(Flow.Subscriber<? super Row> subscriber) {
-//      this.subscriber = subscriber;
-//    }
-//
-//    @Override
-//    public void request(long n) {
-//      if (n <= 0) {
-//        subscriber.onError(new IllegalArgumentException("n <= 0"));
-//        return;
-//      }
-//      if (cancelled.get()) return;
-//
-//      long prev = requested.getAndAdd(n);
-//      if (prev == 0) {
-//        // Start/resume reading if paused
-//        // (you can use this to control how aggressively you read from socket)
-//      }
-//    }
-//
-//    @Override
-//    public void cancel() {
-//      if (cancelled.compareAndSet(false, true)) {
-//        // Send attention signal to SQL Server if needed
-////        sendAttentionAsync();
-//        // Cleanup resources
-//      }
-//    }
-//
-//    // Called from onReadable() / packet callback when a ROW token is parsed
-//    void pushRow(Row row) {
-//      if (cancelled.get() || completed) return;
-//
-//      if (requested.decrementAndGet() >= 0) {
-//        subscriber.onNext(row);
-//      } else {
-//        // Backpressure: too many rows buffered → pause reading or drop (your choice)
-//        // For simplicity, we can just buffer a few, or implement proper pause
-//      }
-//    }
-//
-//    void complete() {
-//      if (!completed && !cancelled.get()) {
-//        completed = true;
-//        subscriber.onComplete();
-//      }
-//    }
-//
-//    void error(Throwable t) {
-//      if (!completed && !cancelled.get()) {
-//        subscriber.onError(t);
-//      }
-//    }
-//  }
-
+  /**
+   * Invoked by the transport when a TDS message arrives.
+   *
+   * This method dispatches tokens contained in the provided message to the
+   * currently active token visitor (via {@link TokenDispatcher}). The visitor
+   * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
+   * row publishing, errors, etc.). After dispatching, if the message signals
+   * a connection-level reset (resetConnection flag) the client's session state
+   * is reset to library defaults.
+   *
+   * @param message the received {@link Message}; expected to be non-null and
+   *                containing tokens to process
+   */
   public void onMessagesReceived(Message message) {
 
     // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
@@ -539,48 +456,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
       resetToDefaults();
     }
 
-    // This is called from selector thread when full response arrives
-//    try {
-//      QueryResponseTokenVisitor visitor = processQueryResponse(message);
-//      if (currentQueryFuture != null) {
-//        currentQueryFuture.complete(visitor);
-//        currentQueryFuture = null;
-//      }
-//    } catch (Exception e) {
-//      if (currentQueryFuture != null) {
-//        currentQueryFuture.completeExceptionally(e);
-//        currentQueryFuture = null;
-//      }
-//    }
   }
-
-//  private void finishCurrentResponse() {
-//    if (currentQueryFuture == null) return;
-//
-//    try {
-//      QueryResponseTokenVisitor visitor = processQueryResponse(currentResponseMessages);
-//      currentQueryFuture.complete(visitor);
-//    } catch (Exception e) {
-//      currentQueryFuture.completeExceptionally(e);
-//    } finally {
-//      currentQueryFuture = null;
-//      expectingResponse = false;
-//      currentResponseMessages.clear();
-//    }
-//  }
-
-//  private void completeCurrentQueryExceptionally(Throwable t) {
-//    if (currentQueryFuture != null && !currentQueryFuture.isDone()) {
-//      currentQueryFuture.completeExceptionally(t);
-//    }
-//    currentQueryFuture = null;
-//    expectingResponse = false;
-//    currentResponseMessages.clear();
-//  }
-
-//  private QueryResponseTokenVisitor processQueryResponse(Message message) {
-//    return queryResponseTokenVisitor;
-//  }
 
   /**
    * Enable TLS on the transport (placeholder).
@@ -629,27 +505,4 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return connected;
   }
 
-//  private QueryResponseTokenVisitor queryInternal(String sql) throws IOException {
-//
-//    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
-//    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
-//
-//    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
-//
-//    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
-//    payload.put(allHeaders);
-//    payload.put(sqlBytes);
-//
-//    payload.flip();
-//
-//    // Create SQL_BATCH message
-//    Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
-//
-//    messageHandler.sendMessage(queryMsg);
-//
-//    // Receive & process full response (same as login)
-//    List<Message> responses = messageHandler.receiveFullResponse();
-//
-//    return processQueryResponse(responses);
-//  }
 }

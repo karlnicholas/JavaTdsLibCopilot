@@ -35,11 +35,11 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
-//  private final List<ResultSet> resultSets = new ArrayList<>();  // one per result set
-//  private ResultSet currentResultSet;                // currently building
-//  private boolean hasMoreResultSets = false;
   private boolean hasError = false;
   // ------------------------------------------------
+
+  private Flow.Subscriber<? super RowWithMetadata> subscriber;
+  private AtomicBoolean messageSent = new AtomicBoolean(false);
 
   /**
    * Create a new QueryResponseTokenVisitor that will apply ENVCHANGE tokens to
@@ -47,26 +47,20 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    *
    * @param connectionContext connection context used for ENVCHANGE handling
    */
-  public QueryResponseTokenVisitor(ConnectionContext connectionContext, TcpTransport transport, Message queryMessage) {
+  public QueryResponseTokenVisitor(
+          ConnectionContext connectionContext,
+          TcpTransport transport,
+          Message queryMessage) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     this.transport = transport;
     this.queryMessage = queryMessage;
-//    startNewResultSet();
   }
-
-//  private void startNewResultSet() {
-////    currentResultSet = new ResultSet();
-////    resultSets.add(currentResultSet);
-//  }
 
   @Override
   public void onToken(Token token) {
     switch (token.getType()) {
       case COL_METADATA:
         currentMetadata = (ColMetaDataToken) token;
-//        currentResultSet.setColumnCount(currentMetadata.getColumnCount());
-//        currentResultSet.setColumns(currentMetadata.getColumns());  // assuming getColumns() exists
-//        logger.info("New result set with {} columns", currentResultSet.getColumnCount());
         break;
 
       case ROW:
@@ -84,12 +78,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
         DoneStatus status = done.getStatus(); // Assuming DoneToken wraps the short in DoneStatus
-
-//        // 1. Handle Row Count if valid (Mask 0x10)
-//        if (status.isValidRowCount()) {
-//          currentResultSet.setRowCount(done.getRowCount());
-//        }
-
         // 2. Check for More Result Sets (Mask 0x01)
         if (!status.hasMoreResults()) {
           // No more results = truly done
@@ -125,26 +113,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
     }
   }
 
-  // ------------------- Public API for caller -------------------
-
-  /**
-   * Returns a defensive copy of the collected result sets.
-   *
-   * @return list of collected {@link ResultSet} objects
-   */
-//  public List<ResultSet> getResultSets() {
-//    return new ArrayList<>(resultSets);
-//  }
-
-  /**
-   * Return the first result set, or {@code null} if none were produced.
-   *
-   * @return first {@link ResultSet} or {@code null}
-   */
-//  public ResultSet getFirstResultSet() {
-//    return resultSets.isEmpty() ? null : resultSets.get(0);
-//  }
-
   /**
    * Indicates whether any server error/info tokens flagged an error during processing.
    *
@@ -153,40 +121,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   public boolean hasError() {
     return hasError;
   }
-
-  /**
-   * Returns {@code true} if multiple result sets were observed or more are expected.
-   *
-   * @return {@code true} when multiple result sets are present or more are incoming
-   */
-//  public boolean hasMultipleResultSets() {
-//    return resultSets.size() > 1 || hasMoreResultSets;
-//  }
-
-  /**
-   * Reset internal state clearing collected result sets and prepare for reuse.
-   */
-//  public void clear() {
-//    resultSets.clear();
-//    currentMetadata = null;
-//    currentResultSet = null;
-//    hasMoreResultSets = false;
-//    hasError = false;
-//    startNewResultSet(); // prepare for reuse
-//  }
-
-  /**
-   * Return a synthesized {@link QueryResponse} containing the collected
-   * result sets and error flag for callers.
-   *
-   * @return QueryResponse summarizing the parsed tokens
-   */
-//  QueryResponse getQueryResponse() {
-//    return new QueryResponse(getResultSets(), hasError());
-//  }
-
-  private Flow.Subscriber<? super RowWithMetadata> subscriber;
-  private AtomicBoolean messageSent = new AtomicBoolean(false);
 
   @Override
   public void subscribe(Flow.Subscriber<? super RowWithMetadata> subscriber) {
@@ -200,7 +134,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       @Override
       public void request(long n) {
-        if ( !messageSent.compareAndSet(true, true) ) {
+        if (!messageSent.compareAndSet(true, true)) {
           try {
             new MessageHandler(transport).sendMessage(queryMessage);
           } catch (IOException e) {
