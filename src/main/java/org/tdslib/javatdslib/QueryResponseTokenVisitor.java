@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
@@ -32,8 +34,8 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
-  private final List<ResultSet> resultSets = new ArrayList<>();  // one per result set
-  private ResultSet currentResultSet;                // currently building
+//  private final List<ResultSet> resultSets = new ArrayList<>();  // one per result set
+//  private ResultSet currentResultSet;                // currently building
   private boolean hasMoreResultSets = false;
   private boolean hasError = false;
   // ------------------------------------------------
@@ -52,8 +54,8 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   }
 
   private void startNewResultSet() {
-    currentResultSet = new ResultSet();
-    resultSets.add(currentResultSet);
+//    currentResultSet = new ResultSet();
+//    resultSets.add(currentResultSet);
   }
 
   @Override
@@ -61,9 +63,9 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
     switch (token.getType()) {
       case COL_METADATA:
         currentMetadata = (ColMetaDataToken) token;
-        currentResultSet.setColumnCount(currentMetadata.getColumnCount());
-        currentResultSet.setColumns(currentMetadata.getColumns());  // assuming getColumns() exists
-        logger.info("New result set with {} columns", currentResultSet.getColumnCount());
+//        currentResultSet.setColumnCount(currentMetadata.getColumnCount());
+//        currentResultSet.setColumns(currentMetadata.getColumns());  // assuming getColumns() exists
+//        logger.info("New result set with {} columns", currentResultSet.getColumnCount());
         break;
 
       case ROW:
@@ -72,7 +74,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
           return;
         }
         RowToken row = (RowToken) token;
-        currentResultSet.addRawRow(row.getColumnData());
+        subscriber.onNext(new RowWithMetadata(row.getColumnData(), currentMetadata.getColumns()));
         logger.debug("Row added ({} columns)", row.getColumnData().size());
         break;
 
@@ -80,7 +82,8 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       case DONE_IN_PROC:
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
-        currentResultSet.setRowCount(done.getRowCount());  // now long → long
+        subscriber.onComplete();
+//        currentResultSet.setRowCount(done.getRowCount());  // now long → long
 
         // Assuming DoneToken.getStatus() returns DoneStatus enum with getValue() method
         int statusValue = done.getStatus().getValue();  // adjust if your enum is different
@@ -130,18 +133,18 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    *
    * @return list of collected {@link ResultSet} objects
    */
-  public List<ResultSet> getResultSets() {
-    return new ArrayList<>(resultSets);
-  }
+//  public List<ResultSet> getResultSets() {
+//    return new ArrayList<>(resultSets);
+//  }
 
   /**
    * Return the first result set, or {@code null} if none were produced.
    *
    * @return first {@link ResultSet} or {@code null}
    */
-  public ResultSet getFirstResultSet() {
-    return resultSets.isEmpty() ? null : resultSets.get(0);
-  }
+//  public ResultSet getFirstResultSet() {
+//    return resultSets.isEmpty() ? null : resultSets.get(0);
+//  }
 
   /**
    * Indicates whether any server error/info tokens flagged an error during processing.
@@ -157,21 +160,21 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    *
    * @return {@code true} when multiple result sets are present or more are incoming
    */
-  public boolean hasMultipleResultSets() {
-    return resultSets.size() > 1 || hasMoreResultSets;
-  }
+//  public boolean hasMultipleResultSets() {
+//    return resultSets.size() > 1 || hasMoreResultSets;
+//  }
 
   /**
    * Reset internal state clearing collected result sets and prepare for reuse.
    */
-  public void clear() {
-    resultSets.clear();
-    currentMetadata = null;
-    currentResultSet = null;
-    hasMoreResultSets = false;
-    hasError = false;
-    startNewResultSet(); // prepare for reuse
-  }
+//  public void clear() {
+//    resultSets.clear();
+//    currentMetadata = null;
+//    currentResultSet = null;
+//    hasMoreResultSets = false;
+//    hasError = false;
+//    startNewResultSet(); // prepare for reuse
+//  }
 
   /**
    * Return a synthesized {@link QueryResponse} containing the collected
@@ -179,11 +182,13 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    *
    * @return QueryResponse summarizing the parsed tokens
    */
-  QueryResponse getQueryResponse() {
-    return new QueryResponse(getResultSets(), hasError());
-  }
+//  QueryResponse getQueryResponse() {
+//    return new QueryResponse(getResultSets(), hasError());
+//  }
 
   private Flow.Subscriber<? super RowWithMetadata> subscriber;
+  private AtomicBoolean messageSent = new AtomicBoolean(false);
+
   @Override
   public void subscribe(Flow.Subscriber<? super RowWithMetadata> subscriber) {
     // Validate subscriber
@@ -196,12 +201,13 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       @Override
       public void request(long n) {
-        try {
-          new MessageHandler(transport).sendMessage(queryMessage);
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+        if ( !messageSent.compareAndSet(true, true) ) {
+          try {
+            new MessageHandler(transport).sendMessage(queryMessage);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-
       }
 
       @Override
@@ -210,5 +216,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       }
     });
     // Store the current subscriber for use in the response handling
+
   }
 }

@@ -17,7 +17,9 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.util.ArrayDeque;
 import java.util.Iterator;
+import java.util.Queue;
 import java.util.function.Consumer;
 
 /**
@@ -186,9 +188,19 @@ public class TcpTransport implements AutoCloseable {
    * @param buffer data to write
    * @throws IOException on I/O error
    */
+
+  // Inside TcpTransport class
+  private final Queue<ByteBuffer> writeQueue = new ArrayDeque<>();
+  private final Object writeLock = new Object();
+  private volatile boolean writing = false; // to avoid redundant OP_WRITE
+
+  /**
+   * Writes the buffer. In blocking mode: direct write.
+   * In async mode: queue it and enable OP_WRITE if needed.
+   */
   public void write(ByteBuffer buffer) throws IOException {
     if (!asyncMode) {
-      // Old blocking path (used during connect/login)
+      // Blocking path (connect/login phase)
       if (sslEngine != null) {
         writeEncrypted(buffer);
       } else {
@@ -196,13 +208,58 @@ public class TcpTransport implements AutoCloseable {
           socketChannel.write(buffer);
         }
       }
-    } else {
-      // In async mode we DON'T write directly from this method!
-      // → The caller (usually event loop / selector thread) should do it
-      throw new IllegalStateException(
-              "Direct write not allowed in async mode - use queue + selector");
+      return;
+    }
+
+    // Async mode: queue the buffer (copy to avoid mutation)
+    ByteBuffer copy = buffer.duplicate(); // safe copy
+    synchronized (writeLock) {
+      writeQueue.add(copy);
+    }
+
+    // Tell event loop we have data to write
+    SelectionKey key = socketChannel.keyFor(selector);
+    if (key != null && key.isValid()) {
+      synchronized (writeLock) {
+        if (!writing) {
+          writing = true;
+          key.interestOpsOr(SelectionKey.OP_WRITE);
+          selector.wakeup(); // wake selector if sleeping
+        }
+      }
     }
   }
+
+  /**
+   * Called from event loop when key.isWritable()
+   */
+  public void onWritable() throws IOException {
+    synchronized (writeLock) {
+      while (!writeQueue.isEmpty()) {
+        ByteBuffer buf = writeQueue.peek();
+        int written = socketChannel.write(buf);
+
+        if (written == 0) {
+          // Can't write more now — keep OP_WRITE
+          break;
+        }
+
+        if (!buf.hasRemaining()) {
+          writeQueue.poll(); // fully sent
+        }
+      }
+
+      // If queue empty → drop OP_WRITE
+      if (writeQueue.isEmpty()) {
+        writing = false;
+        SelectionKey key = socketChannel.keyFor(selector);
+        if (key != null && key.isValid()) {
+          key.interestOpsAnd(~SelectionKey.OP_WRITE);
+        }
+      }
+    }
+  }
+
   public void onReadable() throws IOException {
     if (!running || messageHandler == null) {
       logger.debug("Skipping read - transport not running or no handler");
@@ -323,10 +380,6 @@ public class TcpTransport implements AutoCloseable {
 
   public SocketChannel getChannel() {
     return socketChannel;
-  }
-
-  public void onWritable() throws IOException {
-    // Handle pending outgoing data if you have a write queue
   }
 
   public boolean isAsyncMode() {

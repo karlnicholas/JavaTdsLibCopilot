@@ -1,3 +1,7 @@
 package org.tdslib.javatdslib;
 
-public record RowWithMetadata(Row row, RowMetadata metadata) {}
+import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
+
+import java.util.List;
+
+public record RowWithMetadata(List<byte[]> row, List<ColumnMeta> metadata) {}
