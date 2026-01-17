@@ -3,9 +3,11 @@ package org.tdslib.javatdslib.transport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.stream.IIOByteBuffer;
 import javax.net.ssl.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.SelectionKey;
@@ -47,11 +49,16 @@ public class TcpTransport implements AutoCloseable {
   private SelectionKey selectionKey;
 
   // ── Read state (packet framing) ───────────────────────
-  private ByteBuffer readBuffer = ByteBuffer.allocate(32768);
+  private ByteBuffer readBuffer = ByteBuffer.allocate(packetSize);
 
 //  private volatile boolean running = true;
   private final Consumer<Message> messageHandler;   // callback from TdsClient
   private final Consumer<Throwable> errorHandler;  // passed by library user
+
+  // Inside TcpTransport class
+  private final Queue<ByteBuffer> writeQueue = new ArrayDeque<>();
+  private final Object writeLock = new Object();
+  private volatile boolean writing = false; // to avoid redundant OP_WRITE
 
   /**
    * Opens a new TCP connection to the given host and port.
@@ -117,7 +124,9 @@ public class TcpTransport implements AutoCloseable {
             SelectionKey key = iterator.next();
             iterator.remove();
 
-            if (!key.isValid()) continue;
+            if (!key.isValid()) {
+              continue;
+            }
 
             TcpTransport transport = (TcpTransport) key.attachment();
             if (transport == null) {
@@ -169,54 +178,6 @@ public class TcpTransport implements AutoCloseable {
       close();
     } catch (Exception e) {
       logger.warn("Failed to clean up key/transport", e);
-    }
-  }
-
-  /**
-   * Writes the provided buffer to the transport. The buffer's position will be advanced.
-   *
-   * @param buffer data to write
-   * @throws IOException on I/O error
-   */
-
-  // Inside TcpTransport class
-  private final Queue<ByteBuffer> writeQueue = new ArrayDeque<>();
-  private final Object writeLock = new Object();
-  private volatile boolean writing = false; // to avoid redundant OP_WRITE
-
-  /**
-   * Writes the buffer. In blocking mode: direct write.
-   * In async mode: queue it and enable OP_WRITE if needed.
-   */
-  public void write(ByteBuffer buffer) throws IOException {
-    if (!asyncMode) {
-      // Blocking path (connect/login phase)
-      if (sslEngine != null) {
-        writeEncrypted(buffer);
-      } else {
-        while (buffer.hasRemaining()) {
-          socketChannel.write(buffer);
-        }
-      }
-      return;
-    }
-
-    // Async mode: queue the buffer (copy to avoid mutation)
-    ByteBuffer copy = buffer.duplicate(); // safe copy
-    synchronized (writeLock) {
-      writeQueue.add(copy);
-    }
-
-    // Tell event loop we have data to write
-    SelectionKey key = socketChannel.keyFor(selector);
-    if (key != null && key.isValid()) {
-      synchronized (writeLock) {
-        if (!writing) {
-          writing = true;
-          key.interestOpsOr(SelectionKey.OP_WRITE);
-          selector.wakeup(); // wake selector if sleeping
-        }
-      }
     }
   }
 
@@ -311,68 +272,6 @@ public class TcpTransport implements AutoCloseable {
     }
   }
 
-  private Message buildMessageFromPacket(ByteBuffer packet) {
-    packet.mark();
-
-    final byte type   = packet.get();
-    final byte status = packet.get();
-    final int length  = Short.toUnsignedInt(packet.getShort());
-    final short spid  = packet.getShort();
-    final byte packetId = packet.get(); // actually a byte, not short
-    final byte window = packet.get();   // usually 0
-
-    packet.reset();
-    packet.position(8);
-
-    ByteBuffer payload = packet.slice();
-    payload.limit(length - 8);
-
-    return new Message(
-            type,
-            status,
-            length,
-            spid,
-            packetId,
-            payload,
-            System.nanoTime(),
-            null   // trace context
-    );
-  }
-
-  // Optional helpers
-  public boolean isConnected() {
-    return socketChannel.isConnected();
-  }
-
-  public SocketChannel getChannel() {
-    return socketChannel;
-  }
-
-  public boolean isAsyncMode() {
-    return asyncMode;
-  }
-
-  // Very important cleanup
-  @Override
-  public void close() throws IOException {
-    asyncMode = false;
-    if (selectionKey != null) {
-      selectionKey.cancel();
-    }
-    if (selector != null) {
-      selector.close();
-    }
-    if (sslEngine != null) {
-      try {
-        sslEngine.closeOutbound();
-      } catch (Exception ignored) {
-        logger.warn("Error during SSL engine close", ignored);
-      }
-    }
-    socketChannel.close();
-  }
-
-  // ... rest of your existing methods ...
   /**
    * Enable TLS on the existing connection and perform the TLS handshake.
    *
@@ -536,34 +435,6 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
-   * Returns true if TLS is enabled on this transport.
-   *
-   * @return {@code true} when TLS is enabled
-   */
-  public boolean isSecure() {
-    return sslEngine != null;
-  }
-
-  private void writeEncrypted(final ByteBuffer appData) throws IOException {
-    while (appData.hasRemaining()) {
-      myNetData.clear();
-
-      final SSLEngineResult result = sslEngine.wrap(appData, myNetData);
-
-      if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-        // Double buffer size and retry
-        myNetData = ByteBuffer.allocate(myNetData.capacity() * 2);
-        continue;
-      }
-
-      myNetData.flip();
-      while (myNetData.hasRemaining()) {
-        socketChannel.write(myNetData);
-      }
-    }
-  }
-
-  /**
    * Reads a full TDS packet (including header) into the provided buffer.
    * For TLS, this returns the decrypted application data.
    *
@@ -615,24 +486,13 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
-   * No-op flush for this transport.
-   */
-  public void flush() {
-    // No-op for plain TCP; TLS doesn't need explicit flush in this design
-  }
-
-  /**
    * Update read timeout for the underlying socket.
    *
    * @param ms timeout in milliseconds
    */
-  public void setReadTimeout(final int ms) {
+  public void setReadTimeout(final int ms) throws SocketException {
     this.readTimeoutMs = ms;
-    try {
-      socketChannel.socket().setSoTimeout(ms);
-    } catch (final IOException e) {
-      logger.warn("Failed to set socket timeout", e);
-    }
+    socketChannel.socket().setSoTimeout(ms);
   }
 
   /**
@@ -643,6 +503,7 @@ public class TcpTransport implements AutoCloseable {
   public void setPacketSize(final int newSize) {
     this.packetSize = newSize;
     // You may want to resize buffers here in the future
+    readBuffer = ByteBuffer.allocate(newSize);
   }
 
   /**
@@ -661,59 +522,29 @@ public class TcpTransport implements AutoCloseable {
     sslEngine = null;
   }
 
-  public String getHost() {
-    return host;
-  }
   /**
-   * Sends a complete logical message (may be split into multiple packets).
+   * Receives a **complete logical response** by reading packets until the last one (EOM).
    *
-   * @param message the message to send (usually built by the client layer)
-   * @throws IOException if sending fails
+   * <p>Useful for simple request-response patterns.
+   *
+   * @return list of all packets that form the logical response
+   * @throws IOException if any read fails
    */
-  public void sendMessage(Message message) throws IOException {
-    // If the message payload is small, send as single packet
-    logHex("Sending message", message.getPayload());
-    // If large, split into multiple packets (max ~4096 bytes each)
-    List<ByteBuffer> packetBuffers = buildPackets(
-        message.getPacketType(),
-        message.getStatusFlags(),
-        message.getSpid(),
-        message.getPayload(),
-        (short) 1,
-        getCurrentPacketSize()
-    );
+  public List<Message> receiveFullResponse() throws IOException {
+    List<Message> messages = new ArrayList<>();
 
-    for (ByteBuffer buf : packetBuffers) {
-      write(buf);
-      //  currentPacketNumber++;
-    }
+    Message packet;
+    do {
+      packet = receiveSinglePacket();
+      messages.add(packet);
 
-    flush();
-  }
-
-  // Helper for hex dumping
-  private void logHex(String label, ByteBuffer buffer) {
-    if (!logger.isDebugEnabled()) {
-      return;
-    }
-
-    StringBuilder sb = new StringBuilder();
-    sb.append(label).append(" (Length: ").append(buffer.remaining()).append(")\n");
-
-    int pos = buffer.position();
-    int i = 0;
-    while (buffer.hasRemaining()) {
-      byte b = buffer.get();
-      sb.append(String.format("%02X ", b));
-      if (++i % 16 == 0) {
-        sb.append("\n");
+      // Optional: handle reset connection flag as soon as we see it
+      if (packet.isResetConnection()) {
+        // Can notify upper layers immediately if needed
       }
-    }
-    sb.append("\n");
+    } while (!packet.isLastPacket());
 
-    // Rewind so the actual write operation can read it again
-    buffer.position(pos);
-    logger.debug(sb.toString());
+    return messages;
   }
 
   /**
@@ -756,31 +587,6 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
-   * Receives a **complete logical response** by reading packets until the last one (EOM).
-   *
-   * <p>Useful for simple request-response patterns.
-   *
-   * @return list of all packets that form the logical response
-   * @throws IOException if any read fails
-   */
-  public List<Message> receiveFullResponse() throws IOException {
-    List<Message> messages = new ArrayList<>();
-
-    Message packet;
-    do {
-      packet = receiveSinglePacket();
-      messages.add(packet);
-
-      // Optional: handle reset connection flag as soon as we see it
-      if (packet.isResetConnection()) {
-        // Can notify upper layers immediately if needed
-      }
-    } while (!packet.isLastPacket());
-
-    return messages;
-  }
-
-  /**
    * Reads exactly one complete TDS packet.
    * Returns the full packet as a ByteBuffer (header + payload).
    */
@@ -810,6 +616,110 @@ public class TcpTransport implements AutoCloseable {
     fullPacket.flip();
 
     return fullPacket;
+  }
+
+  /**
+   * Sends a complete logical message (may be split into multiple packets).
+   *
+   * @param message the message to send (usually built by the client layer)
+   * @throws IOException if sending fails
+   */
+  public void sendMessage(Message message) throws IOException {
+    // If the message payload is small, send as single packet
+    logHex("Sending message", message.getPayload());
+    // If large, split into multiple packets (max ~4096 bytes each)
+    List<ByteBuffer> packetBuffers = buildPackets(
+        message.getPacketType(),
+        message.getStatusFlags(),
+        message.getSpid(),
+        message.getPayload(),
+        (short) 1,
+        getCurrentPacketSize()
+    );
+
+    for (ByteBuffer buf : packetBuffers) {
+      write(buf);
+      //  currentPacketNumber++;
+    }
+
+  }
+
+  /**
+   * Writes the provided buffer to the transport. The buffer's position will be advanced.
+   * In blocking mode: direct write.
+   * In async mode: queue it and enable OP_WRITE if needed.
+   *
+   * @param buffer data to write
+   * @throws IOException on I/O error
+   */
+  public void write(ByteBuffer buffer) throws IOException {
+    if (!asyncMode) {
+      // Blocking path (connect/login phase)
+      if (sslEngine != null) {
+        writeEncrypted(buffer);
+      } else {
+        while (buffer.hasRemaining()) {
+          socketChannel.write(buffer);
+        }
+      }
+      return;
+    }
+
+    // Async mode: queue the buffer (copy to avoid mutation)
+    synchronized (writeLock) {
+      writeQueue.add(buffer);
+    }
+
+    // Tell event loop we have data to write
+    SelectionKey key = socketChannel.keyFor(selector);
+    if (key != null && key.isValid()) {
+      synchronized (writeLock) {
+        if (!writing) {
+          writing = true;
+          key.interestOpsOr(SelectionKey.OP_WRITE);
+          selector.wakeup(); // wake selector if sleeping
+        }
+      }
+    }
+  }
+
+  private void writeEncrypted(final ByteBuffer appData) throws IOException {
+    while (appData.hasRemaining()) {
+      myNetData.clear();
+
+      final SSLEngineResult result = sslEngine.wrap(appData, myNetData);
+
+      if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+        // Double buffer size and retry
+        myNetData = ByteBuffer.allocate(myNetData.capacity() * 2);
+        continue;
+      }
+
+      myNetData.flip();
+      while (myNetData.hasRemaining()) {
+        socketChannel.write(myNetData);
+      }
+    }
+  }
+
+  // Very important cleanup
+  @Override
+  public void close() throws IOException {
+    asyncMode = false;
+    if (selectionKey != null) {
+      selectionKey.cancel();
+    }
+    if (selector != null) {
+      selector.close();
+    }
+    if (sslEngine != null) {
+      try {
+        sslEngine.closeOutbound();
+      } catch (Exception ignored) {
+        logger.warn("Error during SSL engine close", ignored);
+      }
+    }
+    socketChannel.close();
   }
 
   /**
@@ -873,6 +783,59 @@ public class TcpTransport implements AutoCloseable {
     }
 
     return packets;
+  }
+
+  private Message buildMessageFromPacket(ByteBuffer packet) {
+    packet.mark();
+
+    final byte type   = packet.get();
+    final byte status = packet.get();
+    final int length  = Short.toUnsignedInt(packet.getShort());
+    final short spid  = packet.getShort();
+    final byte packetId = packet.get(); // actually a byte, not short
+    final byte window = packet.get();   // usually 0
+
+    packet.reset();
+    packet.position(8);
+
+    ByteBuffer payload = packet.slice();
+    payload.limit(length - 8);
+
+    return new Message(
+        type,
+        status,
+        length,
+        spid,
+        packetId,
+        payload,
+        System.nanoTime(),
+        null   // trace context
+    );
+  }
+
+  // Helper for hex dumping
+  private void logHex(String label, ByteBuffer buffer) {
+    if (!logger.isDebugEnabled()) {
+      return;
+    }
+
+    StringBuilder sb = new StringBuilder();
+    sb.append(label).append(" (Length: ").append(buffer.remaining()).append(")\n");
+
+    int pos = buffer.position();
+    int i = 0;
+    while (buffer.hasRemaining()) {
+      byte b = buffer.get();
+      sb.append(String.format("%02X ", b));
+      if (++i % 16 == 0) {
+        sb.append("\n");
+      }
+    }
+    sb.append("\n");
+
+    // Rewind so the actual write operation can read it again
+    buffer.position(pos);
+    logger.debug(sb.toString());
   }
 
 }

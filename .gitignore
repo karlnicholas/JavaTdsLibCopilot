@@ -4,3 +4,4 @@ csharp_source/
 .vscode/
 .DS_Store
 .idea/
+/checkstyle-output.txt

@@ -403,7 +403,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @throws IOException on I/O or transport errors
    */
   public Flow.Publisher<RowWithMetadata> queryAsync(String sql) throws IOException {
-    if (!connected || !transport.isAsyncMode()) {
+    if (!connected) {
       throw new IllegalStateException("Not connected or not in async mode");
     }
 
