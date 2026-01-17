@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.messages.Message;
-import org.tdslib.javatdslib.messages.MessageHandler;
+import org.tdslib.javatdslib.transport.Message;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
@@ -23,8 +24,8 @@ import java.util.concurrent.Flow;
  * Provides a simple connect + execute interface, hiding protocol details.
  */
 public class TdsClient implements ConnectionContext, AutoCloseable {
+  private static final Logger logger = LoggerFactory.getLogger(TdsClient.class);
 
-  private final MessageHandler messageHandler;
   private final TcpTransport transport;
   private final TokenDispatcher tokenDispatcher;
 
@@ -182,10 +183,12 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @throws IOException if the underlying transport cannot be created
    */
   public TdsClient(String host, int port) throws IOException {
-    this.transport = new TcpTransport(host, port);
-    this.messageHandler = new MessageHandler(transport);
+    this.transport = new TcpTransport(host, port, this::onMessagesReceived, this::errorHandler);
     this.tokenDispatcher = new TokenDispatcher();
     this.connected = false;
+  }
+
+  private void errorHandler(Throwable throwable) {
   }
 
   /**
@@ -217,7 +220,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     // Switch socket to non-blocking + register to selector
-    transport.enterAsyncMode(this::onMessagesReceived);
+    transport.enterAsyncMode();
 
     connected = true;
   }
@@ -233,9 +236,9 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         buildPreLoginPayload(false, false)
     );
 
-    messageHandler.sendMessage(msg);
+    transport.sendMessage(msg);
 
-    List<Message> responses = messageHandler.receiveFullResponse();
+    List<Message> responses = transport.receiveFullResponse();
 
     PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
 
@@ -265,9 +268,9 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     Message loginMsg = Message.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
 
-    messageHandler.sendMessage(loginMsg);
+    transport.sendMessage(loginMsg);
 
-    List<Message> responses = messageHandler.receiveFullResponse();
+    List<Message> responses = transport.receiveFullResponse();
 
     return processLoginResponse(responses);
   }
@@ -424,7 +427,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     currentPublisher = queryReactive(queryMsg);
 
-    messageHandler.sendMessage(queryMsg);
+    transport.sendMessage(queryMsg);
     return currentPublisher;
   }
 
@@ -436,7 +439,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   /**
    * Invoked by the transport when a TDS message arrives.
    *
-   * This method dispatches tokens contained in the provided message to the
+   * <p>This method dispatches tokens contained in the provided message to the
    * currently active token visitor (via {@link TokenDispatcher}). The visitor
    * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
    * row publishing, errors, etc.). After dispatching, if the message signals
@@ -496,7 +499,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    */
   @Override
   public void close() throws IOException {
-    messageHandler.close();
+    logger.debug("Closing TdsClient");
     transport.close();
     connected = false;
   }

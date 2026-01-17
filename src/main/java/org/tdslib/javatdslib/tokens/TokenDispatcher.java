@@ -2,7 +2,7 @@ package org.tdslib.javatdslib.tokens;
 
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
-import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.transport.Message;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;

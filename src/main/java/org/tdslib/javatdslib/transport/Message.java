@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.messages;
+package org.tdslib.javatdslib.transport;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

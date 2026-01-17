@@ -2,8 +2,7 @@ package org.tdslib.javatdslib;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.messages.Message;
-import org.tdslib.javatdslib.messages.MessageHandler;
+import org.tdslib.javatdslib.transport.Message;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
@@ -16,11 +15,8 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TcpTransport;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
@@ -39,7 +35,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   // ------------------------------------------------
 
   private Flow.Subscriber<? super RowWithMetadata> subscriber;
-  private AtomicBoolean messageSent = new AtomicBoolean(false);
+  private final AtomicBoolean messageSent = new AtomicBoolean(false);
 
   /**
    * Create a new QueryResponseTokenVisitor that will apply ENVCHANGE tokens to
@@ -136,7 +132,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       public void request(long n) {
         if (!messageSent.compareAndSet(true, true)) {
           try {
-            new MessageHandler(transport).sendMessage(queryMessage);
+            transport.sendMessage(queryMessage);
           } catch (IOException e) {
             throw new RuntimeException(e);
           }

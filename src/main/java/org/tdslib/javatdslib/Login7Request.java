@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.messages.Message;
+import org.tdslib.javatdslib.transport.Message;
+import org.tdslib.javatdslib.packets.PacketType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -135,7 +136,7 @@ public class Login7Request {
     payload.flip();
 
     return new Message(
-        (byte) 0x10,           // Login7
+        PacketType.LOGIN7.getValue(),           // Login7
         (byte) 0x01,           // EOM
         payload.capacity() + 8,
         (short) 0,
