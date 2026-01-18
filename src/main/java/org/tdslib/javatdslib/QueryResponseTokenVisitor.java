@@ -12,7 +12,7 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
-import org.tdslib.javatdslib.transport.TcpTransport;
+import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
 import java.util.concurrent.Flow;
@@ -26,7 +26,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
 
   private final EnvChangeTokenVisitor envChangeVisitor;
-  private final TcpTransport transport;
+  private final TdsTransport transport;
   private final Message queryMessage;
 
   // ------------------- State -------------------
@@ -45,7 +45,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    */
   public QueryResponseTokenVisitor(
           ConnectionContext connectionContext,
-          TcpTransport transport,
+          TdsTransport transport,
           Message queryMessage) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     this.transport = transport;
@@ -132,7 +132,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       public void request(long n) {
         if (!messageSent.compareAndSet(true, true)) {
           try {
-            transport.sendMessage(queryMessage);
+            transport.sendMessageDirect(queryMessage);
           } catch (IOException e) {
             throw new RuntimeException(e);
           }
@@ -146,5 +146,9 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
     });
     // Store the current subscriber for use in the response handling
 
+  }
+
+  public Flow.Subscriber<? super RowWithMetadata> getSubscriber() {
+    return subscriber;
   }
 }

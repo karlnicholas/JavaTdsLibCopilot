@@ -3,8 +3,6 @@ package org.tdslib.javatdslib.transport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.stream.IIOByteBuffer;
-import javax.net.ssl.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -15,50 +13,41 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
  * Low-level TCP transport for TDS communication.
  * Supports both plain TCP and TLS (SQL Server encrypted connection).
  */
-public class TcpTransport implements AutoCloseable {
+public class TdsTransport implements AutoCloseable {
 
-  private static final Logger logger = LoggerFactory.getLogger(TcpTransport.class);
+  private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
 
   private final SocketChannel socketChannel;
   private final String host;
   private final int port;
-
-  // TLS fields (null if not using TLS)
-  private SSLEngine sslEngine;
-  private ByteBuffer myNetData;     // Outgoing encrypted data
-  private ByteBuffer peerNetData;   // Incoming encrypted data
-  private ByteBuffer peerAppData;   // Decrypted application data
+  private final Queue<ByteBuffer> writeQueue = new ConcurrentLinkedQueue<>();
+  private final AtomicBoolean pendingWrite = new AtomicBoolean(false);
 
   private static final int TDS_HEADER_LENGTH = 8;
-  private static final int PRELOGIN_PACKET_TYPE = 0x12;
 
   private int readTimeoutMs = 60_000;
   private int packetSize = 4096;  // Default TDS packet size, updated via ENVCHANGE
 
-  private volatile boolean asyncMode = false;
   private Selector selector;           // will be set when entering async mode
-  private SelectionKey selectionKey;
 
   // ── Read state (packet framing) ───────────────────────
   private ByteBuffer readBuffer = ByteBuffer.allocate(packetSize);
 
-//  private volatile boolean running = true;
   private final Consumer<Message> messageHandler;   // callback from TdsClient
   private final Consumer<Throwable> errorHandler;  // passed by library user
-
-  // Inside TcpTransport class
-  private final Queue<ByteBuffer> writeQueue = new ArrayDeque<>();
-  private final Object writeLock = new Object();
-  private volatile boolean writing = false; // to avoid redundant OP_WRITE
+  private final TlsHandshake tlsHandshake;
 
   /**
    * Opens a new TCP connection to the given host and port.
@@ -67,11 +56,17 @@ public class TcpTransport implements AutoCloseable {
    * @param port remote port
    * @throws IOException on I/O error while opening the socket
    */
-  public TcpTransport(final String host, final int port, Consumer<Message> messageHandler, Consumer<Throwable> errorHandler) throws IOException {
+  public TdsTransport(
+      final String host,
+      final int port,
+      Consumer<Message> messageHandler,
+      Consumer<Throwable> errorHandler
+  ) throws IOException {
     this.host = host;
     this.port = port;
     this.messageHandler = messageHandler;
     this.errorHandler = errorHandler;
+    this.tlsHandshake = new TlsHandshake();
     this.socketChannel = SocketChannel.open();
     this.socketChannel.configureBlocking(true);
     this.socketChannel.socket().setSoTimeout(readTimeoutMs);
@@ -90,18 +85,7 @@ public class TcpTransport implements AutoCloseable {
     this.selector = Selector.open();
 
     socketChannel.configureBlocking(false);
-    this.selectionKey = socketChannel.register(selector, SelectionKey.OP_READ, this);
-
-    // Optional: initial interest in reading
-    selectionKey.interestOps(SelectionKey.OP_READ);
-
-    asyncMode = true;
-
-    // Optional: clear any leftover TLS buffers to help GC
-    myNetData = null;
-    peerNetData = null;
-    peerAppData = null;
-    sslEngine = null;
+    socketChannel.register(selector, SelectionKey.OP_READ, this);
 
     startEventLoop();
   }
@@ -128,7 +112,7 @@ public class TcpTransport implements AutoCloseable {
               continue;
             }
 
-            TcpTransport transport = (TcpTransport) key.attachment();
+            TdsTransport transport = (TdsTransport) key.attachment();
             if (transport == null) {
               key.cancel();
               continue;
@@ -139,7 +123,7 @@ public class TcpTransport implements AutoCloseable {
                 transport.onReadable(key);
               }
               if (key.isWritable()) {
-                transport.onWritable();
+                transport.onWritable(key);
               }
             } catch (Throwable t) {  // Throwable — catches Error too
               // Per-transport error — usually close this connection
@@ -184,30 +168,32 @@ public class TcpTransport implements AutoCloseable {
   /**
    * Called from event loop when key.isWritable().
    */
-  public void onWritable() throws IOException {
-    synchronized (writeLock) {
-      while (!writeQueue.isEmpty()) {
-        ByteBuffer buf = writeQueue.peek();
-        int written = socketChannel.write(buf);
+  private void onWritable(SelectionKey key) throws IOException {
+    SocketChannel ch = (SocketChannel) key.channel();
 
-        if (written == 0) {
-          // Can't write more now — keep OP_WRITE
-          break;
-        }
-
-        if (!buf.hasRemaining()) {
-          writeQueue.poll(); // fully sent
-        }
+    while (true) {
+      ByteBuffer buf = writeQueue.peek();
+      if (buf == null) {
+        // Queue is empty → we can safely turn off OP_WRITE
+        pendingWrite.set(false);
+        key.interestOpsAnd(~SelectionKey.OP_WRITE);
+        return;
       }
 
-      // If queue empty → drop OP_WRITE
-      if (writeQueue.isEmpty()) {
-        writing = false;
-        SelectionKey key = socketChannel.keyFor(selector);
-        if (key != null && key.isValid()) {
-          key.interestOpsAnd(~SelectionKey.OP_WRITE);
-        }
+      int written = ch.write(buf);
+
+      if (written == 0) {
+        // Can't write more right now
+        return;
       }
+
+      if (buf.hasRemaining()) {
+        // Still data left in current buffer → stay interested
+        return;
+      }
+
+      // Buffer fully written → remove it
+      writeQueue.poll();
     }
   }
 
@@ -220,268 +206,44 @@ public class TcpTransport implements AutoCloseable {
    * @throws IOException on I/O error while reading from the socket
    */
   public void onReadable(SelectionKey selectionKey) throws IOException {
-    while (true) {
-      // 1. Read as much as possible in one go
-      int read = socketChannel.read(readBuffer);
+    // 1. Read once (usually enough to fill buffer)
+    int read = socketChannel.read(readBuffer);
 
-      if (read == -1) {
-        logger.info("Connection closed by server (EOF)");
+    if (read == -1) {
+      logger.info("Connection closed by server (EOF)");
+      cleanupKeyAndTransport(selectionKey);
+      return;
+    }
+    if (read == 0) {
+      return;
+    }
 
-        cleanupKeyAndTransport(selectionKey);
-        return;  // Exit immediately
-      }
+    readBuffer.flip();
 
-      if (read == 0) {
-        break;  // nothing available right now
-      }
+    try {
+      while (readBuffer.remaining() >= TDS_HEADER_LENGTH) {
+        int length = Short.toUnsignedInt(readBuffer.getShort(readBuffer.position() + 2));
 
-      logger.trace("Read {} bytes (total: {})", read, readBuffer.position());
-
-      readBuffer.flip();
-
-      // 2. Process all complete packets in this read
-      while (readBuffer.remaining() >= TDS_HEADER_LENGTH) {  // use constant
-        int start = readBuffer.position();
-
-        // Quick peek at length without advancing position
-        int length = Short.toUnsignedInt(readBuffer.getShort(start + 2));
+        // Safety Check: Packet larger than buffer?
+        if (length > readBuffer.capacity()) {
+          throw new IOException("TDS Packet length (" + length + ") exceeds buffer capacity");
+        }
 
         if (readBuffer.remaining() < length) {
-          // Not enough for full packet → wait for next read
-          break;
+          break; // Wait for more data
         }
 
-        // 3. Extract complete packet
-        ByteBuffer packet = readBuffer.slice(start, length);
-        packet.position(0);
+        // Slice and process
+        ByteBuffer packet = readBuffer.slice().limit(length);
 
-        try {
-          Message message = buildMessageFromPacket(packet);
-          if (messageHandler != null) {
-            messageHandler.accept(message);
-          }
-        } catch (Exception e) {
-          logger.error("Failed to build message from packet", e);
-          return;
-        }
+        // Advance position immediately so we don't re-read this header
+        readBuffer.position(readBuffer.position() + length);
 
-        readBuffer.position(start + length);
+        Message message = buildMessageFromPacket(packet);
+        messageHandler.accept(message);
       }
-
-      readBuffer.compact();  // shift remaining bytes to front
-    }
-  }
-
-  /**
-   * Enable TLS on the existing connection and perform the TLS handshake.
-   *
-   * @throws IOException on TLS initialization or handshake failures
-   */
-  public void enableTls() throws IOException {
-    try {
-      // 1. Trust All Certs (Explicitly requested)
-      final TrustManager[] trustAllCerts = new TrustManager[]{
-          new X509TrustManager() {
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-              return new X509Certificate[0];
-            }
-
-            @Override
-            public void checkClientTrusted(final X509Certificate[] certs,
-                                           final String authType) {
-              // Trust all
-            }
-
-            @Override
-            public void checkServerTrusted(final X509Certificate[] certs,
-                                           final String authType) {
-              // Trust all
-            }
-          }
-      };
-
-      // 2. Init SSLContext (TLSv1.2)
-      final SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-      sslContext.init(null, trustAllCerts, new SecureRandom());
-
-      this.sslEngine = sslContext.createSSLEngine(host, port);
-      this.sslEngine.setUseClientMode(true);
-
-      final SSLSession session = sslEngine.getSession();
-      // Allocate buffers. peerNetData must hold TDS packets + TLS records.
-      final int bufferSize = Math.max(session.getPacketBufferSize(), 32768);
-
-      myNetData = ByteBuffer.allocate(bufferSize);
-      peerNetData = ByteBuffer.allocate(bufferSize);
-      peerAppData = ByteBuffer.allocate(session.getApplicationBufferSize());
-
-      // Prepare for reading
-      peerNetData.flip();
-
-      sslEngine.beginHandshake();
-      doHandshake();
-
-    } catch (NoSuchAlgorithmException | KeyManagementException e) {
-      throw new IOException("TLS initialization failed", e);
-    }
-  }
-
-  private void doHandshake() throws IOException {
-    SSLEngineResult result;
-    SSLEngineResult.HandshakeStatus handshakeStatus = sslEngine.getHandshakeStatus();
-    final ByteBuffer dummy = ByteBuffer.allocate(0);
-
-    // Helper buffer for reading the TDS header during handshake
-    final ByteBuffer headerBuf = ByteBuffer.allocate(TDS_HEADER_LENGTH);
-
-    while (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED
-        && handshakeStatus != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
-
-      switch (handshakeStatus) {
-        case NEED_UNWRAP:
-          // TLS records are wrapped inside TDS 0x12 packets.
-
-          // Only read from network if buffer has no remaining data.
-          if (!peerNetData.hasRemaining()) {
-            peerNetData.clear();
-            headerBuf.clear();
-
-            // 1. Read TDS header
-            readFully(headerBuf);
-            headerBuf.flip();
-
-            // 2. Parse length (bytes 2-3 big-endian)
-            final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
-            final int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
-
-            // 3. Read the TLS payload inside the TDS packet
-            peerNetData.limit(tlsDataLength);
-            readFully(peerNetData);
-            peerNetData.flip();
-          }
-
-          try {
-            result = sslEngine.unwrap(peerNetData, peerAppData);
-
-            // Handle BUFFER_UNDERFLOW (TLS record split across TDS packets)
-            if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-              peerNetData.compact();
-
-              // Read next TDS header
-              headerBuf.clear();
-              readFully(headerBuf);
-              headerBuf.flip();
-
-              final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
-              final int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
-
-              final int limit = peerNetData.position() + tlsDataLength;
-              if (limit > peerNetData.capacity()) {
-                throw new IOException("Buffer overflow while reading TLS payload");
-              }
-              peerNetData.limit(limit);
-              readFully(peerNetData);
-
-              peerNetData.flip(); // Retry unwrap
-            }
-          } catch (final SSLException e) {
-            throw new IOException("TLS Handshake unwrap failed", e);
-          }
-          handshakeStatus = result.getHandshakeStatus();
-          break;
-
-        case NEED_WRAP:
-          myNetData.clear();
-          // Reserve 8 bytes for TDS header
-          myNetData.position(TDS_HEADER_LENGTH);
-
-          try {
-            result = sslEngine.wrap(dummy, myNetData);
-            handshakeStatus = result.getHandshakeStatus();
-          } catch (final SSLException e) {
-            throw new IOException("TLS Handshake wrap failed", e);
-          }
-
-          myNetData.flip();
-          final int totalLength = myNetData.limit();
-
-          // Add TDS header (0x12 Pre-Login)
-          myNetData.put(0, (byte) PRELOGIN_PACKET_TYPE);
-          myNetData.put(1, (byte) 0x01);
-          myNetData.putShort(2, (short) totalLength);
-          myNetData.putShort(4, (short) 0x0000);
-          myNetData.put(6, (byte) 0x01);
-          myNetData.put(7, (byte) 0x00);
-
-          while (myNetData.hasRemaining()) {
-            socketChannel.write(myNetData);
-          }
-          break;
-
-        case NEED_TASK:
-          Runnable task;
-          while ((task = sslEngine.getDelegatedTask()) != null) {
-            task.run();
-          }
-          handshakeStatus = sslEngine.getHandshakeStatus();
-          break;
-
-        default:
-          throw new IllegalStateException(
-              "Invalid TLS Handshake status: " + handshakeStatus);
-      }
-    }
-  }
-
-  /**
-   * Reads a full TDS packet (including header) into the provided buffer.
-   * For TLS, this returns the decrypted application data.
-   *
-   * @param buffer destination buffer
-   * @throws IOException on I/O error or end-of-stream
-   */
-  public void readFully(final ByteBuffer buffer) throws IOException {
-    while (buffer.hasRemaining()) {
-      final int read = socketChannel.read(buffer);
-      if (read == -1) {
-        throw new IOException("Unexpected end of stream");
-      }
-    }
-  }
-
-  private void readDecryptedFully(final ByteBuffer target) throws IOException {
-    while (target.hasRemaining()) {
-      if (peerAppData.remaining() == 0) {
-        peerAppData.clear();
-
-        // Read more encrypted data if needed
-        if (!peerNetData.hasRemaining()) {
-          peerNetData.clear();
-          final int count = socketChannel.read(peerNetData);
-          if (count == -1) {
-            throw new IOException("Connection closed");
-          }
-          peerNetData.flip();
-        }
-
-        final SSLEngineResult result = sslEngine.unwrap(peerNetData, peerAppData);
-
-        if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-          peerNetData.compact();
-          final int count = socketChannel.read(peerNetData);
-          if (count == -1) {
-            throw new IOException("Connection closed");
-          }
-          peerNetData.flip();
-        }
-      }
-
-      // Copy available decrypted data to target
-      final int toCopy = Math.min(target.remaining(), peerAppData.remaining());
-      final byte[] tmp = new byte[toCopy];
-      peerAppData.get(tmp);
-      target.put(tmp);
+    } finally {
+      readBuffer.compact();
     }
   }
 
@@ -513,13 +275,6 @@ public class TcpTransport implements AutoCloseable {
    */
   public int getCurrentPacketSize() {
     return packetSize;
-  }
-
-  /**
-   * Disable TLS mode (does not close connection).
-   */
-  public void disableTls() {
-    sslEngine = null;
   }
 
   /**
@@ -619,12 +374,28 @@ public class TcpTransport implements AutoCloseable {
   }
 
   /**
+   * Reads a full TDS packet (including header) into the provided buffer.
+   * For TLS, this returns the decrypted application data.
+   *
+   * @param buffer destination buffer
+   * @throws IOException on I/O error or end-of-stream
+   */
+  public void readFully(final ByteBuffer buffer) throws IOException {
+    while (buffer.hasRemaining()) {
+      final int read = socketChannel.read(buffer);
+      if (read == -1) {
+        throw new IOException("Unexpected end of stream");
+      }
+    }
+  }
+
+  /**
    * Sends a complete logical message (may be split into multiple packets).
    *
    * @param message the message to send (usually built by the client layer)
    * @throws IOException if sending fails
    */
-  public void sendMessage(Message message) throws IOException {
+  public void sendMessageDirect(Message message) throws IOException {
     // If the message payload is small, send as single packet
     logger.trace("Sending message {}", logHex(message.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
@@ -638,7 +409,7 @@ public class TcpTransport implements AutoCloseable {
     );
 
     for (ByteBuffer buf : packetBuffers) {
-      write(buf);
+      writeDirect(buf);
       //  currentPacketNumber++;
     }
 
@@ -652,52 +423,33 @@ public class TcpTransport implements AutoCloseable {
    * @param buffer data to write
    * @throws IOException on I/O error
    */
-  public void write(ByteBuffer buffer) throws IOException {
-    if (!asyncMode) {
-      // Blocking path (connect/login phase)
-      if (sslEngine != null) {
-        writeEncrypted(buffer);
-      } else {
-        while (buffer.hasRemaining()) {
-          socketChannel.write(buffer);
-        }
-      }
-      return;
-    }
-
-    // Async mode: queue the buffer (copy to avoid mutation)
-    synchronized (writeLock) {
-      writeQueue.add(buffer);
-    }
-
-    // Tell event loop we have data to write
-    SelectionKey key = socketChannel.keyFor(selector);
-    if (key != null && key.isValid()) {
-      synchronized (writeLock) {
-        if (!writing) {
-          writing = true;
-          key.interestOpsOr(SelectionKey.OP_WRITE);
-          selector.wakeup(); // wake selector if sleeping
-        }
-      }
+  public void writeDirect(ByteBuffer buffer) throws IOException {
+    while (buffer.hasRemaining()) {
+      socketChannel.write(buffer);
     }
   }
 
-  private void writeEncrypted(final ByteBuffer appData) throws IOException {
-    while (appData.hasRemaining()) {
-      myNetData.clear();
+  /**
+   * Writes the provided buffer to the transport. The buffer's position will be advanced.
+   * In blocking mode: direct write.
+   * In async mode: queue it and enable OP_WRITE if needed.
+   *
+   * @param src data to write
+   * @throws IOException on I/O error
+   */
+  public void writeAsync(ByteBuffer src) throws IOException {
+    // Important: we must copy because caller may reuse the buffer!
+    ByteBuffer copy = src.duplicate(); // or src.slice() + rewind if you prefer
 
-      final SSLEngineResult result = sslEngine.wrap(appData, myNetData);
+    boolean wasEmpty = writeQueue.isEmpty();
+    writeQueue.offer(copy);
 
-      if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-        // Double buffer size and retry
-        myNetData = ByteBuffer.allocate(myNetData.capacity() * 2);
-        continue;
-      }
-
-      myNetData.flip();
-      while (myNetData.hasRemaining()) {
-        socketChannel.write(myNetData);
+    // Only one thread needs to turn OP_WRITE on
+    if (wasEmpty && pendingWrite.compareAndSet(false, true)) {
+      SelectionKey key = socketChannel.keyFor(selector);
+      if (key != null && key.isValid()) {
+        key.interestOpsOr(SelectionKey.OP_WRITE);
+        selector.wakeup();
       }
     }
   }
@@ -705,19 +457,8 @@ public class TcpTransport implements AutoCloseable {
   // Very important cleanup
   @Override
   public void close() throws IOException {
-    asyncMode = false;
-    if (selectionKey != null) {
-      selectionKey.cancel();
-    }
     if (selector != null) {
       selector.close();
-    }
-    if (sslEngine != null) {
-      try {
-        sslEngine.closeOutbound();
-      } catch (Exception ignored) {
-        logger.warn("Error during SSL engine close", ignored);
-      }
     }
     socketChannel.close();
   }
@@ -814,7 +555,7 @@ public class TcpTransport implements AutoCloseable {
   }
 
   // Helper for hex dumping
-  private String  logHex(ByteBuffer buffer) {
+  private String logHex(ByteBuffer buffer) {
 
     StringBuilder sb = new StringBuilder();
     sb.append(" (Length: ").append(buffer.remaining()).append(")\n");
@@ -835,4 +576,72 @@ public class TcpTransport implements AutoCloseable {
     return sb.toString();
   }
 
+  /**
+   * Performs a TLS handshake on the underlying socket channel to establish
+   * an encrypted session with the remote host.
+   *
+   * <p>This delegates to the {@link TlsHandshake} helper which performs the
+   * protocol negotiation and any necessary I/O. The call may block until the
+   * handshake completes or fails.</p>
+   *
+   * @throws IOException if an I/O error occurs during the handshake
+   * @throws NoSuchAlgorithmException if the required SSL/TLS algorithm is not available
+   * @throws KeyManagementException if there is an error initializing key management for TLS
+   */
+  public void tlsHandshake() throws IOException, NoSuchAlgorithmException, KeyManagementException {
+    tlsHandshake.tlsHandshake(host, port, socketChannel);
+  }
+
+  /**
+   * Finalize TLS setup and release handshake resources.
+   *
+   * <p>Call this after a successful {@link #tlsHandshake()} to indicate that the
+   * TLS handshake has completed and handshake helper resources can be closed.
+   * After this call, the transport is expected to use the established TLS session
+   * for subsequent I/O. Any I/O errors while releasing handshake resources will
+   * be reported via the thrown {@link IOException}.</p>
+   *
+   * @throws IOException if closing handshake resources fails
+   */
+  public void tlsComplete() throws IOException {
+    tlsHandshake.close();
+  }
+
+  /**
+   * Sends a logical TDS message over the established TLS session.
+   *
+   * <p>The message is split into one or more TDS packets via
+   * {@link #buildPackets(byte, byte, int, ByteBuffer, short, int)}
+   * using the current packet size ({@link #getCurrentPacketSize()}).
+   * Each resulting packet is then encrypted and written
+   * to the underlying {@link java.nio.channels.SocketChannel} via the handshake helper.
+   *
+   * <p>Preconditions:
+   * <ul>
+   *   <li>A successful TLS handshake must have been performed so that
+   *   {@link #tlsHandshake} can encrypt data.</li>
+   *   <li>The {@code message} payload buffer should be positioned appropriately;
+   *   this method does not rewind the caller's buffer.</li>
+   * </ul>
+   *
+   * @param message the logical message to send (over TLS)
+   * @throws IOException if encryption or socket I/O fails while sending packets
+   */
+  public void sendMessageEncrypted(Message message) throws IOException {
+
+    logger.trace("Sending message {}", logHex(message.getPayload()));
+    // If large, split into multiple packets (max ~4096 bytes each)
+    List<ByteBuffer> packetBuffers = buildPackets(
+        message.getPacketType(),
+        message.getStatusFlags(),
+        message.getSpid(),
+        message.getPayload(),
+        (short) 1,
+        getCurrentPacketSize()
+    );
+
+    for (ByteBuffer buffer : packetBuffers) {
+      tlsHandshake.writeEncrypted(buffer, socketChannel);
+    }
+  }
 }
