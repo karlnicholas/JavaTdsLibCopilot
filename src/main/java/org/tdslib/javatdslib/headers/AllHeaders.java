@@ -9,14 +9,14 @@ import java.nio.ByteOrder;
  */
 public class AllHeaders {
 
-  private final org.tdslib.javatdslib.tds.headers.TdsHeader[] headers;
+  private final TdsHeader[] headers;
 
   /**
    * Create an AllHeaders container wrapping the supplied TDS headers.
    *
    * @param headers zero or more TdsHeader instances to include
    */
-  public AllHeaders(org.tdslib.javatdslib.tds.headers.TdsHeader... headers) {
+  public AllHeaders(TdsHeader... headers) {
     this.headers = headers;
   }
 
@@ -25,7 +25,7 @@ public class AllHeaders {
    */
   public byte[] toBytes() {
     int dataLength = 0;
-    for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
+    for (TdsHeader h : headers) {
       dataLength += h.getLength();
     }
 
@@ -36,7 +36,7 @@ public class AllHeaders {
 
     buffer.putInt(totalLength);  // TotalLength (includes itself)
 
-    for (org.tdslib.javatdslib.tds.headers.TdsHeader h : headers) {
+    for (TdsHeader h : headers) {
       h.write(buffer);
     }
 

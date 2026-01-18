@@ -2,7 +2,7 @@ package org.tdslib.javatdslib;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.transport.Message;
+import org.tdslib.javatdslib.packets.Message;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;

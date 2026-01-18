@@ -7,7 +7,7 @@ import java.nio.ByteOrder;
  * Transaction Descriptor Header (type 0x0002) – required/strongly recommended for SQLBatch.
  * Used for MARS and transaction context.
  */
-public class TransactionDescriptorHeader extends org.tdslib.javatdslib.tds.headers.TdsHeader {
+public class TransactionDescriptorHeader extends TdsHeader {
 
   private final long transactionDescriptor;      // ULONGLONG (8 bytes)
   private final int outstandingRequestCount;     // DWORD (4 bytes)

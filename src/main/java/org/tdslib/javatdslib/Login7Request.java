@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.transport.Message;
+import org.tdslib.javatdslib.packets.Message;
 import org.tdslib.javatdslib.packets.PacketType;
 
 import java.nio.ByteBuffer;

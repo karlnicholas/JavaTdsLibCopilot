@@ -3,7 +3,7 @@ package org.tdslib.javatdslib;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.transport.Message;
+import org.tdslib.javatdslib.packets.Message;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;

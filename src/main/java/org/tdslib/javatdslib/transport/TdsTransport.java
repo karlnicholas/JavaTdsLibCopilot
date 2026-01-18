@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.Message;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

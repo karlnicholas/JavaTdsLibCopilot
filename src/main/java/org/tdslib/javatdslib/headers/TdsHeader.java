@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.tds.headers;
+package org.tdslib.javatdslib.headers;
 
 import java.nio.ByteBuffer;
 
