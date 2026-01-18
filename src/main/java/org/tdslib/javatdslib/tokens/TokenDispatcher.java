@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.transport.Message;
@@ -23,7 +25,7 @@ import java.util.Map;
  * Processes one Message (one packet) at a time — no stream across packets.
  */
 public class TokenDispatcher {
-
+  private final Logger logger = LoggerFactory.getLogger(TokenDispatcher.class);
   private final Map<Byte, TokenParser> parsers = new HashMap<>();
 
   /**
@@ -80,9 +82,9 @@ public class TokenDispatcher {
         throw new IllegalStateException(err);
       }
 
+      logger.debug("Parsing token type " + TokenType.fromValue(tokenTypeByte).name());
       // Parser consumes exactly the bytes for this token
       final Token token = parser.parse(payload, tokenTypeByte, context, queryContext);
-
       // Notify the visitor (caller decides what to do)
       visitor.onToken(token);
     }

@@ -427,7 +427,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
     currentPublisher = queryReactive(queryMsg);
 
-    transport.sendMessage(queryMsg);
+//    transport.sendMessage(queryMsg);
     return currentPublisher;
   }
 
