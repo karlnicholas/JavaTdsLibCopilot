@@ -626,7 +626,7 @@ public class TcpTransport implements AutoCloseable {
    */
   public void sendMessage(Message message) throws IOException {
     // If the message payload is small, send as single packet
-    logHex("Sending message", message.getPayload());
+    logger.trace("Sending message {}", logHex(message.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
         message.getPacketType(),
@@ -814,13 +814,10 @@ public class TcpTransport implements AutoCloseable {
   }
 
   // Helper for hex dumping
-  private void logHex(String label, ByteBuffer buffer) {
-    if (!logger.isDebugEnabled()) {
-      return;
-    }
+  private String  logHex(ByteBuffer buffer) {
 
     StringBuilder sb = new StringBuilder();
-    sb.append(label).append(" (Length: ").append(buffer.remaining()).append(")\n");
+    sb.append(" (Length: ").append(buffer.remaining()).append(")\n");
 
     int pos = buffer.position();
     int i = 0;
@@ -835,7 +832,7 @@ public class TcpTransport implements AutoCloseable {
 
     // Rewind so the actual write operation can read it again
     buffer.position(pos);
-    logger.debug(sb.toString());
+    return sb.toString();
   }
 
 }

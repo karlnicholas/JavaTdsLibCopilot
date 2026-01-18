@@ -66,7 +66,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         }
         RowToken row = (RowToken) token;
         subscriber.onNext(new RowWithMetadata(row.getColumnData(), currentMetadata.getColumns()));
-        logger.debug("Row added ({} columns)", row.getColumnData().size());
+        logger.trace("Row added ({} columns)", row.getColumnData().size());
         break;
 
       case DONE:
@@ -105,7 +105,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         break;
 
       default:
-        logger.debug("Unhandled token type: 0x{:02X}", token.getType());
+        logger.warn("Unhandled token type: 0x{:02X}", token.getType());
     }
   }
 

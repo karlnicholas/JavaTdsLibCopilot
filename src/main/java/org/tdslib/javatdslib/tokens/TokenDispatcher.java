@@ -82,7 +82,7 @@ public class TokenDispatcher {
         throw new IllegalStateException(err);
       }
 
-      logger.debug("Parsing token type " + TokenType.fromValue(tokenTypeByte).name());
+      logger.trace("Parsing token type " + TokenType.fromValue(tokenTypeByte).name());
       // Parser consumes exactly the bytes for this token
       final Token token = parser.parse(payload, tokenTypeByte, context, queryContext);
       // Notify the visitor (caller decides what to do)
