@@ -250,10 +250,8 @@ public class TlsHandshake {
    *
    * <p>This sends a TLS close_notify when the engine is driven; it does not close
    * the underlying SocketChannel. Callers are responsible for closing the socket.
-   *
-   * @throws IOException if an I/O error occurs while initiating close
    */
-  public void close() throws IOException {
+  public void close() {
     if (sslEngine != null) {
       sslEngine.closeOutbound();
     }

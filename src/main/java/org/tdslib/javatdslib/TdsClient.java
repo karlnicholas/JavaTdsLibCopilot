@@ -31,7 +31,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   private final TdsTransport transport;
   private final TokenDispatcher tokenDispatcher;
 
-  private boolean connected = false;
+  private boolean connected;
 
   private String currentDatabase = null;
   private String currentLanguage = "us_english"; // Default
@@ -107,10 +107,10 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    *
    * @throws IOException on IO error
    */
-  private void preLoginInternal() throws IOException {
+  private void preLoginInternal() throws IOException, NoSuchAlgorithmException, KeyManagementException {
     TdsMessage msg = TdsMessage.createRequest(
         PacketType.PRE_LOGIN.getValue(),
-        buildPreLoginPayload(false, false)
+        buildPreLoginPayload()
     );
 
     transport.sendMessageDirect(msg);
@@ -127,7 +127,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     }
 
     if (preLoginResponse.requiresEncryption()) {
-      enableTls();
+      transport.tlsHandshake();
     }
   }
 
@@ -155,11 +155,9 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   /**
    * Build PreLogin payload. Placeholder builder using PreLoginPayload helper.
    *
-   * @param encryptIfNeeded whether to request encryption
-   * @param supportMars     whether to advertise MARS support
    * @return payload buffer
    */
-  private ByteBuffer buildPreLoginPayload(boolean encryptIfNeeded, boolean supportMars) {
+  private ByteBuffer buildPreLoginPayload() {
     PreLoginPayload preLoginPayload = new PreLoginPayload(false);
     return preLoginPayload.buildBuffer();
   }
@@ -279,7 +277,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-  public Flow.Publisher<RowWithMetadata> queryAsync(String sql) throws IOException {
+  public Flow.Publisher<RowWithMetadata> queryAsync(String sql) {
     if (!connected) {
       throw new IllegalStateException("Not connected or not in async mode");
     }
@@ -335,16 +333,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
       resetToDefaults();
     }
 
-  }
-
-  /**
-   * Enable TLS on the transport (placeholder).
-   *
-   * @throws IOException when TLS setup fails or unsupported
-   */
-  private void enableTls() throws IOException {
-    // Implement TLS handshake
-    throw new UnsupportedOperationException("TLS not yet implemented");
   }
 
   /**

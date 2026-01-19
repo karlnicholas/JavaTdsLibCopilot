@@ -168,8 +168,4 @@ public interface ConnectionContext {
    */
   void resetToDefaults();
 
-  // === Optional future extensions ===
-  // void addRoutingInfo(RoutingInfo info);
-  // byte[] getTransactionId();
-  // void setTransactionId(byte[] id);
 }

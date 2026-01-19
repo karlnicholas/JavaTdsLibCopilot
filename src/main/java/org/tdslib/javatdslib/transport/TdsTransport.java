@@ -29,6 +29,7 @@ import java.util.function.Consumer;
 public class TdsTransport implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
+  private static final String SENDING_MESSAGE = "Sending TDS message {}";
 
   private final SocketChannel socketChannel;
   private final String host;
@@ -96,7 +97,7 @@ public class TdsTransport implements AutoCloseable {
    * The loop waits for selector events and dispatches readable/writable
    * notifications to the attached transport instance.
    */
-  private void startEventLoop() throws IOException {
+  private void startEventLoop() {
     Thread eventLoopThread = new Thread(() -> {
       while (!Thread.currentThread().isInterrupted()) {
         try {
@@ -397,8 +398,7 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException if sending fails
    */
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
-    // If the tdsMessage payload is small, send as single packet
-    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
+    logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
         tdsMessage.getPacketType(),
@@ -423,8 +423,7 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException if sending fails
    */
   public void sendMessageAsync(TdsMessage tdsMessage) throws IOException {
-    // If the tdsMessage payload is small, send as single packet
-    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
+    logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
         tdsMessage.getPacketType(),
@@ -461,9 +460,8 @@ public class TdsTransport implements AutoCloseable {
    * In async mode: queue it and enable OP_WRITE if needed.
    *
    * @param src data to write
-   * @throws IOException on I/O error
    */
-  public void writeAsync(ByteBuffer src) throws IOException {
+  public void writeAsync(ByteBuffer src) {
     SelectionKey key;
     // Important: we must copy because caller may reuse the buffer!
     ByteBuffer copy = src.duplicate(); // or src.slice() + rewind if you prefer
@@ -628,9 +626,8 @@ public class TdsTransport implements AutoCloseable {
    * for subsequent I/O. Any I/O errors while releasing handshake resources will
    * be reported via the thrown {@link IOException}.</p>
    *
-   * @throws IOException if closing handshake resources fails
    */
-  public void tlsComplete() throws IOException {
+  public void tlsComplete() {
     tlsHandshake.close();
   }
 
@@ -655,8 +652,7 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException if encryption or socket I/O fails while sending packets
    */
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
-
-    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
+    logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
         tdsMessage.getPacketType(),

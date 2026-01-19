@@ -107,11 +107,7 @@ public final class Login7Payload extends Payload {
     }
 
     // CRITICAL FIX: Update OptionFlags3 based on whether extensions exist
-    if (extBytes.length > 0) {
-      optionFlags3.setExtensionUsed(true);
-    } else {
-      optionFlags3.setExtensionUsed(false);
-    }
+    optionFlags3.setExtensionUsed(extBytes.length > 0);
 
     // 2. Calculate Offsets (Strict TDS Order)
     int currentOffset = FIXED_HEADER_SIZE;
@@ -258,8 +254,7 @@ public final class Login7Payload extends Payload {
     if (hasExtensions) {
       // Determine total length including terminator
       int total = 0;
-      for (int i = 0; i < buffers.size(); i++) {
-        ByteBuffer b = buffers.get(i);
+      for (ByteBuffer b : buffers) {
         total += b.remaining();
       }
 
@@ -267,8 +262,7 @@ public final class Login7Payload extends Payload {
       total += 1;
       byte[] out = new byte[total];
       int pos = 0;
-      for (int i = 0; i < buffers.size(); i++) {
-        ByteBuffer bb = buffers.get(i);
+      for (ByteBuffer bb : buffers) {
         byte[] tmp = toBytes(bb);
         System.arraycopy(tmp, 0, out, pos, tmp.length);
         pos += tmp.length;
