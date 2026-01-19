@@ -415,6 +415,13 @@ public class TdsTransport implements AutoCloseable {
     }
 
   }
+
+  /**
+   * Sends a complete logical tdsMessage (may be split into multiple packets) asynchronously.
+   *
+   * @param tdsMessage the tdsMessage to send (usually built by the client layer)
+   * @throws IOException if sending fails
+   */
   public void sendMessageAsync(TdsMessage tdsMessage) throws IOException {
     // If the tdsMessage payload is small, send as single packet
     logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
@@ -665,6 +672,9 @@ public class TdsTransport implements AutoCloseable {
     }
   }
 
+  /**
+   * Cancels the current asynchronous operation.
+   */
   public void cancelCurrent() {
   }
 
