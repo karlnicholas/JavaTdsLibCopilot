@@ -13,12 +13,12 @@ public class PacketStatus {
   public static final byte NORMAL = 0x00;
 
   /**
-   * End of Message. The last packet in the message.
+   * End of TdsMessage. The last packet in the message.
    */
   public static final byte EOM = 0x01;
 
   /**
-   * Packet/Message to be ignored.
+   * Packet/TdsMessage to be ignored.
    */
   public static final byte IGNORE = 0x02;
 

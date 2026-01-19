@@ -3,7 +3,7 @@ package org.tdslib.javatdslib;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.packets.Message;
+import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
@@ -108,14 +108,14 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @throws IOException on IO error
    */
   private void preLoginInternal() throws IOException {
-    Message msg = Message.createRequest(
+    TdsMessage msg = TdsMessage.createRequest(
         PacketType.PRE_LOGIN.getValue(),
         buildPreLoginPayload(false, false)
     );
 
     transport.sendMessageDirect(msg);
 
-    List<Message> responses = transport.receiveFullResponse();
+    List<TdsMessage> responses = transport.receiveFullResponse();
 
     PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
 
@@ -143,11 +143,11 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
         hostname, username, password, database, appName, serverName, language
     );
 
-    Message loginMsg = Message.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
+    TdsMessage loginMsg = TdsMessage.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
 
     transport.sendMessageEncrypted(loginMsg);
 
-    List<Message> responses = transport.receiveFullResponse();
+    List<TdsMessage> responses = transport.receiveFullResponse();
 
     return processLoginResponse(responses);
   }
@@ -190,7 +190,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @param packets messages returned from server for prelogin
    * @return parsed PreLoginResponse
    */
-  private PreLoginResponse processPreLoginResponse(List<Message> packets) {
+  private PreLoginResponse processPreLoginResponse(List<TdsMessage> packets) {
     ByteBuffer combined = combinePayloads(packets);
     PreLoginResponse response = new PreLoginResponse();
 
@@ -253,11 +253,11 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @param packets received messages that contain login-related tokens
    * @return populated LoginResponse reflecting login tokens and errors
    */
-  private LoginResponse processLoginResponse(List<Message> packets) {
+  private LoginResponse processLoginResponse(List<TdsMessage> packets) {
     LoginResponse loginResponse = new LoginResponse(this);
     QueryContext queryContext = new QueryContext();
 
-    for (Message msg : packets) {
+    for (TdsMessage msg : packets) {
       setSpid(msg.getSpid());
       // Dispatch tokens to the visitor (which handles ENVCHANGE, LOGINACK, errors, etc.)
       tokenDispatcher.processMessage(msg, this, queryContext, loginResponse);
@@ -296,7 +296,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     payload.flip();
 
     // Create SQL_BATCH message
-    Message queryMsg = Message.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
 
     // 2. Instead of blocking send/receive:
     //    → queue the message, register OP_WRITE if needed
@@ -307,31 +307,31 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     return currentPublisher;
   }
 
-  private QueryResponseTokenVisitor queryReactive(Message queryMsg) {
+  private QueryResponseTokenVisitor queryReactive(TdsMessage queryMsg) {
 
     return new QueryResponseTokenVisitor(this, transport, queryMsg);
   }
 
   /**
-   * Invoked by the transport when a TDS message arrives.
+   * Invoked by the transport when a TDS tdsMessage arrives.
    *
-   * <p>This method dispatches tokens contained in the provided message to the
+   * <p>This method dispatches tokens contained in the provided tdsMessage to the
    * currently active token visitor (via {@link TokenDispatcher}). The visitor
    * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
-   * row publishing, errors, etc.). After dispatching, if the message signals
+   * row publishing, errors, etc.). After dispatching, if the tdsMessage signals
    * a connection-level reset (resetConnection flag) the client's session state
    * is reset to library defaults.
    *
-   * @param message the received {@link Message}; expected to be non-null and
+   * @param tdsMessage the received {@link TdsMessage}; expected to be non-null and
    *                containing tokens to process
    */
-  public void onMessagesReceived(Message message) {
+  public void onMessagesReceived(TdsMessage tdsMessage) {
 
     // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
-    tokenDispatcher.processMessage(message, this, new QueryContext(), currentPublisher);
+    tokenDispatcher.processMessage(tdsMessage, this, new QueryContext(), currentPublisher);
 
-    // Still handle reset flag separately (visitor doesn't cover message-level flags)
-    if (message.isResetConnection()) {
+    // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
+    if (tdsMessage.isResetConnection()) {
       resetToDefaults();
     }
 
@@ -354,13 +354,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @param packets messages whose payloads should be merged
    * @return combined ByteBuffer ready for reading
    */
-  private ByteBuffer combinePayloads(List<Message> packets) {
+  private ByteBuffer combinePayloads(List<TdsMessage> packets) {
     int total = packets.stream()
         .mapToInt(m -> m.getPayload().remaining())
         .sum();
 
     ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
-    for (Message m : packets) {
+    for (TdsMessage m : packets) {
       combined.put(m.getPayload().duplicate());
     }
     combined.flip();

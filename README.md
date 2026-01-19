@@ -11,7 +11,7 @@ The TDS protocol is used for communication between SQL Server clients and server
 - `src/main/java/com/microsoft/data/tools/tdslib/` - Main source code
   - `buffer/` - Buffer classes for type conversion
   - `io/` - Connection-related classes
-  - `messages/` - Logical message formats
+  - `tdsMessages/` - Logical tdsMessage formats
   - `packets/` - Packet handling classes
   - `payloads/` - Message payloads
   - `tokens/` - Token classes for server responses

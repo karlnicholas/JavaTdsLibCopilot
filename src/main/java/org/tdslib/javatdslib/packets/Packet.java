@@ -102,7 +102,7 @@ public class Packet {
   // --- Status Flags ---
 
   /**
-   * Returns true when this packet has EOM (End Of Message).
+   * Returns true when this packet has EOM (End Of TdsMessage).
    *
    * @return true if last packet in logical message
    */

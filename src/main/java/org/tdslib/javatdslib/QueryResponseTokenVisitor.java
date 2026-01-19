@@ -2,7 +2,7 @@ package org.tdslib.javatdslib;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.Message;
+import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
@@ -24,10 +24,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata>, TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
+  private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
   private final EnvChangeTokenVisitor envChangeVisitor;
   private final TdsTransport transport;
-  private final Message queryMessage;
+  private final TdsMessage queryTdsMessage;
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
@@ -46,10 +47,10 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   public QueryResponseTokenVisitor(
           ConnectionContext connectionContext,
           TdsTransport transport,
-          Message queryMessage) {
+          TdsMessage queryTdsMessage) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
     this.transport = transport;
-    this.queryMessage = queryMessage;
+    this.queryTdsMessage = queryTdsMessage;
   }
 
   @Override
@@ -83,8 +84,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       case INFO:
         InfoToken info = (InfoToken) token;
-        logger.info("Server message [{}] (state {}): {}",
-            info.getNumber(), info.getState(), info.getMessage());
+        logger.info(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
 
         if (info.isError()) {
           hasError = true;
@@ -92,8 +92,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         break;
       case ERROR:
         ErrorToken error = (ErrorToken) token;
-        logger.info("Server message [{}] (state {}): {}",
-            error.getNumber(), error.getState(), error.getMessage());
+        logger.info(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
 
         if (error.isError()) {
           hasError = true;
@@ -105,7 +104,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         break;
 
       default:
-        logger.warn("Unhandled token type: 0x{:02X}", token.getType());
+        logger.warn("Unhandled token type: {}", token.getType());
     }
   }
 
@@ -132,7 +131,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       public void request(long n) {
         if (!messageSent.compareAndSet(true, true)) {
           try {
-            transport.sendMessageDirect(queryMessage);
+            transport.sendMessageAsync(queryTdsMessage);
           } catch (IOException e) {
             throw new RuntimeException(e);
           }
@@ -141,7 +140,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       @Override
       public void cancel() {
-
+        transport.cancelCurrent();
       }
     });
     // Store the current subscriber for use in the response handling

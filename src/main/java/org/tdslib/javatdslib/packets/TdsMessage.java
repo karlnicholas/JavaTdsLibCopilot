@@ -9,7 +9,7 @@ import java.util.Objects;
  * Represents a single TDS (Tabular Data Stream) packet/message.
  * Immutable once created.
  */
-public final class Message {
+public final class TdsMessage {
 
   private final byte packetType;
   private final byte statusFlags;
@@ -35,7 +35,7 @@ public final class Message {
    * @param receivedAt   Timestamp marker (nanotime-based) when the packet was received, or 0
    * @param traceContext Optional trace context string
    */
-  public Message(
+  public TdsMessage(
       byte packetType,
       byte statusFlags,
       int packetLength,
@@ -69,10 +69,10 @@ public final class Message {
    *
    * @param packetType TDS packet type (e.g. 0x12 for PreLogin, 0x10 for Login7)
    * @param payload    The payload buffer (positioned at 0)
-   * @return New Message instance ready to send
+   * @return New TdsMessage instance ready to send
    */
-  public static Message createRequest(byte packetType, ByteBuffer payload) {
-    return new Message(
+  public static TdsMessage createRequest(byte packetType, ByteBuffer payload) {
+    return new TdsMessage(
         packetType,
         (byte) 0x01,                  // EOM = true (single packet request)
         payload.capacity() + 8,
@@ -89,13 +89,13 @@ public final class Message {
    * The caller must manage packet number and status flags across packets.
    * Usually used via TdsPacketWriter, not directly.
    */
-  public static Message createMultiPacketPart(
+  public static TdsMessage createMultiPacketPart(
       byte packetType,
       byte statusFlags,
       short packetNumber,
       ByteBuffer payload) {
 
-    return new Message(
+    return new TdsMessage(
         packetType,
         statusFlags,
         payload.capacity() + 8,
@@ -197,7 +197,7 @@ public final class Message {
 
   @Override
   public String toString() {
-    String fmt = "Message{type=%s (0x%02X), packet=%d, length=%d, spid=%d,"
+    String fmt = "TdsMessage{type=%s (0x%02X), packet=%d, length=%d, spid=%d,"
         + " last=%b, reset=%b, payload=%d bytes}";
     return String.format(
         fmt,

@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
-import org.tdslib.javatdslib.packets.Message;
+import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;
@@ -22,7 +22,7 @@ import java.util.Map;
 
 /**
  * Dispatches parsing of individual TDS tokens from a single message payload.
- * Processes one Message (one packet) at a time — no stream across packets.
+ * Processes one TdsMessage (one packet) at a time — no stream across packets.
  */
 public class TokenDispatcher {
   private final Logger logger = LoggerFactory.getLogger(TokenDispatcher.class);
@@ -58,17 +58,17 @@ public class TokenDispatcher {
   }
 
   /**
-   * Processes all tokens in a single TDS message (one packet's payload).
+   * Processes all tokens in a single TDS tdsMessage (one packet's payload).
    * Calls the visitor for each successfully parsed token.
    *
-   * @param message The TDS packet/message to parse
+   * @param tdsMessage The TDS packet/tdsMessage to parse
    * @param context Connection context for state updates (e.g., packet size,
    *                database)
    * @param visitor Callback to handle each parsed token
    */
-  public void processMessage(final Message message, final ConnectionContext context,
+  public void processMessage(final TdsMessage tdsMessage, final ConnectionContext context,
                              final QueryContext queryContext, final TokenVisitor visitor) {
-    final ByteBuffer payload = message.getPayload();
+    final ByteBuffer payload = tdsMessage.getPayload();
     payload.order(ByteOrder.LITTLE_ENDIAN);
 
     while (payload.hasRemaining()) {
@@ -89,8 +89,8 @@ public class TokenDispatcher {
       visitor.onToken(token);
     }
 
-    // Handle resetConnection flag after all tokens in this message
-    if (message.isResetConnection()) {
+    // Handle resetConnection flag after all tokens in this tdsMessage
+    if (tdsMessage.isResetConnection()) {
       context.resetToDefaults();
     }
   }

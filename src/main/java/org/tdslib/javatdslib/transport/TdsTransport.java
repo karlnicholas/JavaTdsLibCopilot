@@ -2,7 +2,7 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.Message;
+import org.tdslib.javatdslib.packets.TdsMessage;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -46,7 +46,7 @@ public class TdsTransport implements AutoCloseable {
   // ── Read state (packet framing) ───────────────────────
   private ByteBuffer readBuffer = ByteBuffer.allocate(packetSize);
 
-  private final Consumer<Message> messageHandler;   // callback from TdsClient
+  private final Consumer<TdsMessage> messageHandler;   // callback from TdsClient
   private final Consumer<Throwable> errorHandler;  // passed by library user
   private final TlsHandshake tlsHandshake;
 
@@ -60,7 +60,7 @@ public class TdsTransport implements AutoCloseable {
   public TdsTransport(
       final String host,
       final int port,
-      Consumer<Message> messageHandler,
+      Consumer<TdsMessage> messageHandler,
       Consumer<Throwable> errorHandler
   ) throws IOException {
     this.host = host;
@@ -200,7 +200,7 @@ public class TdsTransport implements AutoCloseable {
 
   /**
    * Handle readable selector events: read available bytes, assemble full TDS packets,
-   * convert them into Message objects and deliver to the registered message handler.
+   * convert them into TdsMessage objects and deliver to the registered message handler.
    * This method will emit an EOF message and stop the transport if the remote closes
    * the connection, and will stop delivering messages on unrecoverable parse errors.
    *
@@ -240,8 +240,8 @@ public class TdsTransport implements AutoCloseable {
         // Advance position immediately so we don't re-read this header
         readBuffer.position(readBuffer.position() + length);
 
-        Message message = buildMessageFromPacket(packet);
-        messageHandler.accept(message);
+        TdsMessage tdsMessage = buildMessageFromPacket(packet);
+        messageHandler.accept(tdsMessage);
       }
     } finally {
       readBuffer.compact();
@@ -286,13 +286,13 @@ public class TdsTransport implements AutoCloseable {
    * @return list of all packets that form the logical response
    * @throws IOException if any read fails
    */
-  public List<Message> receiveFullResponse() throws IOException {
-    List<Message> messages = new ArrayList<>();
+  public List<TdsMessage> receiveFullResponse() throws IOException {
+    List<TdsMessage> tdsMessages = new ArrayList<>();
 
-    Message packet;
+    TdsMessage packet;
     do {
       packet = receiveSinglePacket();
-      messages.add(packet);
+      tdsMessages.add(packet);
 
       // Optional: handle reset connection flag as soon as we see it
       if (packet.isResetConnection()) {
@@ -300,19 +300,19 @@ public class TdsTransport implements AutoCloseable {
       }
     } while (!packet.isLastPacket());
 
-    return messages;
+    return tdsMessages;
   }
 
   /**
-   * Receives **one single TDS packet** and wraps it as a Message.
+   * Receives **one single TDS packet** and wraps it as a TdsMessage.
    *
    * <p>This is the most basic receive operation.
    * For full logical responses, the caller should loop until isLastPacket().
    *
-   * @return one complete TDS packet as Message
+   * @return one complete TDS packet as TdsMessage
    * @throws IOException if reading fails
    */
-  public Message receiveSinglePacket() throws IOException {
+  public TdsMessage receiveSinglePacket() throws IOException {
     // The packet reader handles header + payload reading
     ByteBuffer rawPacket = readRawPacket();
 
@@ -330,7 +330,7 @@ public class TdsTransport implements AutoCloseable {
     rawPacket.position(8);
     ByteBuffer payload = rawPacket.slice().limit(length - 8);
 
-    return new Message(
+    return new TdsMessage(
         type,
         status,
         length,
@@ -391,20 +391,20 @@ public class TdsTransport implements AutoCloseable {
   }
 
   /**
-   * Sends a complete logical message (may be split into multiple packets).
+   * Sends a complete logical tdsMessage (may be split into multiple packets).
    *
-   * @param message the message to send (usually built by the client layer)
+   * @param tdsMessage the tdsMessage to send (usually built by the client layer)
    * @throws IOException if sending fails
    */
-  public void sendMessageDirect(Message message) throws IOException {
-    // If the message payload is small, send as single packet
-    logger.trace("Sending message {}", logHex(message.getPayload()));
+  public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
+    // If the tdsMessage payload is small, send as single packet
+    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
-        message.getPacketType(),
-        message.getStatusFlags(),
-        message.getSpid(),
-        message.getPayload(),
+        tdsMessage.getPacketType(),
+        tdsMessage.getStatusFlags(),
+        tdsMessage.getSpid(),
+        tdsMessage.getPayload(),
         (short) 1,
         getCurrentPacketSize()
     );
@@ -414,6 +414,24 @@ public class TdsTransport implements AutoCloseable {
       //  currentPacketNumber++;
     }
 
+  }
+  public void sendMessageAsync(TdsMessage tdsMessage) throws IOException {
+    // If the tdsMessage payload is small, send as single packet
+    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
+    // If large, split into multiple packets (max ~4096 bytes each)
+    List<ByteBuffer> packetBuffers = buildPackets(
+        tdsMessage.getPacketType(),
+        tdsMessage.getStatusFlags(),
+        tdsMessage.getSpid(),
+        tdsMessage.getPayload(),
+        (short) 1,
+        getCurrentPacketSize()
+    );
+
+    for (ByteBuffer buf : packetBuffers) {
+      writeAsync(buf);
+      //  currentPacketNumber++;
+    }
   }
 
   /**
@@ -439,6 +457,7 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException on I/O error
    */
   public void writeAsync(ByteBuffer src) throws IOException {
+    SelectionKey key;
     // Important: we must copy because caller may reuse the buffer!
     ByteBuffer copy = src.duplicate(); // or src.slice() + rewind if you prefer
 
@@ -447,7 +466,7 @@ public class TdsTransport implements AutoCloseable {
 
     // Only one thread needs to turn OP_WRITE on
     if (wasEmpty && pendingWrite.compareAndSet(false, true)) {
-      SelectionKey key = socketChannel.keyFor(selector);
+      key = socketChannel.keyFor(selector);
       if (key != null && key.isValid()) {
         key.interestOpsOr(SelectionKey.OP_WRITE);
         selector.wakeup();
@@ -527,7 +546,7 @@ public class TdsTransport implements AutoCloseable {
     return packets;
   }
 
-  private Message buildMessageFromPacket(ByteBuffer packet) {
+  private TdsMessage buildMessageFromPacket(ByteBuffer packet) {
     packet.mark();
 
     final byte type   = packet.get();
@@ -543,7 +562,7 @@ public class TdsTransport implements AutoCloseable {
     ByteBuffer payload = packet.slice();
     payload.limit(length - 8);
 
-    return new Message(
+    return new TdsMessage(
         type,
         status,
         length,
@@ -609,9 +628,9 @@ public class TdsTransport implements AutoCloseable {
   }
 
   /**
-   * Sends a logical TDS message over the established TLS session.
+   * Sends a logical TDS tdsMessage over the established TLS session.
    *
-   * <p>The message is split into one or more TDS packets via
+   * <p>The tdsMessage is split into one or more TDS packets via
    * {@link #buildPackets(byte, byte, int, ByteBuffer, short, int)}
    * using the current packet size ({@link #getCurrentPacketSize()}).
    * Each resulting packet is then encrypted and written
@@ -621,22 +640,22 @@ public class TdsTransport implements AutoCloseable {
    * <ul>
    *   <li>A successful TLS handshake must have been performed so that
    *   {@link #tlsHandshake} can encrypt data.</li>
-   *   <li>The {@code message} payload buffer should be positioned appropriately;
+   *   <li>The {@code tdsMessage} payload buffer should be positioned appropriately;
    *   this method does not rewind the caller's buffer.</li>
    * </ul>
    *
-   * @param message the logical message to send (over TLS)
+   * @param tdsMessage the logical tdsMessage to send (over TLS)
    * @throws IOException if encryption or socket I/O fails while sending packets
    */
-  public void sendMessageEncrypted(Message message) throws IOException {
+  public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
 
-    logger.trace("Sending message {}", logHex(message.getPayload()));
+    logger.trace("Sending tdsMessage {}", logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
-        message.getPacketType(),
-        message.getStatusFlags(),
-        message.getSpid(),
-        message.getPayload(),
+        tdsMessage.getPacketType(),
+        tdsMessage.getStatusFlags(),
+        tdsMessage.getSpid(),
+        tdsMessage.getPayload(),
         (short) 1,
         getCurrentPacketSize()
     );
@@ -645,4 +664,8 @@ public class TdsTransport implements AutoCloseable {
       tlsHandshake.writeEncrypted(buffer, socketChannel);
     }
   }
+
+  public void cancelCurrent() {
+  }
+
 }

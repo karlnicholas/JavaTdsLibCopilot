@@ -34,7 +34,7 @@ public class InfoTokenParser implements TokenParser {
     final byte state = payload.get();
     final byte severity = payload.get();
 
-    // Message text: USHORT char count → bytes = count * 2
+    // TdsMessage text: USHORT char count → bytes = count * 2
     final int msgCharLen = Short.toUnsignedInt(payload.getShort());
     String message = "";
     if (msgCharLen > 0) {
