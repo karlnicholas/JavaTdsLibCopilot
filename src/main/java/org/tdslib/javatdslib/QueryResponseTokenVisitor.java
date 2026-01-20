@@ -27,7 +27,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
   private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
-  private final EnvChangeTokenVisitor envChangeVisitor;
   private final TdsTransport transport;
   private final TdsMessage queryTdsMessage;
   private final TokenDispatcher tokenDispatcher;
@@ -50,7 +49,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
           TdsMessage queryTdsMessage) {
     this.transport = transport;
     this.queryTdsMessage = queryTdsMessage;
-    this.envChangeVisitor = new EnvChangeTokenVisitor(transport);
     this.transport.setClientHandlers(this::messageHander, this::errorHandler);
     this.tokenDispatcher = new TokenDispatcher();
   }
@@ -131,7 +129,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         break;
 
       case ENV_CHANGE:
-        envChangeVisitor.applyEnvChange((EnvChangeToken) token);
+        transport.applyEnvChange((EnvChangeToken) token);
         break;
 
       default:

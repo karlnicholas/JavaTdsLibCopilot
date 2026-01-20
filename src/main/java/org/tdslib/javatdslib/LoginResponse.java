@@ -10,6 +10,7 @@ import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,31 +26,28 @@ public class LoginResponse implements TokenVisitor {
   private boolean success = false;
   private String errorMessage = null;
   private String database = null;
-  private final ConnectionContext connectionContext;
-  private final EnvChangeTokenVisitor envChangeTokenVisitor;
 
   private final List<EnvChangeToken> envChanges = new ArrayList<>();
+  private final TdsTransport transport;
 
   // --- Mutators (used during token processing) ---
 
   /**
    * Create a LoginResponse that will apply tokens to the provided ConnectionContext.
    *
-   * @param connectionContext target connection context to update
    */
-  public LoginResponse(ConnectionContext connectionContext) {
-    this.connectionContext = connectionContext;
-    this.envChangeTokenVisitor = new EnvChangeTokenVisitor(connectionContext);
+  public LoginResponse(TdsTransport transport) {
+    this.transport = transport;
   }
 
   @Override
   public void onToken(Token token) {
     if (token instanceof EnvChangeToken envChange) {
-      envChangeTokenVisitor.applyEnvChange(envChange);
+      transport.applyEnvChange(envChange);
     } else if (token instanceof LoginAckToken ack) {
-      connectionContext.setTdsVersion(ack.getTdsVersion());
-      connectionContext.setServerName(ack.getServerName());
-      connectionContext.setServerVersionString(ack.getServerVersionString());
+      transport.setTdsVersion(ack.getTdsVersion());
+      transport.setServerName(ack.getServerName());
+      transport.setServerVersionString(ack.getServerVersionString());
       setSuccess(true);
       logger.info(
           "Login successful - TDS version: {}, Server name: {}, Server version: {}",
