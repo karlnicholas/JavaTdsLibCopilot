@@ -2,12 +2,7 @@ package org.tdslib.javatdslib.transport;
 
 import org.tdslib.javatdslib.packets.PacketType;
 
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.*;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;

@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.packets.TdsMessage;
 
 import java.io.IOException;
@@ -14,10 +15,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -26,7 +24,7 @@ import java.util.function.Consumer;
  * Low-level TCP transport for TDS communication.
  * Supports both plain TCP and TLS (SQL Server encrypted connection).
  */
-public class TdsTransport implements AutoCloseable {
+public class TdsTransport implements ConnectionContext, AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
   private static final String SENDING_MESSAGE = "Sending TDS message {}";
@@ -40,16 +38,26 @@ public class TdsTransport implements AutoCloseable {
   private static final int TDS_HEADER_LENGTH = 8;
 
   private int readTimeoutMs = 60_000;
-  private int packetSize = 4096;  // Default TDS packet size, updated via ENVCHANGE
 
   private Selector selector;           // will be set when entering async mode
 
   // ── Read state (packet framing) ───────────────────────
-  private ByteBuffer readBuffer = ByteBuffer.allocate(packetSize);
+  private ByteBuffer readBuffer;
 
   private Consumer<TdsMessage> currentMessageHandler;   // callback from TdsClient
   private Consumer<Throwable> currentErrorHandler;  // passed by library user
   private final TlsHandshake tlsHandshake;
+
+  private TdsVersion tdsVersion = TdsVersion.V7_4;
+  private String currentDatabase = null;
+  private String currentLanguage = "us_english";
+  private String currentCharset = null;
+  private int packetSize = 4096;
+  private byte[] currentCollationBytes = new byte[0];
+  private boolean inTransaction = false;
+  private String serverName = null;
+  private String serverVersionString = null;
+  private int spid;
 
   /**
    * Opens a new TCP connection to the given host and port.
@@ -79,7 +87,7 @@ public class TdsTransport implements AutoCloseable {
    * Switch to non-blocking mode and start delivering complete TDS Messages.
    */
   public void enterAsyncMode() throws IOException {
-
+    readBuffer = ByteBuffer.allocate(packetSize);
     this.selector = Selector.open();
 
     socketChannel.configureBlocking(false);
@@ -253,26 +261,6 @@ public class TdsTransport implements AutoCloseable {
   public void setReadTimeout(final int ms) throws SocketException {
     this.readTimeoutMs = ms;
     socketChannel.socket().setSoTimeout(ms);
-  }
-
-  /**
-   * Sets the expected packet size. Does not resize buffers currently.
-   *
-   * @param newSize new packet size in bytes
-   */
-  public void setPacketSize(final int newSize) {
-    this.packetSize = newSize;
-    // You may want to resize buffers here in the future
-    readBuffer = ByteBuffer.allocate(newSize);
-  }
-
-  /**
-   * Returns the current packet size.
-   *
-   * @return packet size in bytes
-   */
-  public int getCurrentPacketSize() {
-    return packetSize;
   }
 
   /**
@@ -681,4 +669,127 @@ public class TdsTransport implements AutoCloseable {
   public void cancelCurrent() {
   }
 
+// ── Implement ConnectionContext methods ────────────────────
+
+  @Override
+  public TdsVersion getTdsVersion() {
+    return tdsVersion;
+  }
+
+  @Override
+  public void setTdsVersion(TdsVersion version) {
+    this.tdsVersion = version;
+  }
+
+  @Override
+  public boolean isUnicodeEnabled() {
+    return tdsVersion.ordinal() >= TdsVersion.V7_1.ordinal();
+  }
+
+  @Override
+  public String getCurrentDatabase() {
+    return currentDatabase;
+  }
+
+  @Override
+  public void setDatabase(String database) {
+    this.currentDatabase = database;
+  }
+
+  @Override
+  public String getCurrentLanguage() {
+    return currentLanguage;
+  }
+
+  @Override
+  public void setLanguage(String language) {
+    this.currentLanguage = language;
+  }
+
+  @Override
+  public String getCurrentCharset() {
+    return currentCharset;
+  }
+
+  @Override
+  public void setCharset(String charset) {
+    this.currentCharset = charset;
+  }
+
+  @Override
+  public int getCurrentPacketSize() {
+    return packetSize;
+  }
+
+  @Override
+  public void setPacketSize(int size) {
+    this.packetSize = size;
+    // Already doing this — keep it consistent
+    // You may want to resize readBuffer here in the future
+  }
+
+  @Override
+  public byte[] getCurrentCollationBytes() {
+    return Arrays.copyOf(currentCollationBytes, currentCollationBytes.length);
+  }
+
+  @Override
+  public void setCollationBytes(byte[] collationBytes) {
+    this.currentCollationBytes = collationBytes != null
+        ? Arrays.copyOf(collationBytes, collationBytes.length)
+        : new byte[0];
+  }
+
+  @Override
+  public boolean isInTransaction() {
+    return inTransaction;
+  }
+
+  @Override
+  public void setInTransaction(boolean inTransaction) {
+    this.inTransaction = inTransaction;
+  }
+
+  @Override
+  public String getServerName() {
+    return serverName;
+  }
+
+  @Override
+  public void setServerName(String serverName) {
+    this.serverName = serverName;
+  }
+
+  @Override
+  public String getServerVersionString() {
+    return serverVersionString;
+  }
+
+  @Override
+  public void setServerVersionString(String versionString) {
+    this.serverVersionString = versionString;
+  }
+
+  @Override
+  public int getSpid() {
+    return spid;
+  }
+
+  @Override
+  public void setSpid(int spid) {
+    this.spid = spid;
+  }
+
+  @Override
+  public void resetToDefaults() {
+    currentDatabase = null;
+    currentLanguage = "us_english";
+    currentCharset = null;
+    packetSize = 4096;
+    currentCollationBytes = new byte[0];
+    inTransaction = false;
+    spid = 0;
+    // Important: do NOT reset tdsVersion, serverName, serverVersionString
+    logger.debug("Session state reset due to resetConnection flag");
+  }
 }

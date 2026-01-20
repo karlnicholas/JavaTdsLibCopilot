@@ -1,10 +1,10 @@
 package org.tdslib.javatdslib.tokens.row;
 
-import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;

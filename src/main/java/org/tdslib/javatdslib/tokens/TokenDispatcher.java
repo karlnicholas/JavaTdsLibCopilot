@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
@@ -14,6 +13,7 @@ import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
 import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.row.RowTokenParser;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

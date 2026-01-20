@@ -1,11 +1,11 @@
 package org.tdslib.javatdslib.tokens.info;
 
-import org.tdslib.javatdslib.ConnectionContext;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

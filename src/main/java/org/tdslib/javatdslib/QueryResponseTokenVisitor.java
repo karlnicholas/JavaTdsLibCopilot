@@ -31,7 +31,6 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private final TdsTransport transport;
   private final TdsMessage queryTdsMessage;
   private final TokenDispatcher tokenDispatcher;
-  private final ConnectionContext connectionContext;
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
@@ -45,18 +44,15 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
    * Create a new QueryResponseTokenVisitor that will apply ENVCHANGE tokens to
    * the provided ConnectionContext and collect result sets produced by tokens.
    *
-   * @param connectionContext connection context used for ENVCHANGE handling
    */
   public QueryResponseTokenVisitor(
-          ConnectionContext connectionContext,
           TdsTransport transport,
           TdsMessage queryTdsMessage) {
-    this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
-    this.connectionContext = connectionContext;
     this.transport = transport;
     this.queryTdsMessage = queryTdsMessage;
-    this.tokenDispatcher = new TokenDispatcher();
+    this.envChangeVisitor = new EnvChangeTokenVisitor(transport);
     this.transport.setClientHandlers(this::messageHander, this::errorHandler);
+    this.tokenDispatcher = new TokenDispatcher();
   }
 
   /**
@@ -75,7 +71,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private void messageHander(TdsMessage tdsMessage) {
 
     // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
-    tokenDispatcher.processMessage(tdsMessage, connectionContext, new QueryContext(), this);
+    tokenDispatcher.processMessage(tdsMessage, transport, new QueryContext(), this);
 
     // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
     if (tdsMessage.isResetConnection()) {

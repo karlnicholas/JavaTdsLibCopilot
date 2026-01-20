@@ -3,8 +3,8 @@ package org.tdslib.javatdslib;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
+import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
@@ -17,7 +17,6 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Flow;
 
@@ -25,24 +24,13 @@ import java.util.concurrent.Flow;
  * High-level TDS client facade.
  * Provides a simple connect + execute interface, hiding protocol details.
  */
-public class TdsClient implements ConnectionContext, AutoCloseable {
+public class TdsClient implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(TdsClient.class);
 
   private final TdsTransport transport;
-
   private boolean connected;
-
-  private String currentDatabase = null;
-  private String currentLanguage = "us_english"; // Default
-  private String currentCharset = null; // Legacy, usually null
-  private int packetSize = 4096;
-  private byte[] currentCollationBytes = new byte[0];
-  private boolean inTransaction = false;
-  private String serverName = null;
-  private String serverVersionString = null;
   private int spid;
 
-  private TdsVersion tdsVersion = TdsVersion.V7_4; // default
 
   /**
    * Create a new TdsClient backed by a TCP transport to the given host/port.
@@ -113,8 +101,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     // Apply negotiated packet size
     int negotiatedSize = preLoginResponse.getNegotiatedPacketSize();
     if (negotiatedSize > 0) {
-      packetSize = negotiatedSize;
-      transport.setPacketSize(packetSize);
+      transport.setPacketSize(negotiatedSize);
     }
 
     if (preLoginResponse.requiresEncryption()) {
@@ -243,18 +230,18 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @return populated LoginResponse reflecting login tokens and errors
    */
   private LoginResponse processLoginResponse(List<TdsMessage> packets) {
-    LoginResponse loginResponse = new LoginResponse(this);
+    LoginResponse loginResponse = new LoginResponse(transport);
     QueryContext queryContext = new QueryContext();
     TokenDispatcher tokenDispatcher = new TokenDispatcher();
 
     for (TdsMessage msg : packets) {
-      setSpid(msg.getSpid());
+      transport.setSpid(msg.getSpid());
       // Dispatch tokens to the visitor (which handles ENVCHANGE, LOGINACK, errors, etc.)
-      tokenDispatcher.processMessage(msg, this, queryContext, loginResponse);
+      tokenDispatcher.processMessage(msg, transport, queryContext, loginResponse);
 
       // Still handle reset flag separately (visitor doesn't cover message-level flags)
       if (msg.isResetConnection()) {
-        resetToDefaults();
+        transport.resetToDefaults();
       }
     }
 
@@ -298,7 +285,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
   private QueryResponseTokenVisitor queryReactive(TdsMessage queryMsg) {
 
-    return new QueryResponseTokenVisitor(this, transport, queryMsg);
+    return new QueryResponseTokenVisitor( transport, queryMsg);
   }
 
   /**
@@ -336,137 +323,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
 
   public boolean isConnected() {
     return connected;
-  }
-
-  @Override
-  public TdsVersion getTdsVersion() {
-    return tdsVersion;
-  }
-
-  @Override
-  public void setTdsVersion(TdsVersion version) {
-    this.tdsVersion = version;
-  }
-
-  @Override
-  public boolean isUnicodeEnabled() {
-    return tdsVersion.ordinal() >= TdsVersion.V7_1.ordinal(); // Unicode from TDS 7.1+
-  }
-
-  @Override
-  public String getCurrentDatabase() {
-    return currentDatabase;
-  }
-
-  @Override
-  public int getCurrentPacketSize() {
-    return packetSize;
-  }
-
-  @Override
-  public void setDatabase(String database) {
-    this.currentDatabase = database;
-  }
-
-  @Override
-  public String getCurrentLanguage() {
-    return currentLanguage;
-  }
-
-  @Override
-  public void setLanguage(String language) {
-    this.currentLanguage = language;
-  }
-
-  @Override
-  public String getCurrentCharset() {
-    return currentCharset;
-  }
-
-  @Override
-  public void setCharset(String charset) {
-    this.currentCharset = charset;
-  }
-
-  /**
-   * Set the client packet size and propagate the value to the transport.
-   *
-   * @param size packet size in bytes
-   */
-  @Override
-  public void setPacketSize(int size) {
-    this.packetSize = size;
-    transport.setPacketSize(size);
-  }
-
-  @Override
-  public byte[] getCurrentCollationBytes() {
-    return Arrays.copyOf(currentCollationBytes, currentCollationBytes.length); // Defensive copy
-  }
-
-  @Override
-  public void setCollationBytes(byte[] collationBytes) {
-    this.currentCollationBytes = collationBytes != null
-        ? Arrays.copyOf(collationBytes, collationBytes.length)
-        : new byte[0];
-  }
-
-  @Override
-  public boolean isInTransaction() {
-    return inTransaction;
-  }
-
-  @Override
-  public void setInTransaction(boolean inTransaction) {
-    this.inTransaction = inTransaction;
-  }
-
-  @Override
-  public String getServerName() {
-    return serverName;
-  }
-
-  @Override
-  public void setServerName(String serverName) {
-    this.serverName = serverName;
-  }
-
-  @Override
-  public String getServerVersionString() {
-    return serverVersionString;
-  }
-
-  @Override
-  public void setServerVersionString(String versionString) {
-    this.serverVersionString = versionString;
-  }
-
-  public int getSpid() {
-    return spid;
-  }
-
-  public void setSpid(int spid) {
-    this.spid = spid;
-  }
-
-  /**
-   * Reset session-scoped state to library defaults.
-   *
-   * <p>This is called when the server signals a connection-level reset
-   * (resetConnection flag) to clear per-session settings while preserving
-   * connection-level information such as TDS version and server name.
-   */
-  @Override
-  public void resetToDefaults() {
-    currentDatabase = null;
-    currentLanguage = "us_english";
-    currentCharset = null;
-    packetSize = 4096;
-    currentCollationBytes = new byte[0];
-    inTransaction = false;
-    spid = 0;
-    // Do NOT reset tdsVersion, serverName, or serverVersionString (connection-level)
-    System.out.println("Session state reset due to resetConnection flag");
   }
 
 }

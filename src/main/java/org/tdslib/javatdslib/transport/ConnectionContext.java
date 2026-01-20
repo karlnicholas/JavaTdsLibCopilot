@@ -1,4 +1,6 @@
-package org.tdslib.javatdslib;
+package org.tdslib.javatdslib.transport;
+
+import org.tdslib.javatdslib.TdsVersion;
 
 /**
  * Represents the current session/connection state in a TDS connection.
@@ -167,5 +169,9 @@ public interface ConnectionContext {
    * Should clear database, transaction state, etc., but keep TDS version.
    */
   void resetToDefaults();
+
+  int getSpid();
+
+  public void setSpid(int spid);
 
 }

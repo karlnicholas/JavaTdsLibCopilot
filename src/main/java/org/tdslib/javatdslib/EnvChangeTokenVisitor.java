@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeType;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
