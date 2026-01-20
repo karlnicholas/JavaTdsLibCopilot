@@ -33,65 +33,82 @@ public class ColMetaDataTokenParser implements TokenParser {
     final List<ColumnMeta> columns = new ArrayList<>(columnCount);
 
     for (int colIndex = 0; colIndex < columnCount; colIndex++) {
-      // -----------------------------------------------------------------
-      // 1. UserType (ULONG / 4 bytes) in TDS 7.2+
-      // -----------------------------------------------------------------
-      final int userType = payload.getInt();
+      final int userType = payload.getInt();      // ULONG
+      final short flags    = payload.getShort();  // USHORT
+      final byte dataType  = payload.get();       // BYTE
 
-      // -----------------------------------------------------------------
-      // 2. Flags (USHORT / 2 bytes)
-      // -----------------------------------------------------------------
-      final short flags = payload.getShort();
-
-      // -----------------------------------------------------------------
-      // 3. TypeInfo
-      // -----------------------------------------------------------------
-      final byte dataType = payload.get(); // e.g. 0xE7 = NVARCHAR
-
-      // Read type-specific info (we focus on variable-length string types
-      // here)
       int maxLength = -1;
       byte[] collation = null;
+      int lengthByte = -1;                     // for types like INTNTYPE
+      byte scale = 0;
 
-      if (isVariableLengthStringType(dataType)) {
-        // Max length in bytes (USHORT for NVARCHAR/VARCHAR)
-        maxLength = payload.getShort() & 0xFFFF;
+      switch (dataType) {
+        // 1. Variable-length character types: 2-byte MaxLen + 5-byte Collation
+        case (byte) 0x27:   // VARCHAR
+        case (byte) 0xE7:   // NVARCHAR
+        case (byte) 0x2F:   // CHAR
+        case (byte) 0xEF:   // NCHAR
+          maxLength = payload.getShort() & 0xFFFF;
+          collation = new byte[5];
+          payload.get(collation);
+          break;
 
-        // Collation (exactly 5 bytes) for character types
-        collation = new byte[5];
-        payload.get(collation);
-      } else {
-        // For fixed-length types or others → skip or handle as needed
-        // (expand later if you need INT, DATETIME, etc.)
+        // 2. Fixed-length types: No extra TypeInfo bytes to read
+        case (byte) 0x7F:   // BIGINT (0x7F = 127) -> 8 bytes
+          maxLength = 8;
+          break;
+        case (byte) 0x38:   // INT -> 4 bytes
+          maxLength = 4;
+          break;
+        case (byte) 0x28:   // DATE -> 3 bytes
+          maxLength = 3;
+          break;
+        case (byte) 0x32:   // BIT -> 1 byte
+          maxLength = 1;
+          break;
+
+        // 3. Variable-length Numeric/DateTime types: 1-byte length prefix
+        case (byte) 0x26:   // INTNTYPE (Nullable TinyInt, SmallInt, Int, BigInt)
+        case (byte) 0x6D:   // FLOATNTYPE (Nullable Real, Float)
+        case (byte) 0x6F:   // DATETIMENTYPE (Nullable DateTime)
+          lengthByte = payload.get();
+          maxLength = lengthByte;
+          break;
+
+        case (byte) 0x2A:   // DATETIME2(n)
+          scale = payload.get(); // 0-7 fractional seconds precision
+          break;
+
+        default:
+          // Log or handle unknown type 0x...
+          break;
       }
 
-      // -----------------------------------------------------------------
-      // 4. Column name (USHORT char count + UTF-16LE)
-      // -----------------------------------------------------------------
-      final short nameLengthInChars = payload.get();
+      // Column name (common to all)
+      final byte nameLengthInChars = payload.get();  // BYTE count of UTF-16LE chars
       String columnName = "";
 
       if (nameLengthInChars > 0) {
-        if (nameLengthInChars > 512) { // safety check
-          throw new IllegalStateException(
-              "Suspiciously long column name: " + nameLengthInChars);
+        if (nameLengthInChars > 512) {
+          throw new IllegalStateException("Suspiciously long column name: " + nameLengthInChars);
         }
-        final byte[] nameBytes = new byte[nameLengthInChars * 2];
+        byte[] nameBytes = new byte[nameLengthInChars * 2];
         payload.get(nameBytes);
         columnName = new String(nameBytes, StandardCharsets.UTF_16LE);
       }
 
-      // -----------------------------------------------------------------
-      // Create and store metadata
-      // -----------------------------------------------------------------
+      // Build metadata – you can add more fields to ColumnMeta if useful
+      // e.g. lengthByte, actual maxLength interpretation, etc.
       final ColumnMeta meta = new ColumnMeta(
-          colIndex + 1, // 1-based column number
+          colIndex + 1,
           columnName,
           dataType,
+          scale,
           maxLength,
           flags,
           userType,
-          collation
+          collation,
+          lengthByte   // optional: store for int types
       );
 
       columns.add(meta);

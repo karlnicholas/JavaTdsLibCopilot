@@ -7,10 +7,12 @@ public class ColumnMeta {
   private final int columnNumber;
   private final String name;
   private final byte dataType;
+  private final byte scale;
   private final int maxLength;
   private final short flags;
   private final int userType;
   private final byte[] collation; // may be null
+  private final int lengthByte;
 
   /**
    * Create a ColumnMeta instance.
@@ -24,15 +26,17 @@ public class ColumnMeta {
    * @param collation    optional 5-byte collation (may be null)
    */
   public ColumnMeta(final int columnNumber, final String name,
-                    final byte dataType, final int maxLength, final short flags,
-                    final int userType, final byte[] collation) {
+                    final byte dataType, final byte scale, final int maxLength, final short flags,
+                    final int userType, final byte[] collation, int lengthByte) {
     this.columnNumber = columnNumber;
     this.name = name;
     this.dataType = dataType;
+    this.scale = scale;
     this.maxLength = maxLength;
     this.flags = flags;
     this.userType = userType;
     this.collation = collation != null ? collation.clone() : null;
+    this.lengthByte = lengthByte;
   }
 
   /**
@@ -89,6 +93,14 @@ public class ColumnMeta {
     return collation;
   }
 
+  public int getLengthByte() {
+    return lengthByte;
+  }
+
+  public byte getScale() {
+    return scale;
+  }
+
   @Override
   public String toString() {
     return "Column " + columnNumber
@@ -96,6 +108,7 @@ public class ColumnMeta {
         + " (type=0x" + Integer.toHexString(dataType & 0xFF)
         + ", maxLen=" + maxLength
         + ", nameLen=" + name.length()
+        + (lengthByte != -1 ? ", nameLen=" + name.length() : "")
         + ")";
   }
 }

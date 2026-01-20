@@ -79,7 +79,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   }
 
   private void errorHandler(Throwable throwable) {
-    getSubscriber().onError(throwable);
+    subscriber.onError(throwable);
   }
 
   @Override
@@ -96,7 +96,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         }
         RowToken row = (RowToken) token;
         subscriber.onNext(new RowWithMetadata(row.getColumnData(), currentMetadata.getColumns()));
-        logger.trace("Row added ({} columns)", row.getColumnData().size());
+        logger.trace("fired onNext for Row ({} columns)", row.getColumnData().size());
         break;
 
       case DONE:
@@ -108,6 +108,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         if (!status.hasMoreResults()) {
           // No more results = truly done
           subscriber.onComplete();
+          logger.trace("fired onComplete");
         }
         break;
 
@@ -115,6 +116,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         InfoToken info = (InfoToken) token;
         logger.info(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
 
+        // should probably fire onError
         if (info.isError()) {
           hasError = true;
         }
@@ -123,6 +125,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         ErrorToken error = (ErrorToken) token;
         logger.info(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
 
+        // should probably fire onError
         if (error.isError()) {
           hasError = true;
         }
