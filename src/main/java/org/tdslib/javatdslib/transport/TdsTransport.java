@@ -19,7 +19,13 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -416,6 +422,20 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
 
   }
 
+  /**
+   * Sets client handlers for incoming messages and transport errors.
+   *
+   * <p>The transport will invoke {@code currentMessageHandler.accept(tdsMessage)} for each
+   * complete {@link TdsMessage} received, and {@code currentErrorHandler.accept(throwable)}
+   * for transport-level errors (selector loop, I/O, parsing, etc.).
+   *
+   * <p>Handlers may be invoked on the transport's event loop thread; callers should ensure
+   * the provided handlers are thread-safe or offload work to another thread as needed.
+   *
+   * @param currentMessageHandler callback to receive complete {@link TdsMessage}
+   *                              instances; must not be null
+   * @param currentErrorHandler callback to receive transport errors; must not be null
+   */
   public void setClientHandlers(
       Consumer<TdsMessage> currentMessageHandler,
       Consumer<Throwable> currentErrorHandler) {
@@ -429,11 +449,7 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
    * @param tdsMessage the tdsMessage to send (usually built by the client layer)
    * @throws IOException if sending fails
    */
-  public void sendQueryMessageAsync(
-      TdsMessage tdsMessage
-) throws IOException {
-    this.currentMessageHandler = currentMessageHandler;
-    this.currentErrorHandler = currentErrorHandler;
+  public void sendQueryMessageAsync(TdsMessage tdsMessage) throws IOException {
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(
@@ -685,8 +701,6 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   public void cancelCurrent() {
   }
 
-// ── Implement ConnectionContext methods ────────────────────
-
   @Override
   public TdsVersion getTdsVersion() {
     return tdsVersion;
@@ -808,15 +822,6 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
     // Important: do NOT reset tdsVersion, serverName, serverVersionString
     logger.debug("Session state reset due to resetConnection flag");
   }
-
-//  /**
-//   * Creates a new visitor that will apply env changes to the given context.
-//   *
-//   * @param connectionContext target connection context to update
-//   */
-//  public EnvChangeTokenVisitor(ConnectionContext connectionContext) {
-//    this.connectionContext = connectionContext;
-//  }
 
   /**
    * Applies an ENVCHANGE token to the connection context.

@@ -170,8 +170,17 @@ public interface ConnectionContext {
    */
   void resetToDefaults();
 
+  /**
+   * Returns the server process id (SPID) assigned by the server for this connection.
+   *
+   * @return the SPID for this session, or a negative or zero value if not available
+   */
   int getSpid();
 
-  public void setSpid(int spid);
-
+  /**
+   * Sets the server process id (SPID) assigned by the server for this connection.
+   *
+   * @param spid the SPID for this session; may be zero or negative if not available
+   */
+  void setSpid(int spid);
 }

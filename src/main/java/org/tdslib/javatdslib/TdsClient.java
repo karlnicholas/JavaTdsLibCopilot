@@ -29,8 +29,6 @@ public class TdsClient implements AutoCloseable {
 
   private final TdsTransport transport;
   private boolean connected;
-  private int spid;
-
 
   /**
    * Create a new TdsClient backed by a TCP transport to the given host/port.
@@ -86,7 +84,8 @@ public class TdsClient implements AutoCloseable {
    *
    * @throws IOException on IO error
    */
-  private void preLoginInternal() throws IOException, NoSuchAlgorithmException, KeyManagementException {
+  private void preLoginInternal()
+      throws IOException, NoSuchAlgorithmException, KeyManagementException {
     TdsMessage msg = TdsMessage.createRequest(
         PacketType.PRE_LOGIN.getValue(),
         buildPreLoginPayload()
@@ -284,8 +283,7 @@ public class TdsClient implements AutoCloseable {
   }
 
   private QueryResponseTokenVisitor queryReactive(TdsMessage queryMsg) {
-
-    return new QueryResponseTokenVisitor( transport, queryMsg);
+    return new QueryResponseTokenVisitor(transport, queryMsg);
   }
 
   /**

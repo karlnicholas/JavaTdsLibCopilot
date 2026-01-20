@@ -73,7 +73,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
     // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
     if (tdsMessage.isResetConnection()) {
-//      resetToDefaults();
+      // resetToDefaults();
     }
 
   }
