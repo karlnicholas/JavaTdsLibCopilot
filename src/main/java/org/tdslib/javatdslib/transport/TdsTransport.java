@@ -47,8 +47,8 @@ public class TdsTransport implements AutoCloseable {
   // ── Read state (packet framing) ───────────────────────
   private ByteBuffer readBuffer = ByteBuffer.allocate(packetSize);
 
-  private final Consumer<TdsMessage> messageHandler;   // callback from TdsClient
-  private final Consumer<Throwable> errorHandler;  // passed by library user
+  private Consumer<TdsMessage> currentMessageHandler;   // callback from TdsClient
+  private Consumer<Throwable> currentErrorHandler;  // passed by library user
   private final TlsHandshake tlsHandshake;
 
   /**
@@ -60,14 +60,10 @@ public class TdsTransport implements AutoCloseable {
    */
   public TdsTransport(
       final String host,
-      final int port,
-      Consumer<TdsMessage> messageHandler,
-      Consumer<Throwable> errorHandler
+      final int port
   ) throws IOException {
     this.host = host;
     this.port = port;
-    this.messageHandler = messageHandler;
-    this.errorHandler = errorHandler;
     this.tlsHandshake = new TlsHandshake();
     this.socketChannel = SocketChannel.open();
     this.socketChannel.configureBlocking(true);
@@ -133,14 +129,14 @@ public class TdsTransport implements AutoCloseable {
               cleanupKeyAndTransport(key);
 
               // Optional: notify owner of this specific transport
-              errorHandler.accept(t);
+              currentErrorHandler.accept(t);
             }
           }
         } catch (Throwable fatal) {  // Catch around the whole select loop
           logger.error("Fatal error in TDS event loop", fatal);
 
           // Critical: notify library user
-          errorHandler.accept(fatal);
+          currentErrorHandler.accept(fatal);
 
           // OR: continue; + cleanup all keys  // more resilient but complex
           break;
@@ -242,7 +238,7 @@ public class TdsTransport implements AutoCloseable {
         readBuffer.position(readBuffer.position() + length);
 
         TdsMessage tdsMessage = buildMessageFromPacket(packet);
-        messageHandler.accept(tdsMessage);
+        currentMessageHandler.accept(tdsMessage);
       }
     } finally {
       readBuffer.compact();
@@ -416,13 +412,24 @@ public class TdsTransport implements AutoCloseable {
 
   }
 
+  public void setClientHandlers(
+      Consumer<TdsMessage> currentMessageHandler,
+      Consumer<Throwable> currentErrorHandler) {
+    this.currentMessageHandler = currentMessageHandler;
+    this.currentErrorHandler = currentErrorHandler;
+  }
+
   /**
    * Sends a complete logical tdsMessage (may be split into multiple packets) asynchronously.
    *
    * @param tdsMessage the tdsMessage to send (usually built by the client layer)
    * @throws IOException if sending fails
    */
-  public void sendMessageAsync(TdsMessage tdsMessage) throws IOException {
+  public void sendQueryMessageAsync(
+      TdsMessage tdsMessage
+) throws IOException {
+    this.currentMessageHandler = currentMessageHandler;
+    this.currentErrorHandler = currentErrorHandler;
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
     List<ByteBuffer> packetBuffers = buildPackets(

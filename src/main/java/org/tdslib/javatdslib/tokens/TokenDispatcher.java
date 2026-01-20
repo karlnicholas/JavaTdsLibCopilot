@@ -62,11 +62,11 @@ public class TokenDispatcher {
    * Calls the visitor for each successfully parsed token.
    *
    * @param tdsMessage The TDS packet/tdsMessage to parse
-   * @param context Connection context for state updates (e.g., packet size,
+   * @param connectionContext Connection context for state updates (e.g., packet size,
    *                database)
    * @param visitor Callback to handle each parsed token
    */
-  public void processMessage(final TdsMessage tdsMessage, final ConnectionContext context,
+  public void processMessage(final TdsMessage tdsMessage, final ConnectionContext connectionContext,
                              final QueryContext queryContext, final TokenVisitor visitor) {
     final ByteBuffer payload = tdsMessage.getPayload();
     payload.order(ByteOrder.LITTLE_ENDIAN);
@@ -84,14 +84,14 @@ public class TokenDispatcher {
 
       logger.trace("Parsing token type " + TokenType.fromValue(tokenTypeByte).name());
       // Parser consumes exactly the bytes for this token
-      final Token token = parser.parse(payload, tokenTypeByte, context, queryContext);
+      final Token token = parser.parse(payload, tokenTypeByte, connectionContext, queryContext);
       // Notify the visitor (caller decides what to do)
       visitor.onToken(token);
     }
 
     // Handle resetConnection flag after all tokens in this tdsMessage
     if (tdsMessage.isResetConnection()) {
-      context.resetToDefaults();
+      connectionContext.resetToDefaults();
     }
   }
 }

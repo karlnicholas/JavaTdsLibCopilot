@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.Token;
+import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.done.DoneStatus;
@@ -29,6 +30,8 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private final EnvChangeTokenVisitor envChangeVisitor;
   private final TdsTransport transport;
   private final TdsMessage queryTdsMessage;
+  private final TokenDispatcher tokenDispatcher;
+  private final ConnectionContext connectionContext;
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
@@ -49,8 +52,40 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
           TdsTransport transport,
           TdsMessage queryTdsMessage) {
     this.envChangeVisitor = new EnvChangeTokenVisitor(connectionContext);
+    this.connectionContext = connectionContext;
     this.transport = transport;
     this.queryTdsMessage = queryTdsMessage;
+    this.tokenDispatcher = new TokenDispatcher();
+    this.transport.setClientHandlers(this::messageHander, this::errorHandler);
+  }
+
+  /**
+   * Invoked by the transport when a TDS tdsMessage arrives.
+   *
+   * <p>This method dispatches tokens contained in the provided tdsMessage to the
+   * currently active token visitor (via {@link TokenDispatcher}). The visitor
+   * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
+   * row publishing, errors, etc.). After dispatching, if the tdsMessage signals
+   * a connection-level reset (resetConnection flag) the client's session state
+   * is reset to library defaults.
+   *
+   * @param tdsMessage the received {@link TdsMessage}; expected to be non-null and
+   *                containing tokens to process
+   */
+  private void messageHander(TdsMessage tdsMessage) {
+
+    // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
+    tokenDispatcher.processMessage(tdsMessage, connectionContext, new QueryContext(), this);
+
+    // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
+    if (tdsMessage.isResetConnection()) {
+//      resetToDefaults();
+    }
+
+  }
+
+  private void errorHandler(Throwable throwable) {
+    getSubscriber().onError(throwable);
   }
 
   @Override
@@ -131,7 +166,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       public void request(long n) {
         if (!messageSent.compareAndSet(true, true)) {
           try {
-            transport.sendMessageAsync(queryTdsMessage);
+            transport.sendQueryMessageAsync(queryTdsMessage);
           } catch (IOException e) {
             throw new RuntimeException(e);
           }

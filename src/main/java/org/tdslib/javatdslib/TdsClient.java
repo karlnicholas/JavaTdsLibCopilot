@@ -29,7 +29,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(TdsClient.class);
 
   private final TdsTransport transport;
-  private final TokenDispatcher tokenDispatcher;
 
   private boolean connected;
 
@@ -44,7 +43,6 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   private int spid;
 
   private TdsVersion tdsVersion = TdsVersion.V7_4; // default
-  private QueryResponseTokenVisitor currentPublisher;
 
   /**
    * Create a new TdsClient backed by a TCP transport to the given host/port.
@@ -54,15 +52,8 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
    * @throws IOException if the underlying transport cannot be created
    */
   public TdsClient(String host, int port) throws IOException {
-    this.transport = new TdsTransport(host, port, this::onMessagesReceived, this::errorHandler);
-    this.tokenDispatcher = new TokenDispatcher();
+    this.transport = new TdsTransport(host, port);
     this.connected = false;
-  }
-
-  private void errorHandler(Throwable throwable) {
-    if (currentPublisher != null) {
-      currentPublisher.getSubscriber().onError(throwable);
-    }
   }
 
   /**
@@ -254,6 +245,7 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
   private LoginResponse processLoginResponse(List<TdsMessage> packets) {
     LoginResponse loginResponse = new LoginResponse(this);
     QueryContext queryContext = new QueryContext();
+    TokenDispatcher tokenDispatcher = new TokenDispatcher();
 
     for (TdsMessage msg : packets) {
       setSpid(msg.getSpid());
@@ -300,39 +292,13 @@ public class TdsClient implements ConnectionContext, AutoCloseable {
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-    currentPublisher = queryReactive(queryMsg);
 
-    return currentPublisher;
+    return queryReactive(queryMsg);
   }
 
   private QueryResponseTokenVisitor queryReactive(TdsMessage queryMsg) {
 
     return new QueryResponseTokenVisitor(this, transport, queryMsg);
-  }
-
-  /**
-   * Invoked by the transport when a TDS tdsMessage arrives.
-   *
-   * <p>This method dispatches tokens contained in the provided tdsMessage to the
-   * currently active token visitor (via {@link TokenDispatcher}). The visitor
-   * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
-   * row publishing, errors, etc.). After dispatching, if the tdsMessage signals
-   * a connection-level reset (resetConnection flag) the client's session state
-   * is reset to library defaults.
-   *
-   * @param tdsMessage the received {@link TdsMessage}; expected to be non-null and
-   *                containing tokens to process
-   */
-  public void onMessagesReceived(TdsMessage tdsMessage) {
-
-    // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
-    tokenDispatcher.processMessage(tdsMessage, this, new QueryContext(), currentPublisher);
-
-    // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
-    if (tdsMessage.isResetConnection()) {
-      resetToDefaults();
-    }
-
   }
 
   /**
