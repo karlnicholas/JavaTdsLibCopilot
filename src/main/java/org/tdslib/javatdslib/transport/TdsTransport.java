@@ -310,6 +310,34 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
     return tdsMessages;
   }
 
+  public TdsMessage buildMessageFromPacket(ByteBuffer packet) {
+    packet.mark();
+
+    final byte type   = packet.get();
+    final byte status = packet.get();
+    final int length  = Short.toUnsignedInt(packet.getShort());
+    final short spid  = packet.getShort();
+    final byte packetId = packet.get(); // actually a byte, not short
+    final byte window = packet.get();   // usually 0
+
+    packet.reset();
+    packet.position(8);
+
+    ByteBuffer payload = packet.slice();
+    payload.limit(length - 8);
+
+    return new TdsMessage(
+            type,
+            status,
+            length,
+            spid,
+            packetId,
+            payload,
+            System.nanoTime(),
+            null   // trace context
+    );
+  }
+
   /**
    * Receives **one single TDS packet** and wraps it as a TdsMessage.
    *
@@ -405,11 +433,13 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
    */
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
+
+    QueryPacketBuilder queryPacketBuilder = new QueryPacketBuilder();
     // If large, split into multiple packets (max ~4096 bytes each)
-    List<ByteBuffer> packetBuffers = buildPackets(
+    List<ByteBuffer> packetBuffers = queryPacketBuilder.buildPackets(
         tdsMessage.getPacketType(),
         tdsMessage.getStatusFlags(),
-        tdsMessage.getSpid(),
+        getSpid(),
         tdsMessage.getPayload(),
         (short) 1,
         getCurrentPacketSize()
@@ -451,15 +481,24 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
    */
   public void sendQueryMessageAsync(TdsMessage tdsMessage) throws IOException {
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
-    // If large, split into multiple packets (max ~4096 bytes each)
-    List<ByteBuffer> packetBuffers = buildPackets(
-        tdsMessage.getPacketType(),
-        tdsMessage.getStatusFlags(),
-        tdsMessage.getSpid(),
-        tdsMessage.getPayload(),
-        (short) 1,
-        getCurrentPacketSize()
+    QueryPacketBuilder queryPacketBuilder = new QueryPacketBuilder();
+    List<ByteBuffer> packetBuffers = queryPacketBuilder.buildPackets(
+            tdsMessage.getPacketType(),
+            tdsMessage.getStatusFlags(),
+            getSpid(),
+            tdsMessage.getPayload(),
+            (short) 1,
+            getCurrentPacketSize()
     );
+//    // If large, split into multiple packets (max ~4096 bytes each)
+//    List<ByteBuffer> packetBuffers = buildPackets(
+//        tdsMessage.getPacketType(),
+//        tdsMessage.getStatusFlags(),
+//        tdsMessage.getSpid(),
+//        tdsMessage.getPayload(),
+//        (short) 1,
+//        getCurrentPacketSize()
+//    );
 
     for (ByteBuffer buf : packetBuffers) {
       writeAsync(buf);
@@ -513,97 +552,6 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
       selector.close();
     }
     socketChannel.close();
-  }
-
-  /**
-   * Builds one or more TDS packets from a payload.
-   *
-   * @param packetType       TDS message type (e.g. 0x01 for SQL Batch, 0x10 for Login7)
-   * @param statusFlags      status flags (usually 0x01 for last packet/EOM)
-   * @param payload          the logical message payload (positioned at 0)
-   * @param startingPacketId starting packet number (usually 1 for client requests)
-   * @param maxPacketSize    maximum allowed packet size (default 4096)
-   * @return list of ready-to-send ByteBuffers (each is a full 8-byte header + payload chunk)
-   */
-  public List<ByteBuffer> buildPackets(
-      byte packetType,
-      byte statusFlags,
-      int spid,
-      ByteBuffer payload,
-      short startingPacketId,
-      int maxPacketSize) {
-
-    List<ByteBuffer> packets = new ArrayList<>();
-    short packetId = startingPacketId;
-
-    int maxPayloadPerPacket = maxPacketSize - 8;
-
-    payload = payload.asReadOnlyBuffer();
-    payload.rewind();
-
-    boolean isFirst = true;
-
-    while (payload.hasRemaining() || isFirst) {
-      isFirst = false;
-
-      int thisPayloadSize = Math.min(maxPayloadPerPacket, payload.remaining());
-
-      // For multi-packet: only last packet has EOM (0x01)
-      // For single-packet: always set EOM
-      boolean isLast = !payload.hasRemaining() || thisPayloadSize == payload.remaining();
-      byte thisStatus = (byte) (isLast ? (statusFlags | 0x01) : (statusFlags & ~0x01));
-
-      ByteBuffer packet = ByteBuffer.allocate(8 + thisPayloadSize)
-          .order(ByteOrder.BIG_ENDIAN);
-
-      packet.put(packetType);                    // Byte 0: Type
-      packet.put(thisStatus);                    // Byte 1: Status (EOM on last)
-      packet.putShort((short) (8 + thisPayloadSize)); // Bytes 2-3: Length (BE)
-      packet.putShort((short) spid);                // Bytes 4-5: SPID (0 for client)
-      packet.put((byte) (packetId & 0xFF));      // Byte 6: Packet Number (1 byte)
-      packet.put((byte) 0);                      // Byte 7: Window (always 0)
-
-      if (thisPayloadSize > 0) {
-        ByteBuffer chunk = payload.slice().limit(thisPayloadSize);
-        packet.put(chunk);
-        payload.position(payload.position() + thisPayloadSize);
-      }
-
-      packet.flip();
-      packets.add(packet);
-
-      packetId++;
-    }
-
-    return packets;
-  }
-
-  private TdsMessage buildMessageFromPacket(ByteBuffer packet) {
-    packet.mark();
-
-    final byte type   = packet.get();
-    final byte status = packet.get();
-    final int length  = Short.toUnsignedInt(packet.getShort());
-    final short spid  = packet.getShort();
-    final byte packetId = packet.get(); // actually a byte, not short
-    final byte window = packet.get();   // usually 0
-
-    packet.reset();
-    packet.position(8);
-
-    ByteBuffer payload = packet.slice();
-    payload.limit(length - 8);
-
-    return new TdsMessage(
-        type,
-        status,
-        length,
-        spid,
-        packetId,
-        payload,
-        System.nanoTime(),
-        null   // trace context
-    );
   }
 
   // Helper for hex dumping
@@ -662,8 +610,6 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
    * Sends a logical TDS tdsMessage over the established TLS session.
    *
    * <p>The tdsMessage is split into one or more TDS packets via
-   * {@link #buildPackets(byte, byte, int, ByteBuffer, short, int)}
-   * using the current packet size ({@link #getCurrentPacketSize()}).
    * Each resulting packet is then encrypted and written
    * to the underlying {@link java.nio.channels.SocketChannel} via the handshake helper.
    *
@@ -681,13 +627,23 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     // If large, split into multiple packets (max ~4096 bytes each)
-    List<ByteBuffer> packetBuffers = buildPackets(
-        tdsMessage.getPacketType(),
-        tdsMessage.getStatusFlags(),
-        tdsMessage.getSpid(),
-        tdsMessage.getPayload(),
-        (short) 1,
-        getCurrentPacketSize()
+//    List<ByteBuffer> packetBuffers = buildPackets(
+//        tdsMessage.getPacketType(),
+//        tdsMessage.getStatusFlags(),
+//        tdsMessage.getSpid(),
+//        tdsMessage.getPayload(),
+//        (short) 1,
+//        getCurrentPacketSize()
+//    );
+
+    QueryPacketBuilder queryPacketBuilder = new QueryPacketBuilder();
+    List<ByteBuffer> packetBuffers = queryPacketBuilder.buildPackets(
+            tdsMessage.getPacketType(),
+            tdsMessage.getStatusFlags(),
+            getSpid(),
+            tdsMessage.getPayload(),
+            (short) 1,
+            getCurrentPacketSize()
     );
 
     for (ByteBuffer buffer : packetBuffers) {
@@ -807,6 +763,7 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
 
   @Override
   public void setSpid(int spid) {
+    logger.debug("Setting SPID to {}", spid);
     this.spid = spid;
   }
 
@@ -982,5 +939,9 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
         logger.debug("Unhandled ENVCHANGE type: {}", type);
         break;
     }
+  }
+
+  public SocketChannel getSocketChannel() {
+    return socketChannel;
   }
 }

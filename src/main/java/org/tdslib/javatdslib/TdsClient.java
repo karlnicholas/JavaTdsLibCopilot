@@ -14,6 +14,7 @@ import org.tdslib.javatdslib.transport.TdsTransport;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -278,14 +279,50 @@ public class TdsClient implements AutoCloseable {
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-
-    return queryReactive(queryMsg);
-  }
-
-  private QueryResponseTokenVisitor queryReactive(TdsMessage queryMsg) {
     return new QueryResponseTokenVisitor(transport, queryMsg);
   }
 
+  private static final int TDS_PACKET_SIZE = 4096;
+  private static final byte TDS_RPC = 0x03;
+  private static final byte TDS_STATUS_LAST = 0x01;
+
+  public void rpcAsync(ByteBuffer payload) {
+
+    payload.rewind();
+    int remaining = payload.remaining();
+    int packetNumber = 1;
+
+    while (remaining > 0) {
+      ByteBuffer packet = ByteBuffer.allocate(TDS_PACKET_SIZE); // .order(ByteOrder.LITTLE_ENDIAN);
+
+      int chunkSize = Math.min(remaining, TDS_PACKET_SIZE - 8);
+
+      // TDS Header
+      packet.put(TDS_RPC);
+      packet.put(TDS_STATUS_LAST);
+      packet.putShort((short) (8 + chunkSize));   // total length
+      packet.putShort((short) transport.getSpid());                 // SPID
+      packet.put((byte) packetNumber++);
+      packet.put((byte) 0);                       // window
+
+      // Payload chunk
+      byte[] chunk = new byte[chunkSize];
+      payload.get(chunk);
+      packet.put(chunk);
+
+      // Pad to 4096
+//      while (packet.position() < TDS_PACKET_SIZE) {
+//        packet.put((byte) 0);
+//      }
+
+      packet.flip();
+//      while (packet.hasRemaining()) {
+        transport.writeAsync(packet);
+//      }
+
+      remaining -= chunkSize;
+    }
+  }
   /**
    * Combine payload buffers from a list of messages into a single
    * big\-endian ByteBuffer containing the concatenated payload bytes.
@@ -321,6 +358,10 @@ public class TdsClient implements AutoCloseable {
 
   public boolean isConnected() {
     return connected;
+  }
+
+  public SocketChannel getSocketChannel() {
+    return transport.getSocketChannel();
   }
 
 }
