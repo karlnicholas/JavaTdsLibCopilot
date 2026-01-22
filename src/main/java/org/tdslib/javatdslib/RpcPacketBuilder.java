@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib;
 
+import org.tdslib.javatdslib.headers.AllHeaders;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -82,7 +84,18 @@ INSERT INTO dbo.users (firstName, lastName, email, postCount) VALUES ( @P0 ,  @P
     buf.putLong(postCount);
 
     buf.flip();
-    return buf;
+// Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
+    byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
+
+    // Combine: ALL_HEADERS + RPC core
+    ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
+        .order(ByteOrder.LITTLE_ENDIAN);
+    fullPayload.put(allHeadersBytes);
+    fullPayload.put(buf);
+
+    fullPayload.flip();
+    return fullPayload;
+//    return buf;
   }
 
   private static void putParamName(ByteBuffer buf, String name) {
