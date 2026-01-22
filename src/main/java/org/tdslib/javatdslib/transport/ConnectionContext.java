@@ -2,6 +2,10 @@ package org.tdslib.javatdslib.transport;
 
 import org.tdslib.javatdslib.TdsVersion;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
+
 /**
  * Represents the current session/connection state in a TDS connection.
  * Tracks environment changes (ENVCHANGE), login ack info, and other server-driven state.
@@ -183,4 +187,23 @@ public interface ConnectionContext {
    * @param spid the SPID for this session; may be zero or negative if not available
    */
   void setSpid(int spid);
+// Add these to the interface
+
+  /**
+   * Returns the Java Charset most appropriate for decoding non-Unicode (varchar/char) data
+   * based on the current server collation (ENVCHANGE type 7).
+   * Returns empty if unknown, Unicode-only, or no collation set.
+   */
+  Optional<Charset> getNonUnicodeCharset();
+
+  /**
+   * Returns UTF-16LE if Unicode is enabled (TDS 7.0+), otherwise falls back to non-Unicode charset.
+   * This is usually what you want for reading strings from the server.
+   */
+  default Charset getEffectiveCharset() {
+    if (isUnicodeEnabled()) {
+      return StandardCharsets.UTF_16LE;  // TDS uses UTF-16LE for nvarchar/nchar
+    }
+    return getNonUnicodeCharset().orElse(StandardCharsets.ISO_8859_1); // fallback
+  }
 }

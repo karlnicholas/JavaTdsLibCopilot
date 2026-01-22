@@ -19,13 +19,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -720,13 +714,6 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   }
 
   @Override
-  public void setCollationBytes(byte[] collationBytes) {
-    this.currentCollationBytes = collationBytes != null
-        ? Arrays.copyOf(collationBytes, collationBytes.length)
-        : new byte[0];
-  }
-
-  @Override
   public boolean isInTransaction() {
     return inTransaction;
   }
@@ -765,6 +752,16 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   public void setSpid(int spid) {
     logger.debug("Setting SPID to {}", spid);
     this.spid = spid;
+  }
+
+  @Override
+  public Optional<Charset> getNonUnicodeCharset() {
+    return CollationUtils.getCharsetFromCollation(currentCollationBytes);
+  }
+
+  @Override
+  public void setCollationBytes(byte[] collationBytes) {
+    this.currentCollationBytes = collationBytes != null ? collationBytes.clone() : null;
   }
 
   @Override

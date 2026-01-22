@@ -13,6 +13,7 @@ import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
 import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.returnstatus.ReturnStatusTokenParser;
+import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueTokenParser;
 import org.tdslib.javatdslib.tokens.row.RowTokenParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
@@ -45,6 +46,7 @@ public class TokenDispatcher {
     register(TokenType.DONE_IN_PROC, new DoneInProcTokenParser());
     register(TokenType.DONE_PROC, new DoneProcTokenParser());
     register(TokenType.RETURN_STATUS, new ReturnStatusTokenParser());
+    register(TokenType.RETURN_VALUE, new ReturnValueTokenParser());
     // For ROW, you may need to pass last ColMetaDataToken (store in context or
     // use stateful parser)
   }

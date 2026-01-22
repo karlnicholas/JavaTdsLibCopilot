@@ -15,6 +15,7 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.returnstatus.ReturnStatusToken;
+import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -140,6 +141,11 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       case RETURN_STATUS:
         ReturnStatusToken returnStatusToken = (ReturnStatusToken) token;
         logger.info("Server return status: {}", returnStatusToken.getValue());
+        break;
+
+      case RETURN_VALUE:
+        ReturnValueToken returnValueToken = (ReturnValueToken) token;
+        logger.info("Server return value: {}", returnValueToken.toString());
         break;
 
       default:

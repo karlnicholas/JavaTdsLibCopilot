@@ -6,14 +6,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
-public class RpcPacketBuilder {
+public class RpcPacketBuilderOrig {
 
   private static final byte TYPE_NVARCHAR = (byte) 0xE7;
   private static final byte TYPE_BIGINT   = 0x7F;
 
-  private static final byte RPC_PARAM_DEFAULT = 0x00; // Standard Input parameter.
-  private static final byte RPC_PARAM_BYREF = 0x01; // Output parameter (passed by reference).
-  private static final byte RPC_PARAM_DEFAULT_VALUE = 0x02; // Use the procedure's default value (the value sent is ignored).
+  private static final byte RPC_PARAM_INPUT = 0x01;
 
   public ByteBuffer buildRpcPayload(
           String firstName,
@@ -31,59 +29,59 @@ public class RpcPacketBuilder {
     buf.putShort((byte) 0x00);
 
     // Param 1: @stmt
-    putParamName(buf, "@stmt");
-//    buf.put((byte) 0);
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarcharMax(buf, 4000);
-    putPlpUnicodeString(buf,
-        "INSERT INTO dbo.users (firstName, lastName, email, postCount) VALUES (@p1, @p2, @p3, @p4)");
+//    putParamName(buf, "@stmt");
+    buf.put((byte) 0);
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    putTypeInfoNVarcharMax(buf, 8000);
+    putPlpUnicodeStringParamValue(buf,
+"""
+INSERT INTO dbo.users (firstName, lastName, email, postCount) VALUES ( @P0 ,  @P1 ,  @P2 ,  @P3 )
+    """);
 
     // Param 2: @params
-    putParamName(buf, "@params");
-//    buf.put((byte) 0);
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarcharMax(buf, 4000);
-    putPlpUnicodeString(buf,
-        "@p1 nvarchar(100), @p2 nvarchar(100), @p3 nvarchar(254), @p4 bigint");
+//    putParamName(buf, "@params");
+    buf.put((byte) 0);
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    putTypeInfoNVarcharMax(buf, 8000);
+    putPlpUnicodeStringParamValue(buf,
+            "@P0 nvarchar(4000),@P1 nvarchar(4000),@P2 nvarchar(4000),@P3 bigint");
 
     // Param 3: @p1 = firstName
-//    buf.put((byte) 0);
-    putParamName(buf, "@p1");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 100);
-    putPlpUnicodeString(buf, firstName);
+    buf.put((byte) 0);
+//    putParamName(buf, "@P0");
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    putTypeInfoNVarchar(buf, 8000);
+    putPlpUnicodeStringParamValue(buf, firstName);
 
     // Param 4: @p2 = lastName
-//    buf.put((byte) 0);
-    putParamName(buf, "@p2");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 100);
-    putPlpUnicodeString(buf, lastName);
+    buf.put((byte) 0);
+//    putParamName(buf, "@P1");
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    putTypeInfoNVarchar(buf, 8000);
+    putPlpUnicodeStringParamValue(buf, lastName);
 
     // Param 5: @p3 = email
-//    buf.put((byte) 0);
-    putParamName(buf, "@p3");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 254);
-    putPlpUnicodeString(buf, email);
-
-//    // Param 6: @p4 = postCount
-////    buf.put((byte) 0);
-//    putParamName(buf, "@P3");
-//    buf.put(RPC_PARAM_DEFAULT);
-//    buf.put((byte) 0x26);
-//    buf.put((byte) 8);
-////    buf.put((byte) 0x00);  // no extra info
-//    buf.put((byte) 8);
-//    buf.putLong(postCount);
+    buf.put((byte) 0);
+//    putParamName(buf, "@P2");
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    putTypeInfoNVarchar(buf, 8000);
+    putPlpUnicodeStringParamValue(buf, email);
 
     // Param 6: @p4 = postCount
-    putParamName(buf, "@p4");
-    buf.put(RPC_PARAM_DEFAULT);
-    buf.put(TYPE_BIGINT);
+    buf.put((byte) 0);
+//    putParamName(buf, "@P3");
+//    buf.put(RPC_PARAM_INPUT);
+    buf.put((byte) 0);
+    buf.put((byte) 0x26);
+    buf.put((byte) 8);
 //    buf.put((byte) 0x00);  // no extra info
+    buf.put((byte) 8);
     buf.putLong(postCount);
-
 
     buf.flip();
 // Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
@@ -124,7 +122,6 @@ public class RpcPacketBuilder {
     // No extra bytes — exactly 5 bytes total for collation
   }
 
-
 //  private static void putPlpUnicodeString(ByteBuffer buf, String value) {
 //    if (value == null) {
 //      // TRUE SQL NULL for PLP types: marker + total length -1, NO chunks
@@ -145,14 +142,15 @@ public class RpcPacketBuilder {
 //    }
 //
 //    // Normal value
-////    buf.putInt(-1);                     // PLP marker
+////    buf.putLong(-1);                     // PLP marker
+////    buf.put((byte) 0);
+//    buf.putLong(utf16.length);           // first (and only) chunk
 //    buf.putInt(utf16.length);           // first (and only) chunk
 //    buf.put(utf16);
 //    buf.putInt(0);                      // end
 ////    buf.putLong(-1L);                   // total unknown
 //  }
-
-  private static void putPlpUnicodeString(ByteBuffer buf, String value) {
+  private static void putPlpUnicodeStringParamValue(ByteBuffer buf, String value) {
     if (value == null) {
       // TRUE SQL NULL for PLP types: marker + total length -1, NO chunks
       buf.putInt(-1);                     // 0xFFFFFFFF
