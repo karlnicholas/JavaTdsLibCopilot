@@ -3,7 +3,7 @@ package org.tdslib.javatdslib.tokens.done;
 /**
  * DONE_IN_PROC token (0xFF) - completion of a statement inside a stored procedure.
  */
-public final class DoneInProcToken extends AbstractDoneToken {
+public final class DoneInProcToken extends DoneToken {
 
   /**
    * Construct a DONE_IN_PROC token.

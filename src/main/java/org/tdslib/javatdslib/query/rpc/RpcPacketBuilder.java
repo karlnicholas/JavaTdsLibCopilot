@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib;
+package org.tdslib.javatdslib.query.rpc;
 
 import org.tdslib.javatdslib.headers.AllHeaders;
 

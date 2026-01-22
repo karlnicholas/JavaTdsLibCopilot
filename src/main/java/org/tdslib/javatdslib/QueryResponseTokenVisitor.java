@@ -7,11 +7,14 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.done.DoneInProcToken;
+import org.tdslib.javatdslib.tokens.done.DoneProcToken;
 import org.tdslib.javatdslib.tokens.done.DoneStatus;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
+import org.tdslib.javatdslib.tokens.returnstatus.ReturnStatusToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -103,12 +106,11 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
       case DONE_IN_PROC:
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
-        DoneStatus status = done.getStatus(); // Assuming DoneToken wraps the short in DoneStatus
         // 2. Check for More Result Sets (Mask 0x01)
-        if (!status.hasMoreResults()) {
+        if (!done.getStatus().hasMoreResults()) {
           // No more results = truly done
           subscriber.onComplete();
-          logger.trace("fired onComplete");
+          logger.debug("fired onComplete");
         }
         break;
 
@@ -123,7 +125,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
         break;
       case ERROR:
         ErrorToken error = (ErrorToken) token;
-        logger.info(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
+        logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
 
         // should probably fire onError
         if (error.isError()) {
@@ -133,6 +135,11 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
       case ENV_CHANGE:
         transport.applyEnvChange((EnvChangeToken) token);
+        break;
+
+      case RETURN_STATUS:
+        ReturnStatusToken returnStatusToken = (ReturnStatusToken) token;
+        logger.info("Server return status: {}", returnStatusToken.getValue());
         break;
 
       default:
