@@ -67,22 +67,22 @@ public class RpcPacketBuilder {
     putTypeInfoNVarchar(buf, 254);
     putPlpUnicodeString(buf, email);
 
-//    // Param 6: @p4 = postCount
-////    buf.put((byte) 0);
-//    putParamName(buf, "@P3");
-//    buf.put(RPC_PARAM_DEFAULT);
-//    buf.put((byte) 0x26);
-//    buf.put((byte) 8);
-////    buf.put((byte) 0x00);  // no extra info
-//    buf.put((byte) 8);
-//    buf.putLong(postCount);
-
     // Param 6: @p4 = postCount
+//    buf.put((byte) 0);
     putParamName(buf, "@p4");
     buf.put(RPC_PARAM_DEFAULT);
-    buf.put(TYPE_BIGINT);
+    buf.put((byte) 0x26);
+    buf.put((byte) 8);
 //    buf.put((byte) 0x00);  // no extra info
+    buf.put((byte) 8);
     buf.putLong(postCount);
+
+//    // Param 6: @p4 = postCount
+//    putParamName(buf, "@p4");
+//    buf.put(RPC_PARAM_DEFAULT);
+//    buf.put(TYPE_BIGINT);
+////    buf.put((byte) 0x00);  // no extra info
+//    buf.putLong(postCount);
 
 
     buf.flip();
@@ -99,6 +99,15 @@ public class RpcPacketBuilder {
     return fullPayload;
 //    return buf;
   }
+
+//  JDBC Method	Generated SQL Type in @params	TDS Token used for Value
+//  setShort()	smallint	0x26 (Length 2)
+//  setInt()	int	0x26 (Length 4)
+//  setLong()	bigint	0x26 (Length 8)
+//  setString()	nvarchar(4000) or (max)	0xe7
+//  setBytes()	varbinary(8000) or (max)	0xa5
+//  setBoolean()	bit	0x32
+//
 
   private static void putParamName(ByteBuffer buf, String name) {
     byte[] utf16 = name.getBytes(StandardCharsets.UTF_16LE);
