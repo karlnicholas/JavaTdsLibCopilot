@@ -1,192 +1,167 @@
 package org.tdslib.javatdslib.query.rpc;
 
-import org.tdslib.javatdslib.headers.AllHeaders;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class RpcPacketBuilder {
 
-  private static final byte TYPE_NVARCHAR = (byte) 0xE7;
-  private static final byte TYPE_BIGINT   = 0x7F;
+  private static final short RPC_PROCID_SWITCH = (short) 0xFFFF;
+  private static final short RPC_PROCID_SPEXECUTESQL = 10;
 
-  private static final byte RPC_PARAM_DEFAULT = 0x00; // Standard Input parameter.
-  private static final byte RPC_PARAM_BYREF = 0x01; // Output parameter (passed by reference).
-  private static final byte RPC_PARAM_DEFAULT_VALUE = 0x02; // Use the procedure's default value (the value sent is ignored).
+  private static final byte RPC_PARAM_DEFAULT = 0x00;
 
-  public ByteBuffer buildRpcPayload(
-          String firstName,
-          String lastName,
-          String email,
-          long postCount) {
+  private final String sql;
+  private final List<ParamEntry> params;
 
-    ByteBuffer buf = ByteBuffer.allocate(4096).order(ByteOrder.LITTLE_ENDIAN);
+  public RpcPacketBuilder(String sql, List<ParamEntry> params) {
+    this.sql = sql;
+    this.params = params;
+  }
 
-    // FIXED: ProcID switch + numeric ProcID for sp_executesql
-    buf.putShort((short) 0xFFFF);     // ProcIDSwitch = 0xFFFF (signals numeric ID follows)
-    buf.putShort((short) 10);         // ProcID = 10 (sp_executesql)
+  public ByteBuffer buildRpcPacket() {
+    ByteBuffer buf = ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
 
-    // RPC flags
-    buf.putShort((byte) 0x00);
+    // RPC header
+    buf.putShort(RPC_PROCID_SWITCH);
+    buf.putShort(RPC_PROCID_SPEXECUTESQL);
+    buf.putShort((short) 0x0000);
 
     // Param 1: @stmt
     putParamName(buf, "@stmt");
-//    buf.put((byte) 0);
     buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarcharMax(buf, 4000);
-    putPlpUnicodeString(buf,
-        "INSERT INTO dbo.users (firstName, lastName, email, postCount) VALUES (@p1, @p2, @p3, @p4)");
+    putTypeInfoNVarcharMax(buf);
+    putPlpUnicodeString(buf, sql);
 
-    // Param 2: @params
+    // Param 2: @params — entry for every parameter
+    String paramsDecl = buildParamsDeclaration();
     putParamName(buf, "@params");
-//    buf.put((byte) 0);
     buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarcharMax(buf, 4000);
-    putPlpUnicodeString(buf,
-        "@p1 nvarchar(100), @p2 nvarchar(100), @p3 nvarchar(254), @p4 bigint");
+    putTypeInfoNVarcharMax(buf);
+    putPlpUnicodeString(buf, paramsDecl);
 
-    // Param 3: @p1 = firstName
-//    buf.put((byte) 0);
-    putParamName(buf, "@p1");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 100);
-    putPlpUnicodeString(buf, firstName);
+    // All parameters — use real name or empty
+    for (int i = 0; i < params.size(); i++) {
+      ParamEntry entry = params.get(i);
+      String rpcParamName = getRpcParamName(entry);           // real or empty
 
-    // Param 4: @p2 = lastName
-//    buf.put((byte) 0);
-    putParamName(buf, "@p2");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 100);
-    putPlpUnicodeString(buf, lastName);
-
-    // Param 5: @p3 = email
-//    buf.put((byte) 0);
-    putParamName(buf, "@p3");
-    buf.put(RPC_PARAM_DEFAULT);
-    putTypeInfoNVarchar(buf, 254);
-    putPlpUnicodeString(buf, email);
-
-    // Param 6: @p4 = postCount
-//    buf.put((byte) 0);
-    putParamName(buf, "@p4");
-    buf.put(RPC_PARAM_DEFAULT);
-    buf.put((byte) 0x26);
-    buf.put((byte) 8);
-//    buf.put((byte) 0x00);  // no extra info
-    buf.put((byte) 8);
-    buf.putLong(postCount);
-
-//    // Param 6: @p4 = postCount
-//    putParamName(buf, "@p4");
-//    buf.put(RPC_PARAM_DEFAULT);
-//    buf.put(TYPE_BIGINT);
-////    buf.put((byte) 0x00);  // no extra info
-//    buf.putLong(postCount);
-
+      putParamName(buf, rpcParamName);                        // empty for unnamed
+      buf.put(RPC_PARAM_DEFAULT);
+      putTypeInfoForParam(buf, entry);
+      putParamValue(buf, entry);
+    }
 
     buf.flip();
-// Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
-    byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
-
-    // Combine: ALL_HEADERS + RPC core
-    ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
-        .order(ByteOrder.LITTLE_ENDIAN);
-    fullPayload.put(allHeadersBytes);
-    fullPayload.put(buf);
-
-    fullPayload.flip();
-    return fullPayload;
-//    return buf;
+    return buf;
   }
 
-//  JDBC Method	Generated SQL Type in @params	TDS Token used for Value
-//  setShort()	smallint	0x26 (Length 2)
-//  setInt()	int	0x26 (Length 4)
-//  setLong()	bigint	0x26 (Length 8)
-//  setString()	nvarchar(4000) or (max)	0xe7
-//  setBytes()	varbinary(8000) or (max)	0xa5
-//  setBoolean()	bit	0x32
-//
-
-  private static void putParamName(ByteBuffer buf, String name) {
-    byte[] utf16 = name.getBytes(StandardCharsets.UTF_16LE);
-    buf.put((byte) (utf16.length / 2));
-    buf.put(utf16);
-  }
-
-  private static void putTypeInfoNVarcharMax(ByteBuffer buf, int maxChars) {
-    buf.put(TYPE_NVARCHAR);
-    buf.putShort((short) maxChars);  // MAX
-    putCollation(buf);
-  }
-
-  private static void putTypeInfoNVarchar(ByteBuffer buf, int maxChars) {
-    buf.put(TYPE_NVARCHAR);
-    buf.putShort((short) (maxChars));  // bytes
-    putCollation(buf);
-  }
-
-  private static void putCollation(ByteBuffer buf) {
-    buf.putInt(0x00D00409);   // LCID + version (SQL_Latin1_General_CP1_CI_AS)
-    buf.put((byte) 0x34);     // Sort ID (52 = CI_AS)
-    // No extra bytes — exactly 5 bytes total for collation
-  }
-
-
-//  private static void putPlpUnicodeString(ByteBuffer buf, String value) {
-//    if (value == null) {
-//      // TRUE SQL NULL for PLP types: marker + total length -1, NO chunks
-//      buf.putInt(-1);                     // 0xFFFFFFFF
-//      buf.putLong(-1L);                   // 0xFFFFFFFFFFFFFFFF
-//      return;
-//    }
-//
-//    byte[] utf16 = value.getBytes(StandardCharsets.UTF_16LE);
-//
-//    if (utf16.length == 0) {
-//      // Empty string '' → one 0-length chunk
-//      buf.putInt(-1);          // PLP marker
-//      buf.putInt(0);           // chunk length 0
-//      buf.putInt(0);           // end of chunks
-//      buf.putLong(-1L);        // total unknown
-//      return;
-//    }
-//
-//    // Normal value
-////    buf.putInt(-1);                     // PLP marker
-//    buf.putInt(utf16.length);           // first (and only) chunk
-//    buf.put(utf16);
-//    buf.putInt(0);                      // end
-////    buf.putLong(-1L);                   // total unknown
-//  }
-
-  private static void putPlpUnicodeString(ByteBuffer buf, String value) {
-    if (value == null) {
-      // TRUE SQL NULL for PLP types: marker + total length -1, NO chunks
-      buf.putInt(-1);                     // 0xFFFFFFFF
-      buf.putLong(-1L);                   // 0xFFFFFFFFFFFFFFFF
-      return;
+  private String buildParamsDeclaration() {
+    if (params.isEmpty()) {
+      return "";
     }
 
-    byte[] utf16 = value.getBytes(StandardCharsets.UTF_16LE);
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < params.size(); i++) {
+      ParamEntry entry = params.get(i);
+      String declName = getDeclarationName(entry, i);
+      String typeDecl = getSqlTypeDeclaration(entry.bindingType());
 
-    if (utf16.length == 0) {
-      // Empty string '' → one 0-length chunk
-      buf.putInt(-1);          // PLP marker
-      buf.putInt(0);           // chunk length 0
-      buf.putInt(0);           // end of chunks
-      buf.putLong(-1L);        // total unknown
+      if (i > 0) sb.append(", ");
+      sb.append(declName).append(" ").append(typeDecl);
+    }
+    return sb.toString();
+  }
+
+  // Name used in @params declaration — always non-empty
+  private String getDeclarationName(ParamEntry entry, int index) {
+    String name = entry.key().name();
+    if (name != null && !name.isEmpty()) {
+      return name.startsWith("@") ? name : "@" + name;
+    }
+    return "@p" + index;  // dummy for unnamed in declaration
+  }
+
+  // Name used in actual RPC parameter token — empty for unnamed
+  private String getRpcParamName(ParamEntry entry) {
+    String name = entry.key().name();
+    if (name != null && !name.isEmpty()) {
+      return name.startsWith("@") ? name : "@" + name;
+    }
+    return "";  // truly unnamed in TDS packet
+  }
+
+  private String getSqlTypeDeclaration(BindingType bt) {
+    return switch (bt) {
+      case SHORT      -> "smallint";
+      case INTEGER    -> "int";
+      case LONG       -> "bigint";
+      case BYTE       -> "tinyint";
+      case BOOLEAN    -> "bit";
+      case FLOAT      -> "real";
+      case DOUBLE     -> "float";
+      case BIGDECIMAL -> "decimal(38,10)";
+      case STRING     -> "nvarchar(4000)";
+      case BYTES      -> "varbinary(8000)";
+      case DATE       -> "date";
+      case TIME       -> "time(7)";
+      case TIMESTAMP  -> "datetime2(7)";
+      case CLOB       -> "varchar(max)";
+      case NCLOB      -> "nvarchar(max)";
+      case BLOB       -> "varbinary(max)";
+      case SQLXML     -> "xml";
+    };
+  }
+
+  // Helpers (unchanged)
+  private void putParamName(ByteBuffer buf, String name) {
+    byte[] bytes = name.getBytes(StandardCharsets.UTF_16LE);
+    buf.putShort((short) (bytes.length / 2));
+    buf.put(bytes);
+  }
+
+  private void putTypeInfoNVarcharMax(ByteBuffer buf) {
+    buf.put((byte) 0xE7);
+    buf.putShort((short) 0xFFFF);
+    buf.putInt(0x00000409);
+    buf.put((byte) 0x00);
+    buf.putShort((short) 52);
+  }
+
+  private void putPlpUnicodeString(ByteBuffer buf, String str) {
+    if (str == null || str.isEmpty()) {
+      buf.putInt(-1);
       return;
     }
+    byte[] bytes = str.getBytes(StandardCharsets.UTF_16LE);
+    buf.putInt(-1);
+    buf.putInt(bytes.length);
+    buf.put(bytes);
+    buf.putInt(0);
+  }
 
-    // Normal value
-//    buf.putLong(-1);                     // PLP marker
-//    buf.put((byte) 0);
-    buf.putShort((short) utf16.length);           // first (and only) chunk
-//    buf.putInt(utf16.length);           // first (and only) chunk
-    buf.put(utf16);
-//    buf.putInt(0);                      // end
-//    buf.putLong(-1L);                   // total unknown
+  private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry) {
+    byte xtype = entry.getEffectiveXtype();
+    buf.put(xtype);
+
+    // Placeholder
+    if (entry.bindingType() == BindingType.STRING ||
+            entry.bindingType() == BindingType.NCLOB ||
+            entry.bindingType() == BindingType.CLOB) {
+      buf.putShort((short) 0xFFFF);
+    } else if (entry.bindingType() == BindingType.BYTES ||
+            entry.bindingType() == BindingType.BLOB) {
+      buf.putShort((short) 0xFFFF);
+    } else if (entry.bindingType() == BindingType.SQLXML) {
+      buf.put((byte) 0x00);
+    }
+  }
+
+  private void putParamValue(ByteBuffer buf, ParamEntry entry) {
+    if (entry.isNull()) {
+      buf.putInt(-1);
+      return;
+    }
+    buf.put((byte) 0x00); // placeholder
   }
 }
