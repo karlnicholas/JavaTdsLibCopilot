@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.query.rpc;
 
+import org.tdslib.javatdslib.headers.AllHeaders;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -44,7 +46,7 @@ public class RpcPacketBuilder {
     // All parameters — use real name or empty
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
-      String rpcParamName = getRpcParamName(entry);           // real or empty
+      String rpcParamName = entry.key().name();
 
       putParamName(buf, rpcParamName);                        // empty for unnamed
       buf.put(RPC_PARAM_DEFAULT);
@@ -53,7 +55,17 @@ public class RpcPacketBuilder {
     }
 
     buf.flip();
-    return buf;
+  // Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
+    byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
+    // Combine: ALL_HEADERS + RPC core
+    ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
+        .order(ByteOrder.LITTLE_ENDIAN);
+    fullPayload.put(allHeadersBytes);
+    fullPayload.put(buf);
+
+    fullPayload.flip();
+    return fullPayload;
+//    return buf;
   }
 
   private String buildParamsDeclaration() {
@@ -83,13 +95,13 @@ public class RpcPacketBuilder {
   }
 
   // Name used in actual RPC parameter token — empty for unnamed
-  private String getRpcParamName(ParamEntry entry) {
-    String name = entry.key().name();
-    if (name != null && !name.isEmpty()) {
-      return name.startsWith("@") ? name : "@" + name;
-    }
-    return "";  // truly unnamed in TDS packet
-  }
+//  private String getRpcParamName(ParamEntry entry) {
+//    String name = entry.key().name();
+//    if (name != null && !name.isEmpty()) {
+//      return name.startsWith("@") ? name : "@" + name;
+//    }
+//    return "";  // truly unnamed in TDS packet
+//  }
 
   private String getSqlTypeDeclaration(BindingType bt) {
     return switch (bt) {
@@ -101,7 +113,7 @@ public class RpcPacketBuilder {
       case FLOAT      -> "real";
       case DOUBLE     -> "float";
       case BIGDECIMAL -> "decimal(38,10)";
-      case STRING     -> "nvarchar(4000)";
+      case STRING     -> "nvarchar(500)";
       case BYTES      -> "varbinary(8000)";
       case DATE       -> "date";
       case TIME       -> "time(7)";
@@ -116,16 +128,17 @@ public class RpcPacketBuilder {
   // Helpers (unchanged)
   private void putParamName(ByteBuffer buf, String name) {
     byte[] bytes = name.getBytes(StandardCharsets.UTF_16LE);
-    buf.putShort((short) (bytes.length / 2));
+//    buf.putShort((short) (bytes.length / 2));
+    buf.put((byte) (bytes.length / 2));
     buf.put(bytes);
   }
 
   private void putTypeInfoNVarcharMax(ByteBuffer buf) {
     buf.put((byte) 0xE7);
-    buf.putShort((short) 0xFFFF);
+    buf.putShort((short) 4000);
     buf.putInt(0x00000409);
-    buf.put((byte) 0x00);
-    buf.putShort((short) 52);
+//    buf.put((byte) 0x00);
+    buf.put((byte) 52);
   }
 
   private void putPlpUnicodeString(ByteBuffer buf, String str) {
@@ -134,34 +147,52 @@ public class RpcPacketBuilder {
       return;
     }
     byte[] bytes = str.getBytes(StandardCharsets.UTF_16LE);
-    buf.putInt(-1);
-    buf.putInt(bytes.length);
+//    buf.putInt(-1);
+    buf.putShort((short) bytes.length);
     buf.put(bytes);
-    buf.putInt(0);
+//    buf.putInt(0);
+  }
+
+  private void putTypeInfoIntNType(ByteBuffer buf, ParamEntry entry) {
+    buf.put((byte) 8);
+    buf.putLong((Long)entry.value());
   }
 
   private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry) {
-    byte xtype = entry.getEffectiveXtype();
+    byte xtype = entry.nullableXtype();
     buf.put(xtype);
 
     // Placeholder
     if (entry.bindingType() == BindingType.STRING ||
             entry.bindingType() == BindingType.NCLOB ||
             entry.bindingType() == BindingType.CLOB) {
-      buf.putShort((short) 0xFFFF);
+      buf.putShort((short) 500);
+      buf.putInt(0x00000409);
+//    buf.put((byte) 0x00);
+      buf.put((byte) 52);
     } else if (entry.bindingType() == BindingType.BYTES ||
             entry.bindingType() == BindingType.BLOB) {
       buf.putShort((short) 0xFFFF);
     } else if (entry.bindingType() == BindingType.SQLXML) {
       buf.put((byte) 0x00);
+    } else if (entry.bindingType() == BindingType.LONG) {
+      buf.put((byte) 0x08);
     }
   }
 
   private void putParamValue(ByteBuffer buf, ParamEntry entry) {
-    if (entry.isNull()) {
-      buf.putInt(-1);
-      return;
+    // Placeholder
+    if (entry.bindingType() == BindingType.STRING ||
+        entry.bindingType() == BindingType.NCLOB ||
+        entry.bindingType() == BindingType.CLOB) {
+      putPlpUnicodeString(buf, entry.value().toString());
+    } else if (entry.bindingType() == BindingType.BYTES ||
+        entry.bindingType() == BindingType.BLOB) {
+      buf.putShort((short) 0xFFFF);
+    } else if (entry.bindingType() == BindingType.SQLXML) {
+      buf.put((byte) 0x00);
+    } else if (entry.bindingType() == BindingType.LONG) {
+      putTypeInfoIntNType(buf, entry);
     }
-    buf.put((byte) 0x00); // placeholder
   }
 }

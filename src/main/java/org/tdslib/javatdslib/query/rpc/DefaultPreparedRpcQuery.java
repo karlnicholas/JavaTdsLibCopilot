@@ -291,130 +291,130 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
 
   @Override
   public PreparedRpcQuery bindShort(String param, Short value) {
-    BindingKey key = new BindingKey(BindingType.SHORT, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.SHORT, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindInteger(String param, Integer value) {
-    BindingKey key = new BindingKey(BindingType.INTEGER, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.INTEGER, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindLong(String param, Long value) {
-    BindingKey key = new BindingKey(BindingType.LONG, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.LONG, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindString(String param, String value) {
-    BindingKey key = new BindingKey(BindingType.STRING, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.STRING, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindBytes(String param, byte[] value) {
-    BindingKey key = new BindingKey(BindingType.BYTES, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.BYTES, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindBoolean(String param, Boolean value) {
-    BindingKey key = new BindingKey(BindingType.BOOLEAN, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.BOOLEAN, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, value));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindSQLXML(String param, SQLXML xml) {
-    BindingKey key = new BindingKey(BindingType.SQLXML, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.SQLXML, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, xml));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindNClob(String param, NClob nclob) {
-    BindingKey key = new BindingKey(BindingType.NCLOB, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.NCLOB, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, nclob));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindClob(String param, Clob clob) {
-    BindingKey key = new BindingKey(BindingType.CLOB, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.CLOB, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, clob));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindBlob(String param, Blob blob) {
-    BindingKey key = new BindingKey(BindingType.BLOB, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.BLOB, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, blob));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindTimestamp(String param, Timestamp ts) {
-    BindingKey key = new BindingKey(BindingType.TIMESTAMP, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.TIMESTAMP, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, ts));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindTime(String param, Time time) {
-    BindingKey key = new BindingKey(BindingType.TIME, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.TIME, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, time));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindDate(String param, Date date) {
-    BindingKey key = new BindingKey(BindingType.DATE, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.DATE, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, date));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindBigDecimal(String param, BigDecimal bd) {
-    BindingKey key = new BindingKey(BindingType.BIGDECIMAL, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.BIGDECIMAL, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, bd));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindDouble(String param, Double d) {
-    BindingKey key = new BindingKey(BindingType.DOUBLE, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.DOUBLE, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, d));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindFloat(String param, Float f) {
-    BindingKey key = new BindingKey(BindingType.FLOAT, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.FLOAT, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, f));
     return this;
   }
 
   @Override
   public PreparedRpcQuery bindByte(String param, Byte b) {
-    BindingKey key = new BindingKey(BindingType.BYTE, BindingKind.NAMED, normalizeParamName(param), -1);
+    BindingKey key = new BindingKey(BindingType.BYTE, BindingKind.NAMED, param, -1);
     params.add(new ParamEntry(key, b));
     return this;
   }
 
-  private String normalizeParamName(String param) {
-    if (param == null) return null;
-    if (param.startsWith("@") || param.startsWith(":")) {
-      return param.substring(1);
-    }
-    return param;
-  }
+//  private String normalizeParamName(String param) {
+//    if (param == null) return null;
+//    if (param.startsWith("@") || param.startsWith(":")) {
+//      return param.substring(1);
+//    }
+//    return param;
+//  }
 
   @Override
   public PreparedRpcQuery fetchSize(int rows) {
@@ -433,6 +433,8 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
+//    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
+//    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);
     return client.rpcAsync(rpcPacket);
   }
 }
