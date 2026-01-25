@@ -1,9 +1,15 @@
 package org.tdslib.javatdslib.query.rpc;
+
+import java.util.Objects;
+
 // Immutable key for each binding
 record BindingKey(
         BindingType type,
-        BindingKind kind,   // which method was used
-        String name,        // for NAMED; null otherwise
-        int index           // for INDEXED or IMPLIED (1-based); -1 for NAMED
+        String name
 ) {
+  // Compact constructor (implicitly called by the canonical constructor)
+  public BindingKey {
+    // Enforce non-null for reference types
+    name = Objects.requireNonNull(name, "Name must not be null");
+  }
 }

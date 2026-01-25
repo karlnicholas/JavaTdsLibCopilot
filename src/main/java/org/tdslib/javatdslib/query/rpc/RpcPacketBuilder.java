@@ -76,7 +76,7 @@ public class RpcPacketBuilder {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
-      String declName = getDeclarationName(entry, i);
+      String declName = entry.key().name();
       String typeDecl = getSqlTypeDeclaration(entry.bindingType());
 
       if (i > 0) sb.append(", ");
@@ -85,14 +85,14 @@ public class RpcPacketBuilder {
     return sb.toString();
   }
 
-  // Name used in @params declaration — always non-empty
-  private String getDeclarationName(ParamEntry entry, int index) {
-    String name = entry.key().name();
-    if (name != null && !name.isEmpty()) {
-      return name.startsWith("@") ? name : "@" + name;
-    }
-    return "@p" + index;  // dummy for unnamed in declaration
-  }
+//  // Name used in @params declaration — always non-empty
+//  private String getDeclarationName(ParamEntry entry, int index) {
+//    String name = entry.key().name();
+//    if (name != null && !name.isEmpty()) {
+//      return name;
+//    }
+//    return "";  // dummy for unnamed in declaration
+//  }
 
   // Name used in actual RPC parameter token — empty for unnamed
 //  private String getRpcParamName(ParamEntry entry) {
@@ -142,10 +142,6 @@ public class RpcPacketBuilder {
   }
 
   private void putPlpUnicodeString(ByteBuffer buf, String str) {
-    if (str == null || str.isEmpty()) {
-      buf.putInt(-1);
-      return;
-    }
     byte[] bytes = str.getBytes(StandardCharsets.UTF_16LE);
 //    buf.putInt(-1);
     buf.putShort((short) bytes.length);
