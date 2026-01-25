@@ -77,7 +77,7 @@ public class RpcPacketBuilder {
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
       String declName = entry.key().name();
-      String typeDecl = getSqlTypeDeclaration(entry.bindingType());
+      String typeDecl = getSqlTypeDeclaration(entry.key().type());
 
       if (i > 0) sb.append(", ");
       sb.append(declName).append(" ").append(typeDecl);
@@ -155,39 +155,39 @@ public class RpcPacketBuilder {
   }
 
   private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry) {
-    byte xtype = entry.nullableXtype();
+    byte xtype = entry.key().type().getXtype();
     buf.put(xtype);
 
     // Placeholder
-    if (entry.bindingType() == BindingType.STRING ||
-            entry.bindingType() == BindingType.NCLOB ||
-            entry.bindingType() == BindingType.CLOB) {
+    if (entry.key().type() == BindingType.STRING ||
+        entry.key().type() == BindingType.NCLOB ||
+        entry.key().type() == BindingType.CLOB) {
       buf.putShort((short) 500);
       buf.putInt(0x00000409);
 //    buf.put((byte) 0x00);
       buf.put((byte) 52);
-    } else if (entry.bindingType() == BindingType.BYTES ||
-            entry.bindingType() == BindingType.BLOB) {
+    } else if (entry.key().type() == BindingType.BYTES ||
+        entry.key().type() == BindingType.BLOB) {
       buf.putShort((short) 0xFFFF);
-    } else if (entry.bindingType() == BindingType.SQLXML) {
+    } else if (entry.key().type() == BindingType.SQLXML) {
       buf.put((byte) 0x00);
-    } else if (entry.bindingType() == BindingType.LONG) {
+    } else if (entry.key().type() == BindingType.LONG) {
       buf.put((byte) 0x08);
     }
   }
 
   private void putParamValue(ByteBuffer buf, ParamEntry entry) {
     // Placeholder
-    if (entry.bindingType() == BindingType.STRING ||
-        entry.bindingType() == BindingType.NCLOB ||
-        entry.bindingType() == BindingType.CLOB) {
+    if (entry.key().type() == BindingType.STRING ||
+        entry.key().type() == BindingType.NCLOB ||
+        entry.key().type() == BindingType.CLOB) {
       putPlpUnicodeString(buf, entry.value().toString());
-    } else if (entry.bindingType() == BindingType.BYTES ||
-        entry.bindingType() == BindingType.BLOB) {
+    } else if (entry.key().type() == BindingType.BYTES ||
+        entry.key().type() == BindingType.BLOB) {
       buf.putShort((short) 0xFFFF);
-    } else if (entry.bindingType() == BindingType.SQLXML) {
+    } else if (entry.key().type() == BindingType.SQLXML) {
       buf.put((byte) 0x00);
-    } else if (entry.bindingType() == BindingType.LONG) {
+    } else if (entry.key().type() == BindingType.LONG) {
       putTypeInfoIntNType(buf, entry);
     }
   }
