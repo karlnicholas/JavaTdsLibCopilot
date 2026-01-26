@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib;
 
+import io.r2dbc.spi.Result;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
@@ -21,7 +23,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
-import java.util.concurrent.Flow;
 
 /**
  * High-level TDS client facade.
@@ -32,6 +33,7 @@ public class TdsClient implements AutoCloseable {
 
   private final TdsTransport transport;
   private boolean connected;
+  private TdsResult activeResult;
 
   /**
    * Create a new TdsClient backed by a TCP transport to the given host/port.
@@ -258,7 +260,7 @@ public class TdsClient implements AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-  public Flow.Publisher<RowWithMetadata> queryAsync(String sql) {
+  public Publisher<Result> queryAsync(String sql) {
     if (!connected) {
       throw new IllegalStateException("Not connected or not in async mode");
     }
@@ -288,7 +290,7 @@ public class TdsClient implements AutoCloseable {
     return new DefaultPreparedRpcQuery(sql);
   }
 
-  public Flow.Publisher<RowWithMetadata> rpcAsync(ByteBuffer payload) {
+  public Publisher<Result> rpcAsync(ByteBuffer payload) {
 
     // Create SQL_BATCH message
     TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);

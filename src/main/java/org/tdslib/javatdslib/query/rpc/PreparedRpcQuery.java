@@ -1,11 +1,10 @@
 package org.tdslib.javatdslib.query.rpc;
 
-import org.tdslib.javatdslib.RowWithMetadata;
+import io.r2dbc.spi.Result;
 import org.tdslib.javatdslib.TdsClient;
-import java.math.BigDecimal;
-import java.sql.*;
+import org.reactivestreams.Publisher;
+
 import java.util.Map;
-import java.util.concurrent.Flow;
 /**
  Fluent builder for preparing and executing an RPC-style query (prepared statement)
  against a SQL Server / TDS connection.
@@ -32,29 +31,29 @@ public interface PreparedRpcQuery {
    After this call, further bind() calls on this instance are usually invalid.
    @return Flow.Publisher that emits rows as they arrive from the TDS stream
    */
-  Flow.Publisher<RowWithMetadata> execute(TdsClient client);
-  Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client);
-  Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client);
+  Publisher<Result> execute(TdsClient client);
+  Publisher<Result> executeQuery(TdsClient client);
+  Publisher<Result> executeUpdate(TdsClient client);
 
   /**
    Convenience: execute with named parameters (map keys should match @param names
    without the @ prefix, or include it — implementation normalizes).
    */
-  default Flow.Publisher<RowWithMetadata> execute(TdsClient client, Map<String, ?> params) {
+  default Publisher<Result> execute(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }
     return execute(client);
   }
 
-  default Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client, Map<String, ?> params) {
+  default Publisher<Result> executeQuery(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }
     return executeQuery(client);
   }
 
-  default Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client, Map<String, ?> params) {
+  default Publisher<Result> executeUpdate(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }
@@ -73,6 +72,6 @@ public interface PreparedRpcQuery {
 // Pattern matching instanceof (final in Java 17)
   }
 // Optional future extensions
-// Flow.Publisher<Integer> executeUpdate();           // for INSERT/UPDATE/DELETE
-// Flow.Publisher<OutputParam> executeWithOutputs();  // for stored procs with OUTPUT
+// Publisher<Integer> executeUpdate();           // for INSERT/UPDATE/DELETE
+// Publisher<OutputParam> executeWithOutputs();  // for stored procs with OUTPUT
 }

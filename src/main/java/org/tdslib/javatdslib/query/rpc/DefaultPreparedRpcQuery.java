@@ -1,13 +1,13 @@
 package org.tdslib.javatdslib.query.rpc;
 
-import org.tdslib.javatdslib.RowWithMetadata;
+import io.r2dbc.spi.Result;
+import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.TdsClient;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Flow;
 
 public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
 
@@ -142,7 +142,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
   }
 
   @Override
-  public Flow.Publisher<RowWithMetadata> execute(TdsClient client) {
+  public Publisher<Result> execute(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
@@ -151,7 +151,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
     return client.rpcAsync(rpcPacket);
   }
   @Override
-  public Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client) {
+  public Publisher<Result> executeQuery(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
@@ -160,7 +160,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
     return client.rpcAsync(rpcPacket);
   }
   @Override
-  public Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client) {
+  public Publisher<Result> executeUpdate(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();

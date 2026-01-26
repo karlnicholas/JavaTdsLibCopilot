@@ -1,5 +1,9 @@
 package org.tdslib.javatdslib;
 
+import io.r2dbc.spi.Result;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.TdsMessage;
@@ -7,9 +11,6 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
-import org.tdslib.javatdslib.tokens.done.DoneInProcToken;
-import org.tdslib.javatdslib.tokens.done.DoneProcToken;
-import org.tdslib.javatdslib.tokens.done.DoneStatus;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
@@ -20,14 +21,13 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
-import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
  * from a SQL batch execution.
  */
-public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata>, TokenVisitor {
+public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
   private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
@@ -40,7 +40,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   private boolean hasError = false;
   // ------------------------------------------------
 
-  private Flow.Subscriber<? super RowWithMetadata> subscriber;
+  private Subscriber<? super Result> subscriber;
   private final AtomicBoolean messageSent = new AtomicBoolean(false);
 
   /**
@@ -99,7 +99,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
           return;
         }
         RowToken row = (RowToken) token;
-        subscriber.onNext(new RowWithMetadata(row.getColumnData(), currentMetadata.getColumns()));
+        subscriber.onNext(null);
         logger.trace("fired onNext for Row ({} columns)", row.getColumnData().size());
         break;
 
@@ -163,14 +163,14 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
   }
 
   @Override
-  public void subscribe(Flow.Subscriber<? super RowWithMetadata> subscriber) {
+  public void subscribe(Subscriber<? super Result> subscriber) {
     // Validate subscriber
     if (subscriber == null) {
       throw new NullPointerException("Subscriber cannot be null");
     }
 
     this.subscriber = subscriber;
-    subscriber.onSubscribe(new Flow.Subscription() {
+    subscriber.onSubscribe(new Subscription() {
 
       @Override
       public void request(long n) {
@@ -192,7 +192,7 @@ public class QueryResponseTokenVisitor implements Flow.Publisher<RowWithMetadata
 
   }
 
-  public Flow.Subscriber<? super RowWithMetadata> getSubscriber() {
+  public Subscriber<? super Result> getSubscriber() {
     return subscriber;
   }
 }
