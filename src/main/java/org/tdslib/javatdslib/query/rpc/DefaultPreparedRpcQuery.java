@@ -3,9 +3,7 @@ package org.tdslib.javatdslib.query.rpc;
 import org.tdslib.javatdslib.RowWithMetadata;
 import org.tdslib.javatdslib.TdsClient;
 
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.sql.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,125 +25,103 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
   // ───────────────────────────────────────────────────────────────
 
   @Override
-  public PreparedRpcQuery bindShort(String param, Short value) {
-    BindingKey key = new BindingKey(BindingType.SHORT, param);
+  public PreparedRpcQuery bind(String param, Object value) {
+    if (param == null || param.trim().isEmpty()) {
+      throw new IllegalArgumentException("Parameter name cannot be null or empty");
+    }
+
+    if (value == null) {
+      throw new IllegalArgumentException(
+          "Value is null. Use bindNull(\"" + param + "\", <type>) instead of bind(\"" + param + "\", null)"
+      );
+    }
+
+//    String cleanParam = param.trim();
+//    if (cleanParam.startsWith("@")) {
+//      cleanParam = cleanParam.substring(1);
+//    }
+
+    // Infer BindingType from runtime value type
+    BindingType bindingType = inferBindingType(value);
+
+    if (bindingType == null) {
+      throw new IllegalArgumentException(
+          "Cannot bind value of type " + value.getClass().getName() +
+              " — no matching BindingType found. Supported: Byte, Short, Integer, Long, Boolean, " +
+              "Float, Double, BigDecimal, String, byte[], etc."
+      );
+    }
+
+    BindingKey key = new BindingKey(bindingType, param);
     params.add(new ParamEntry(key, value));
+
     return this;
   }
 
   @Override
-  public PreparedRpcQuery bindInteger(String param, Integer value) {
-    BindingKey key = new BindingKey(BindingType.INTEGER, param);
-    params.add(new ParamEntry(key, value));
+  public PreparedRpcQuery bindNull(String param, Class<?> type) {
+    if (param == null || param.trim().isEmpty()) {
+      throw new IllegalArgumentException("Parameter name cannot be null or empty");
+    }
+    if (type == null) {
+      throw new IllegalArgumentException("Type for null parameter cannot be null");
+    }
+
+    // Normalize param name
+//    String cleanParam = param.trim();
+//    if (cleanParam.startsWith("@")) {
+//      cleanParam = cleanParam.substring(1);
+//    }
+
+    // Infer BindingType from the provided Class<?>
+    BindingType bindingType = inferBindingTypeForClass(type);
+
+    if (bindingType == null) {
+      throw new IllegalArgumentException(
+          "Cannot bind null for type " + type.getName() +
+              " — no matching BindingType found. Provide a supported type (e.g. Integer.class, String.class, etc.)"
+      );
+    }
+
+    BindingKey key = new BindingKey(bindingType, param);
+    params.add(new ParamEntry(key, null));  // null value signals NULL
+
     return this;
   }
 
-  @Override
-  public PreparedRpcQuery bindLong(String param, Long value) {
-    BindingKey key = new BindingKey(BindingType.LONG, param);
-    params.add(new ParamEntry(key, value));
-    return this;
+  /**
+   * Infer BindingType from runtime value (non-null case).
+   */
+  private BindingType inferBindingType(Object value) {
+    Class<?> clazz = value.getClass();
+
+    return inferBindingTypeForClass(clazz);
   }
 
-  @Override
-  public PreparedRpcQuery bindString(String param, String value) {
-    BindingKey key = new BindingKey(BindingType.STRING, param);
-    params.add(new ParamEntry(key, value));
-    return this;
+  /**
+   * Infer BindingType from Class<?> for bindNull (null value case).
+   */
+  private BindingType inferBindingTypeForClass(Class<?> clazz) {
+    if (clazz == Byte.class || clazz == Byte.TYPE) return BindingType.TINYINT;
+    if (clazz == Short.class || clazz == Short.TYPE) return BindingType.SMALLINT;
+    if (clazz == Integer.class || clazz == Integer.TYPE) return BindingType.INT;
+    if (clazz == Long.class || clazz == Long.TYPE) return BindingType.BIGINT;
+
+    if (clazz == Boolean.class || clazz == Boolean.TYPE) return BindingType.BIT;
+
+    if (clazz == Float.class || clazz == Float.TYPE) return BindingType.REAL;
+    if (clazz == Double.class || clazz == Double.TYPE) return BindingType.FLOAT;
+
+    if (clazz == java.math.BigDecimal.class) return BindingType.DECIMAL;
+
+    if (clazz == String.class) return BindingType.NVARCHAR;
+    if (clazz == byte[].class) return BindingType.VARBINARY;
+
+    // Add more as needed
+    return null;  // unsupported
   }
 
-  @Override
-  public PreparedRpcQuery bindBytes(String param, byte[] value) {
-    BindingKey key = new BindingKey(BindingType.BYTES, param);
-    params.add(new ParamEntry(key, value));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindBoolean(String param, Boolean value) {
-    BindingKey key = new BindingKey(BindingType.BOOLEAN, param);
-    params.add(new ParamEntry(key, value));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindSQLXML(String param, SQLXML xml) {
-    BindingKey key = new BindingKey(BindingType.SQLXML, param);
-    params.add(new ParamEntry(key, xml));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindNClob(String param, NClob nclob) {
-    BindingKey key = new BindingKey(BindingType.NCLOB, param);
-    params.add(new ParamEntry(key, nclob));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindClob(String param, Clob clob) {
-    BindingKey key = new BindingKey(BindingType.CLOB, param);
-    params.add(new ParamEntry(key, clob));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindBlob(String param, Blob blob) {
-    BindingKey key = new BindingKey(BindingType.BLOB, param);
-    params.add(new ParamEntry(key, blob));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindTimestamp(String param, Timestamp ts) {
-    BindingKey key = new BindingKey(BindingType.TIMESTAMP, param);
-    params.add(new ParamEntry(key, ts));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindTime(String param, Time time) {
-    BindingKey key = new BindingKey(BindingType.TIME, param);
-    params.add(new ParamEntry(key, time));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindDate(String param, Date date) {
-    BindingKey key = new BindingKey(BindingType.DATE, param);
-    params.add(new ParamEntry(key, date));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindBigDecimal(String param, BigDecimal bd) {
-    BindingKey key = new BindingKey(BindingType.BIGDECIMAL, param);
-    params.add(new ParamEntry(key, bd));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindDouble(String param, Double d) {
-    BindingKey key = new BindingKey(BindingType.DOUBLE, param);
-    params.add(new ParamEntry(key, d));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindFloat(String param, Float f) {
-    BindingKey key = new BindingKey(BindingType.FLOAT, param);
-    params.add(new ParamEntry(key, f));
-    return this;
-  }
-
-  @Override
-  public PreparedRpcQuery bindByte(String param, Byte b) {
-    BindingKey key = new BindingKey(BindingType.BYTE, param);
-    params.add(new ParamEntry(key, b));
-    return this;
-  }
-
-//  private String normalizeParamName(String param) {
+  //  private String normalizeParamName(String param) {
 //    if (param == null) return null;
 //    if (param.startsWith("@") || param.startsWith(":")) {
 //      return param.substring(1);

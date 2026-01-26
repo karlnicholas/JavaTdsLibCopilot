@@ -12,23 +12,9 @@ import java.util.concurrent.Flow;
  */
 public interface PreparedRpcQuery {
 
-  PreparedRpcQuery bindShort(String param, Short value);
-  PreparedRpcQuery bindInteger(String param, Integer value);
-  PreparedRpcQuery bindLong(String param, Long value);
-  PreparedRpcQuery bindString(String param, String value);
-  PreparedRpcQuery bindBytes(String param, byte[] value);
-  PreparedRpcQuery bindBoolean(String param, Boolean value);
-  PreparedRpcQuery bindSQLXML(String param, SQLXML xml);
-  PreparedRpcQuery bindNClob(String param, NClob nclob);
-  PreparedRpcQuery bindClob(String param, Clob clob);
-  PreparedRpcQuery bindBlob(String param, Blob blob);
-  PreparedRpcQuery bindTimestamp(String param, Timestamp ts);
-  PreparedRpcQuery bindTime(String param, Time time);
-  PreparedRpcQuery bindDate(String param, Date date);
-  PreparedRpcQuery bindBigDecimal(String param, BigDecimal bd);
-  PreparedRpcQuery bindDouble(String param, Double d);
-  PreparedRpcQuery bindFloat(String param, Float f);
-  PreparedRpcQuery bindByte(String param, Byte b);
+  PreparedRpcQuery bind(String param, Object value);
+
+  PreparedRpcQuery bindNull(String param, Class<?> type);
 
   /**
    Optional: set fetch size (row batching hint for TDS STREAM).
@@ -83,47 +69,8 @@ public interface PreparedRpcQuery {
 // If your TdsClient supports generic null, you could call:
 // bindNull(index, java.sql.Types.OTHER);
     }
+    bind(param, value);
 // Pattern matching instanceof (final in Java 17)
-    if (value instanceof Byte b) {
-      bindByte(param, b);
-    } else if (value instanceof Short s) {
-      bindShort(param, s);
-    } else if (value instanceof Integer i) {
-      bindInteger(param, i);
-    } else if (value instanceof Long l) {
-      bindLong(param, l);
-    } else if (value instanceof Float f) {
-      bindFloat(param, f);
-    } else if (value instanceof Double d) {
-      bindDouble(param, d);
-    } else if (value instanceof java.math.BigDecimal bd) {
-      bindBigDecimal(param, bd);
-    } else if (value instanceof Boolean bool) {
-      bindBoolean(param, bool);
-    } else if (value instanceof String str) {
-      bindString(param, str);  // fallback; consider bindNString if needed
-    } else if (value instanceof java.sql.Date date) {
-      bindDate(param, date);
-    } else if (value instanceof java.sql.Time time) {
-      bindTime(param, time);
-    } else if (value instanceof java.sql.Timestamp ts) {
-      bindTimestamp(param, ts);
-    } else if (value instanceof byte[] bytes) {
-      bindBytes(param, bytes);
-    } else if (value instanceof java.sql.Blob blob) {
-      bindBlob(param, blob);
-    } else if (value instanceof java.sql.Clob clob) {
-      bindClob(param, clob);
-    } else if (value instanceof java.sql.NClob nclob) {
-      bindNClob(param, nclob);
-    } else if (value instanceof java.sql.SQLXML xml) {
-      bindSQLXML(param, xml);
-    } else {
-      throw new IllegalArgumentException(
-              "Unsupported automatic bind type: " + value.getClass().getName() +
-                      " (value = " + value + "). " +
-                      "Use explicit bindXxx(...) or bindObject(index, value, jdbcType)");
-    }
   }
 // Optional future extensions
 // Flow.Publisher<Integer> executeUpdate();           // for INSERT/UPDATE/DELETE
