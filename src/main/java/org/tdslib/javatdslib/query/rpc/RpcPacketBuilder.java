@@ -16,10 +16,12 @@ public class RpcPacketBuilder {
 
   private final String sql;
   private final List<ParamEntry> params;
+  private final boolean update;
 
-  public RpcPacketBuilder(String sql, List<ParamEntry> params) {
+  public RpcPacketBuilder(String sql, List<ParamEntry> params, boolean update) {
     this.sql = sql;
     this.params = params;
+    this.update = update;
   }
 
   public ByteBuffer buildRpcPacket() {
@@ -55,17 +57,20 @@ public class RpcPacketBuilder {
     }
 
     buf.flip();
-  // Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
-    byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
-    // Combine: ALL_HEADERS + RPC core
-    ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
-        .order(ByteOrder.LITTLE_ENDIAN);
-    fullPayload.put(allHeadersBytes);
-    fullPayload.put(buf);
+    if ( update ) {
+      // Now build ALL_HEADERS (most common: auto-commit, transaction=0, outstanding=1)
+      byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
+      // Combine: ALL_HEADERS + RPC core
+      ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
+          .order(ByteOrder.LITTLE_ENDIAN);
+      fullPayload.put(allHeadersBytes);
+      fullPayload.put(buf);
 
-    fullPayload.flip();
-    return fullPayload;
-//    return buf;
+      fullPayload.flip();
+      return fullPayload;
+    } else {
+      return buf;
+    }
   }
 
   private String buildParamsDeclaration() {

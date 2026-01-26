@@ -168,7 +168,25 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
   @Override
   public Flow.Publisher<RowWithMetadata> execute(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
-    RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params);
+    RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
+    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
+//    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
+//    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);
+    return client.rpcAsync(rpcPacket);
+  }
+  @Override
+  public Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client) {
+    // TODO: Implement TDS RPC execution using params list
+    RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
+    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
+//    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
+//    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);
+    return client.rpcAsync(rpcPacket);
+  }
+  @Override
+  public Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client) {
+    // TODO: Implement TDS RPC execution using params list
+    RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
 //    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
 //    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);

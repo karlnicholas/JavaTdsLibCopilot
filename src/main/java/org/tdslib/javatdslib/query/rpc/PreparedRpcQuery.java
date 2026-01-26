@@ -47,6 +47,8 @@ public interface PreparedRpcQuery {
    @return Flow.Publisher that emits rows as they arrive from the TDS stream
    */
   Flow.Publisher<RowWithMetadata> execute(TdsClient client);
+  Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client);
+  Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client);
 
   /**
    Convenience: execute with named parameters (map keys should match @param names
@@ -57,6 +59,20 @@ public interface PreparedRpcQuery {
       params.forEach(this::bindParam);
     }
     return execute(client);
+  }
+
+  default Flow.Publisher<RowWithMetadata> executeQuery(TdsClient client, Map<String, ?> params) {
+    if (params != null) {
+      params.forEach(this::bindParam);
+    }
+    return executeQuery(client);
+  }
+
+  default Flow.Publisher<RowWithMetadata> executeUpdate(TdsClient client, Map<String, ?> params) {
+    if (params != null) {
+      params.forEach(this::bindParam);
+    }
+    return executeUpdate(client);
   }
 
   default void bindParam(String param, Object value) {
