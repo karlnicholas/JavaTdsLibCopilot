@@ -31,29 +31,29 @@ public interface PreparedRpcQuery {
    After this call, further bind() calls on this instance are usually invalid.
    @return Flow.Publisher that emits rows as they arrive from the TDS stream
    */
-  Publisher<Result> execute(TdsClient client);
-  Publisher<Result> executeQuery(TdsClient client);
-  Publisher<Result> executeUpdate(TdsClient client);
+  Result execute(TdsClient client);
+  Result executeQuery(TdsClient client);
+  Result executeUpdate(TdsClient client);
 
   /**
    Convenience: execute with named parameters (map keys should match @param names
    without the @ prefix, or include it — implementation normalizes).
    */
-  default Publisher<Result> execute(TdsClient client, Map<String, ?> params) {
+  default Result execute(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }
     return execute(client);
   }
 
-  default Publisher<Result> executeQuery(TdsClient client, Map<String, ?> params) {
+  default Result executeQuery(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }
     return executeQuery(client);
   }
 
-  default Publisher<Result> executeUpdate(TdsClient client, Map<String, ?> params) {
+  default Result executeUpdate(TdsClient client, Map<String, ?> params) {
     if (params != null) {
       params.forEach(this::bindParam);
     }

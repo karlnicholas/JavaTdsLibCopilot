@@ -142,7 +142,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
   }
 
   @Override
-  public Publisher<Result> execute(TdsClient client) {
+  public Result execute(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
@@ -151,7 +151,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
     return client.rpcAsync(rpcPacket);
   }
   @Override
-  public Publisher<Result> executeQuery(TdsClient client) {
+  public Result executeQuery(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
@@ -160,7 +160,7 @@ public class DefaultPreparedRpcQuery implements PreparedRpcQuery {
     return client.rpcAsync(rpcPacket);
   }
   @Override
-  public Publisher<Result> executeUpdate(TdsClient client) {
+  public Result executeUpdate(TdsClient client) {
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(sql, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();

@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib;
 
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +34,6 @@ public class TdsClient implements AutoCloseable {
 
   private final TdsTransport transport;
   private boolean connected;
-  private TdsResult activeResult;
 
   /**
    * Create a new TdsClient backed by a TCP transport to the given host/port.
@@ -260,7 +260,7 @@ public class TdsClient implements AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-  public Publisher<Result> queryAsync(String sql) {
+  public Result queryAsync(String sql) {
     if (!connected) {
       throw new IllegalStateException("Not connected or not in async mode");
     }
@@ -283,14 +283,15 @@ public class TdsClient implements AutoCloseable {
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-    return new QueryResponseTokenVisitor(transport, queryMsg);
+    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
+//    return new QueryResponseTokenVisitor(transport, queryMsg);
   }
 
   public PreparedRpcQuery queryRpc(String sql) {
     return new DefaultPreparedRpcQuery(sql);
   }
 
-  public Publisher<Result> rpcAsync(ByteBuffer payload) {
+  public Result rpcAsync(ByteBuffer payload) {
 
     // Create SQL_BATCH message
     TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
@@ -299,7 +300,7 @@ public class TdsClient implements AutoCloseable {
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-    return new QueryResponseTokenVisitor(transport, queryMsg);
+    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
   }
   /**
    * Combine payload buffers from a list of messages into a single

@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib;
 
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -21,13 +22,14 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Stateful visitor that collects the results of one or more result-sets
  * from a SQL batch execution.
  */
-public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisitor {
+public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
   private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
@@ -40,7 +42,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisito
   private boolean hasError = false;
   // ------------------------------------------------
 
-  private Subscriber<? super Result> subscriber;
+  private Subscriber<? super Row> subscriber;
   private final AtomicBoolean messageSent = new AtomicBoolean(false);
 
   /**
@@ -89,20 +91,41 @@ public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisito
   @Override
   public void onToken(Token token) {
     switch (token.getType()) {
+//      case COL_METADATA:
+//        currentMetadata = (ColMetaDataToken) token;
+//        break;
+//
+//      case ROW:
+//        if (currentMetadata == null) {
+//          logger.warn("ROW token without preceding COL_METADATA - ignoring");
+//          return;
+//        }
+//        RowToken row = (RowToken) token;
+//        subscriber.onNext(null);
+//        logger.trace("fired onNext for Row ({} columns)", row.getColumnData().size());
+//        break;
+//
+//      case DONE:
+//      case DONE_IN_PROC:
+//      case DONE_PROC:
+//        DoneToken done = (DoneToken) token;
+//        // 2. Check for More Result Sets (Mask 0x01)
+//        if (!done.getStatus().hasMoreResults()) {
+//          // No more results = truly done
+//          subscriber.onComplete();
+//          logger.debug("fired onComplete");
+//        }
+//        break;
       case COL_METADATA:
         currentMetadata = (ColMetaDataToken) token;
         break;
 
       case ROW:
-        if (currentMetadata == null) {
-          logger.warn("ROW token without preceding COL_METADATA - ignoring");
-          return;
-        }
-        RowToken row = (RowToken) token;
-        subscriber.onNext(null);
-        logger.trace("fired onNext for Row ({} columns)", row.getColumnData().size());
+        // Push the row data into the result's internal stream
+        RowToken rowToken = (RowToken) token;
+        TdsRow row = new TdsRow(rowToken.getColumnData(), currentMetadata.getColumns());
+        subscriber.onNext(row);
         break;
-
       case DONE:
       case DONE_IN_PROC:
       case DONE_PROC:
@@ -110,11 +133,15 @@ public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisito
         // 2. Check for More Result Sets (Mask 0x01)
         if (!done.getStatus().hasMoreResults()) {
           // No more results = truly done
+//          if ( currentMetadata == null) {
+//            subscriber.onNext(new TdsRow(Collections.emptyList(), Collections.emptyList()));
+//          }
           subscriber.onComplete();
+          currentMetadata = null;
           logger.debug("fired onComplete");
         }
+        // ... existing done logic ...
         break;
-
       case INFO:
         InfoToken info = (InfoToken) token;
         logger.info(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
@@ -163,7 +190,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisito
   }
 
   @Override
-  public void subscribe(Subscriber<? super Result> subscriber) {
+  public void subscribe(Subscriber<? super Row> subscriber) {
     // Validate subscriber
     if (subscriber == null) {
       throw new NullPointerException("Subscriber cannot be null");
@@ -192,7 +219,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result>, TokenVisito
 
   }
 
-  public Subscriber<? super Result> getSubscriber() {
+  public Subscriber<? super Row> getSubscriber() {
     return subscriber;
   }
 }
