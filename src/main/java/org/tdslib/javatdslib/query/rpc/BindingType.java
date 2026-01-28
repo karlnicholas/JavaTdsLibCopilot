@@ -21,6 +21,12 @@ import java.util.Map;
  */
 public enum BindingType {
 
+  // String types
+
+  // Binary types
+
+  // Date/Time corrections
+
   // Integer types (INTNTYPE = 0x26, length 1/2/4/8 — Java: Byte/Short/Integer/Long)
   TINYINT("tinyint", (byte) 0x26, TypeStyle.LENGTH, null, null, (byte) 1),
   SMALLINT("smallint", (byte) 0x26, TypeStyle.LENGTH, null, null, (byte) 2),
@@ -44,23 +50,24 @@ public enum BindingType {
 
   // String types (NVARCHARTYPE / VARCHARTYPE = 0xE7, varlen max — Java: String)
   CHAR("char", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) 8000),      // fixed-length but TDS treats as var
-  VARCHAR("varchar", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) -1),  // -1 = MAX
+  VARCHAR("varchar(max)", (byte) 0xA7, TypeStyle.VARLEN, null, null, (short) -1),
   TEXT("text", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) -1),
   NCHAR("nchar", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) 4000),
-  NVARCHAR("nvarchar", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) -1),
+  NVARCHAR("nvarchar (max)", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) -1),
   NTEXT("ntext", (byte) 0xE7, TypeStyle.VARLEN, null, null, (short) -1),
 
   // Binary types (VARBINARYTYPE = 0xA5, varlen max — Java: byte[])
   BINARY("binary", (byte) 0xA5, TypeStyle.VARLEN, null, null, (short) 8000),
-  VARBINARY("varbinary", (byte) 0xA5, TypeStyle.VARLEN, null, null, (short) -1),
+  VARBINARY("varbinary(max)", (byte) 0xA5, TypeStyle.VARLEN, null, null, (short) -1),
   IMAGE("image", (byte) 0xA5, TypeStyle.VARLEN, null, null, (short) -1),
 
   // Date/Time types (DATENTYPE=0x28, TIMENTYPE=0x29, DATETIMETYPE=0x2A — Java: LocalDate, LocalTime, LocalDateTime)
   DATE("date", (byte) 0x28, TypeStyle.FIXED, null, null, null),
   TIME("time", (byte) 0x29, TypeStyle.FIXED, null, null, null),
-  DATETIME("datetime", (byte) 0x2A, TypeStyle.FIXED, null, null, null),
-  DATETIME2("datetime2", (byte) 0x2A, TypeStyle.FIXED, null, null, null),
-  SMALLDATETIME("smalldatetime", (byte) 0x3A, TypeStyle.FIXED, null, null, null),  // 0x3A MONEYTYPE? Wait, no — actually 0x3A is MONEY, smalldatetime is 0x3B DATETIM4TYPE
+  DATETIME("datetime", (byte) 0x3D, TypeStyle.FIXED, null, null, null), // Changed from 0x2A
+  SMALLDATETIME("smalldatetime", (byte) 0x3B, TypeStyle.FIXED, null, null, null), // Changed from 0x3A
+  DATETIME2("datetime2(7)", (byte) 0x2A, TypeStyle.FIXED, null, null, null),
+
   DATETIMEOFFSET("datetimeoffset", (byte) 0x2B, TypeStyle.FIXED, null, null, null),
 
   // Uniqueidentifier (GUIDTYPE = 0x24, fixed 16 bytes — Java: UUID or byte[16])

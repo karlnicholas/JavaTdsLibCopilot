@@ -199,7 +199,7 @@ public class RpcPacketBuilder {
             type == BindingType.NCHAR || type == BindingType.NVARCHAR || type == BindingType.NTEXT) {
           // Collation info (hardcoded default: LCID 0x00000409 = English US, flags 0x00, sort ID 52 = Latin1_General_CI_AS)
           buf.putInt(0x00000409);  // LCID (4 bytes)
-          buf.put((byte) 0x00);    // Flags (1 byte)
+          buf.put((byte) 52);    // Flags (1 byte)
         } else if (type == BindingType.XML) {
           // Schema collection name length (0 for no schema)
           buf.put((byte) 0x00);
