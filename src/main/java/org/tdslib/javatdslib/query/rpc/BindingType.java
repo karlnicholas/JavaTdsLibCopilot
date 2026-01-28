@@ -20,13 +20,6 @@ import java.util.Map;
  * Java type hints are comments only (e.g. for BigDecimal, Double, etc.) — use runtime type inference in your binder.
  */
 public enum BindingType {
-
-  // String types
-
-  // Binary types
-
-  // Date/Time corrections
-
   // Integer types (INTNTYPE = 0x26, length 1/2/4/8 — Java: Byte/Short/Integer/Long)
   TINYINT("tinyint", (byte) 0x26, TypeStyle.LENGTH, null, null, (byte) 1),
   SMALLINT("smallint", (byte) 0x26, TypeStyle.LENGTH, null, null, (byte) 2),
