@@ -29,7 +29,7 @@ public interface PreparedRpcQuery {
   /**
    Executes the prepared RPC and returns a reactive publisher of result rows.
    After this call, further bind() calls on this instance are usually invalid.
-   @return Flow.Publisher that emits rows as they arrive from the TDS stream
+   @return Result that emits rows as they arrive from the TDS stream
    */
   Result execute(TdsClient client);
   Result executeQuery(TdsClient client);
