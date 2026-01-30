@@ -257,48 +257,13 @@ public class TdsClient implements AutoCloseable {
    * @throws IOException on I/O or transport errors
    */
   public Statement queryAsync(String sql) {
-//    if (!connected) {
-//      throw new IllegalStateException("Not connected or not in async mode");
-//    }
-//
-//    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
-//    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
-//
-//    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
-//
-//    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
-//    payload.put(allHeaders);
-//    payload.put(sqlBytes);
-//
-//    payload.flip();
-//
-//    // Create SQL_BATCH message
-//    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
-
-    // 2. Instead of blocking send/receive:
-    //    → queue the message, register OP_WRITE if needed
-    //    → return future that will be completed from selector loop
-
-//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
     return new TdsStatementImpl(sql, transport);
-//    return new QueryResponseTokenVisitor(transport, queryMsg);
   }
 
   public Statement queryRpc(String sql) {
     return new TdsStatementImpl(sql, transport);
   }
 
-//  private Statement rpcAsync(ByteBuffer payload) {
-//
-//    // Create SQL_BATCH message
-//    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
-//
-//    // 2. Instead of blocking send/receive:
-//    //    → queue the message, register OP_WRITE if needed
-//    //    → return future that will be completed from selector loop
-//
-//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
-//  }
   /**
    * Combine payload buffers from a list of messages into a single
    * big\-endian ByteBuffer containing the concatenated payload bytes.

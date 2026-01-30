@@ -22,39 +22,15 @@ import java.util.List;
  TDS implementation of R2DBC Statement for FLOW queries.
  */
 public class TdsStatementImpl implements Statement {
-//  private final QueryResponseTokenVisitor source;
-//  private final TdsClient client;
   private final String query;
   private final TdsTransport transport;
   private final List<ParamEntry> params = new ArrayList<>();
   private boolean completed;
 
   public TdsStatementImpl(String sql, TdsTransport transport) {
-//    this.source = source;
-//    this.completed = false;
     this.query = sql;
     this.transport = transport;
   }
-
-//  @Override
-//  public Publisher<Result> execute() {
-//    // We return a Publisher that emits a single FlowResult
-//    return subscriber -> {
-//      subscriber.onSubscribe(new Subscription() {
-//        @Override
-//        public void request(long n) {
-//          // Use a boolean guard to ensure we run only once
-//          if (!completed && n > 0) {
-//            completed = true;
-//            subscriber.onNext(new TdsResultImpl(source));
-//            subscriber.onComplete();
-//          }
-//        }
-//        @Override
-//        public void cancel() {}
-//      });
-//    };
-//  }
 
   @Override
   public Publisher<Result> execute() {
@@ -75,31 +51,17 @@ public class TdsStatementImpl implements Statement {
       // Create SQL_BATCH message
       queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
 
-      // 2. Instead of blocking send/receive:
-      //    → queue the message, register OP_WRITE if needed
-      //    → return future that will be completed from selector loop
-
-//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
-
     } else {
 
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(query, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
-  //    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
-  //    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);
     // Create SQL_BATCH message
     queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), rpcPacket);
 
-    // 2. Instead of blocking send/receive:
-    //    → queue the message, register OP_WRITE if needed
-    //    → return future that will be completed from selector loop
-
-//    return new TdsStatementImpl();
     }
 
-//    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
-    // client.rpcAsync(rpcPacket);
+    // LAZY creation and execution of statement
     return subscriber -> {
       subscriber.onSubscribe(new Subscription() {
         @Override
@@ -164,12 +126,6 @@ public class TdsStatementImpl implements Statement {
       throw new IllegalArgumentException("Type for null parameter cannot be null");
     }
 
-    // Normalize param name
-//    String cleanParam = param.trim();
-//    if (cleanParam.startsWith("@")) {
-//      cleanParam = cleanParam.substring(1);
-//    }
-
     // Infer BindingType from the provided Class<?>
     BindingType bindingType = inferBindingTypeForClass(type);
 
@@ -218,14 +174,6 @@ public class TdsStatementImpl implements Statement {
     return null;  // unsupported
   }
 
-  //  private String normalizeParamName(String param) {
-  //    if (param == null) return null;
-  //    if (param.startsWith("@") || param.startsWith(":")) {
-  //      return param.substring(1);
-  //    }
-  //    return param;
-  //  }
-
   @Override
   public Statement fetchSize(int rows) {
 //    this.fetchSize = rows;
@@ -242,28 +190,14 @@ public class TdsStatementImpl implements Statement {
     return null;
   }
 
-//  @Override
-//  public Statement bind(String s, Object o) {
-//    return null;
-//  }
-
   @Override
   public Statement bindNull(int i, Class<?> aClass) {
     return null;
   }
-
-//  @Override
-//  public Statement bindNull(String s, Class<?> aClass) {
-//    return null;
-//  }
 
   @Override
   public Statement returnGeneratedValues(String... columns) {
     return null;
   }
 
-//  @Override
-//  public Statement fetchSize(int rows) {
-//    return Statement.super.fetchSize(rows);
-//  }
 }
