@@ -4,6 +4,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
@@ -13,6 +14,7 @@ import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,19 +58,45 @@ public class TdsStatementImpl implements Statement {
 
   @Override
   public Publisher<Result> execute() {
+    TdsMessage queryMsg;
+    if ( params.isEmpty()) {
+
+      // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
+      byte[] sqlBytes = (query).getBytes(StandardCharsets.UTF_16LE);
+
+      byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
+
+      ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
+      payload.put(allHeaders);
+      payload.put(sqlBytes);
+
+      payload.flip();
+
+      // Create SQL_BATCH message
+      queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+
+      // 2. Instead of blocking send/receive:
+      //    → queue the message, register OP_WRITE if needed
+      //    → return future that will be completed from selector loop
+
+//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
+
+    } else {
+
     // TODO: Implement TDS RPC execution using params list
     RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(query, params, true);
     ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
   //    RpcPacketBuildersave rpcPacketBuilder = new RpcPacketBuildersave();
   //    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPayload("Michael", "Thomas", "mt@mt.com", 12);
     // Create SQL_BATCH message
-    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), rpcPacket);
+    queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), rpcPacket);
 
     // 2. Instead of blocking send/receive:
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
 //    return new TdsStatementImpl();
+    }
 
 //    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
     // client.rpcAsync(rpcPacket);
