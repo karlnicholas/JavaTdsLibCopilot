@@ -8,10 +8,10 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
-class TdsRowMetadata implements RowMetadata {
+class TdsRowMetadataImpl implements RowMetadata {
   private final List<ColumnMeta> metadata;
 
-  TdsRowMetadata(List<ColumnMeta> metadata) {
+  TdsRowMetadataImpl(List<ColumnMeta> metadata) {
     this.metadata = metadata;
   }
 
@@ -20,7 +20,7 @@ class TdsRowMetadata implements RowMetadata {
     if (index < 0 || index >= metadata.size()) {
       throw new IndexOutOfBoundsException("Column index " + index + " is out of range");
     }
-    return new TdsColumnMetadata(metadata.get(index));
+    return new TdsColumnMetadataImpl(metadata.get(index));
   }
 
   @Override
@@ -31,7 +31,7 @@ class TdsRowMetadata implements RowMetadata {
     return metadata.stream()
         .filter(m -> m.getName().equalsIgnoreCase(name))
         .findFirst()
-        .map(TdsColumnMetadata::new)
+        .map(TdsColumnMetadataImpl::new)
         .orElseThrow(() -> new NoSuchElementException("Column name '" + name + "' does not exist"));
   }
 
@@ -41,7 +41,7 @@ class TdsRowMetadata implements RowMetadata {
   @Override
   public List<? extends ColumnMetadata> getColumnMetadatas() {
     return metadata.stream()
-        .map(TdsColumnMetadata::new)
+        .map(TdsColumnMetadataImpl::new)
         .collect(Collectors.toList());
   }
 }

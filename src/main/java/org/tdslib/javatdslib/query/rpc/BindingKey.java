@@ -3,7 +3,7 @@ package org.tdslib.javatdslib.query.rpc;
 import java.util.Objects;
 
 // Immutable key for each binding
-record BindingKey(
+public record BindingKey(
         BindingType type,
         String name
 ) {

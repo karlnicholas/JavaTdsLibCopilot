@@ -1,8 +1,6 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
-import org.reactivestreams.Publisher;
+import io.r2dbc.spi.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
@@ -11,8 +9,6 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
-import org.tdslib.javatdslib.query.rpc.DefaultPreparedRpcQuery;
-import org.tdslib.javatdslib.query.rpc.PreparedRpcQuery;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -260,48 +256,49 @@ public class TdsClient implements AutoCloseable {
    * @return QueryResponse containing results or errors
    * @throws IOException on I/O or transport errors
    */
-  public Result queryAsync(String sql) {
-    if (!connected) {
-      throw new IllegalStateException("Not connected or not in async mode");
-    }
-
-    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
-    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
-
-    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
-
-    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
-    payload.put(allHeaders);
-    payload.put(sqlBytes);
-
-    payload.flip();
-
-    // Create SQL_BATCH message
-    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+  public Statement queryAsync(String sql) {
+//    if (!connected) {
+//      throw new IllegalStateException("Not connected or not in async mode");
+//    }
+//
+//    // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
+//    byte[] sqlBytes = (sql).getBytes(StandardCharsets.UTF_16LE);
+//
+//    byte[] allHeaders = AllHeaders.forAutoCommit(1).toBytes();
+//
+//    ByteBuffer payload = ByteBuffer.allocate(allHeaders.length + sqlBytes.length);
+//    payload.put(allHeaders);
+//    payload.put(sqlBytes);
+//
+//    payload.flip();
+//
+//    // Create SQL_BATCH message
+//    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
 
     // 2. Instead of blocking send/receive:
     //    → queue the message, register OP_WRITE if needed
     //    → return future that will be completed from selector loop
 
-    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
+//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
+    return new TdsStatementImpl(sql, transport);
 //    return new QueryResponseTokenVisitor(transport, queryMsg);
   }
 
-  public PreparedRpcQuery queryRpc(String sql) {
-    return new DefaultPreparedRpcQuery(sql);
+  public Statement queryRpc(String sql) {
+    return new TdsStatementImpl(sql, transport);
   }
 
-  public Result rpcAsync(ByteBuffer payload) {
-
-    // Create SQL_BATCH message
-    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
-
-    // 2. Instead of blocking send/receive:
-    //    → queue the message, register OP_WRITE if needed
-    //    → return future that will be completed from selector loop
-
-    return new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg));
-  }
+//  private Statement rpcAsync(ByteBuffer payload) {
+//
+//    // Create SQL_BATCH message
+//    TdsMessage queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
+//
+//    // 2. Instead of blocking send/receive:
+//    //    → queue the message, register OP_WRITE if needed
+//    //    → return future that will be completed from selector loop
+//
+//    return new TdsStatementImpl(new QueryResponseTokenVisitor(transport, queryMsg));
+//  }
   /**
    * Combine payload buffers from a list of messages into a single
    * big\-endian ByteBuffer containing the concatenated payload bytes.

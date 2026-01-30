@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -22,7 +21,6 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -123,7 +121,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
       case ROW:
         // Push the row data into the result's internal stream
         RowToken rowToken = (RowToken) token;
-        TdsRow row = new TdsRow(rowToken.getColumnData(), currentMetadata.getColumns());
+        TdsRowImpl row = new TdsRowImpl(rowToken.getColumnData(), currentMetadata.getColumns());
         subscriber.onNext(row);
         break;
       case DONE:

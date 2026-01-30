@@ -12,15 +12,15 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
-class TdsRow implements Row {
+class TdsRowImpl implements Row {
   private final List<byte[]> columnData;
   private final List<ColumnMeta> metadata;
-  private final TdsRowMetadata rowMetadata; // Cache metadata for efficiency
+  private final TdsRowMetadataImpl rowMetadata; // Cache metadata for efficiency
 
-  TdsRow(List<byte[]> columnData, List<ColumnMeta> metadata) {
+  TdsRowImpl(List<byte[]> columnData, List<ColumnMeta> metadata) {
     this.columnData = columnData;
     this.metadata = metadata;
-    this.rowMetadata = new TdsRowMetadata(metadata);
+    this.rowMetadata = new TdsRowMetadataImpl(metadata);
   }
 
   @Override

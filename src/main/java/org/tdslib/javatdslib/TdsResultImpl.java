@@ -17,22 +17,21 @@ public class TdsResultImpl implements Result {
   }
 
   @Override
-  public Publisher<Long> getRowsUpdated() {
-    return null;
-  }
-
-  @Override
-  public <R> Publisher<R> map(BiFunction<Row, RowMetadata, ? extends R> mappingFunction) {
-//    public <T> Flow.Publisher<T> map(Function<Integer, ? extends T> mappingFunction) {
-      // Return a new Publisher. When someone subscribes to THIS...
+  public <T> Publisher<T> map(BiFunction<Row, RowMetadata, ? extends T> mappingFunction) {
+    // Return a new Publisher. When someone subscribes to THIS...
     return subscriber -> {
       // create a mapping processor, give it the mapping function and the subscriber
-      MappingFunctionProcessor<Row, R> processor = new MappingFunctionProcessor<>(mappingFunction);
+      MappingFunctionProcessor<Row, T> processor = new MappingFunctionProcessor<>(mappingFunction);
       // 1. First, tell the processor who the final subscriber is
       processor.subscribe(subscriber);
       // 2. ONLY THEN, connect the processor to the data source
       source.subscribe(processor);
     };
+  }
+
+  @Override
+  public Publisher<Long> getRowsUpdated() {
+    return null;
   }
 
   @Override

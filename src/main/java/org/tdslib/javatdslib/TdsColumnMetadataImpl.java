@@ -6,10 +6,10 @@ import io.r2dbc.spi.Type;
 import io.r2dbc.spi.R2dbcType; // Use R2dbcType instead of CommonType
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
-class TdsColumnMetadata implements ColumnMetadata {
+class TdsColumnMetadataImpl implements ColumnMetadata {
   private final ColumnMeta meta;
 
-  TdsColumnMetadata(ColumnMeta meta) {
+  TdsColumnMetadataImpl(ColumnMeta meta) {
     this.meta = meta;
   }
 
