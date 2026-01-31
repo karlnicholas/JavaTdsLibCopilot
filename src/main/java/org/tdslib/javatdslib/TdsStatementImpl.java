@@ -61,6 +61,7 @@ public class TdsStatementImpl implements Statement {
 
     }
 
+
     // LAZY creation and execution of statement
     return subscriber -> {
       subscriber.onSubscribe(new Subscription() {
@@ -77,6 +78,23 @@ public class TdsStatementImpl implements Statement {
         public void cancel() {}
       });
     };
+
+    // LAZY creation and execution of statement
+//    return subscriber -> {
+//      subscriber.onSubscribe(new Subscription() {
+//        @Override
+//        public void request(long n) {
+//          // Use a boolean guard to ensure we run only once
+//          if (!completed && n > 0) {
+//            completed = true;
+//            subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg)));
+//            subscriber.onComplete();
+//          }
+//        }
+//        @Override
+//        public void cancel() {}
+//      });
+//    };
   }
 
   // ───────────────────────────────────────────────────────────────
