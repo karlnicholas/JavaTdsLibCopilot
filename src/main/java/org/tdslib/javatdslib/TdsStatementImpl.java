@@ -25,7 +25,6 @@ public class TdsStatementImpl implements Statement {
   private final String query;
   private final TdsTransport transport;
   private final List<ParamEntry> params = new ArrayList<>();
-  private boolean completed;
 
   public TdsStatementImpl(String sql, TdsTransport transport) {
     this.query = sql;
@@ -65,6 +64,7 @@ public class TdsStatementImpl implements Statement {
     // LAZY creation and execution of statement
     return subscriber -> {
       subscriber.onSubscribe(new Subscription() {
+        private boolean completed;
         @Override
         public void request(long n) {
           // Use a boolean guard to ensure we run only once
@@ -78,23 +78,6 @@ public class TdsStatementImpl implements Statement {
         public void cancel() {}
       });
     };
-
-    // LAZY creation and execution of statement
-//    return subscriber -> {
-//      subscriber.onSubscribe(new Subscription() {
-//        @Override
-//        public void request(long n) {
-//          // Use a boolean guard to ensure we run only once
-//          if (!completed && n > 0) {
-//            completed = true;
-//            subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, queryMsg)));
-//            subscriber.onComplete();
-//          }
-//        }
-//        @Override
-//        public void cancel() {}
-//      });
-//    };
   }
 
   // ───────────────────────────────────────────────────────────────
@@ -112,11 +95,6 @@ public class TdsStatementImpl implements Statement {
           "Value is null. Use bindNull(\"" + param + "\", <type>) instead of bind(\"" + param + "\", null)"
       );
     }
-
-//    String cleanParam = param.trim();
-//    if (cleanParam.startsWith("@")) {
-//      cleanParam = cleanParam.substring(1);
-//    }
 
     // Infer BindingType from runtime value type
     BindingType bindingType = inferBindingType(value);
