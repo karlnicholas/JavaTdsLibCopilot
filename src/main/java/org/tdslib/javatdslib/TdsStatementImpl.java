@@ -24,7 +24,9 @@ import java.util.List;
 public class TdsStatementImpl implements Statement {
   private final String query;
   private final TdsTransport transport;
-  private final List<ParamEntry> params = new ArrayList<>();
+  private final List<List<ParamEntry>> batchParams = new ArrayList<>();
+  // The current row's parameters
+  private List<ParamEntry> currentParams = new ArrayList<>();
 
   public TdsStatementImpl(String sql, TdsTransport transport) {
     this.query = sql;
@@ -33,8 +35,13 @@ public class TdsStatementImpl implements Statement {
 
   @Override
   public Publisher<Result> execute() {
+    // R2DBC Rule: If bindings exist but add() wasn't called, treat it as the last row
+    if (!currentParams.isEmpty()) {
+      batchParams.add(new ArrayList<>(currentParams));
+      currentParams.clear();
+    }
     TdsMessage queryMsg;
-    if ( params.isEmpty()) {
+    if ( currentParams.isEmpty()) {
 
       // Build SQL_BATCH payload: UTF-16LE string + NULL terminator (no length prefix)
       byte[] sqlBytes = (query).getBytes(StandardCharsets.UTF_16LE);
@@ -51,16 +58,19 @@ public class TdsStatementImpl implements Statement {
       queryMsg = TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
 
     } else {
+      // Loop through 'batchParams' and send multiple RPC calls
+      // OR send one RPC call with bundled parameters if the server supports it.
+      // For a simple start, you can verify if you need to emit multiple Results
+      // or combine them.
 
-    // TODO: Implement TDS RPC execution using params list
-    RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(query, params, true);
-    ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
-    // Create SQL_BATCH message
-    queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), rpcPacket);
+      // Note: To truly support Flux<Result>, you might need to chain execute calls
+      // or construct a packet that handles multiple execution sets.
+      RpcPacketBuilder rpcPacketBuilder = new RpcPacketBuilder(query, currentParams, true);
+      ByteBuffer rpcPacket = rpcPacketBuilder.buildRpcPacket();
+      // Create SQL_BATCH message
+      queryMsg = TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), rpcPacket);
 
     }
-
-
     // LAZY creation and execution of statement
     return subscriber -> {
       subscriber.onSubscribe(new Subscription() {
@@ -108,7 +118,7 @@ public class TdsStatementImpl implements Statement {
     }
 
     BindingKey key = new BindingKey(bindingType, param);
-    params.add(new ParamEntry(key, value));
+    currentParams.add(new ParamEntry(key, value));
 
     return this;
   }
@@ -133,7 +143,7 @@ public class TdsStatementImpl implements Statement {
     }
 
     BindingKey key = new BindingKey(bindingType, param);
-    params.add(new ParamEntry(key, null));  // null value signals NULL
+    currentParams.add(new ParamEntry(key, null));  // null value signals NULL
 
     return this;
   }
@@ -178,7 +188,12 @@ public class TdsStatementImpl implements Statement {
 
   @Override
   public Statement add() {
-    return null;
+    // Save the current row's parameters into the batch list
+    if (!currentParams.isEmpty()) {
+      batchParams.add(new ArrayList<>(currentParams));
+      currentParams.clear();
+    }
+    return this;
   }
 
   @Override

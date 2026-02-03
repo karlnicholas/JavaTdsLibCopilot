@@ -48,6 +48,7 @@ public class ColMetaDataTokenParser implements TokenParser {
         case (byte) 0xE7:   // NVARCHAR
         case (byte) 0x2F:   // CHAR
         case (byte) 0xEF:   // NCHAR
+        case (byte) 0xA7:   // BIGVARCHRTYPE (Type 167)
           maxLength = payload.getShort() & 0xFFFF;
           collation = new byte[5];
           payload.get(collation);

@@ -95,6 +95,7 @@ public class RowTokenParser implements TokenParser {
         case (byte) 0x27:   // VARCHAR
         case (byte) 0xEF:   // NCHAR
         case (byte) 0x2F:   // CHAR
+        case (byte) 0xA7:   // BIGVARCHRTYPE (Type 167)
           int varLen = payload.getShort() & 0xFFFF;
           if (varLen == 0xFFFF) {
             data = null;

@@ -6,6 +6,7 @@ import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -37,8 +38,27 @@ class TdsRowImpl implements Row {
 
     // Simple check for NVARCHAR (0xE7) - uses UTF-16LE per TDS spec
     int dataType = meta.getDataType() & 0xFF;
-    if ( dataType == 0xE7) {
+
+// 1. NVARCHAR (0xE7) is ALWAYS UTF-16LE
+    if (dataType == 0xE7) {
       return type.cast(new String(data, StandardCharsets.UTF_16LE));
+    }
+
+// 2. VARCHAR (0xA7) requires Code Page lookup
+    else if (dataType == 0xA7) {
+      byte[] coll = meta.getCollation();
+      // Safe extraction of LCID (first 2 bytes, Little Endian)
+      int lcid = (coll[0] & 0xFF) | ((coll[1] & 0xFF) << 8);
+
+      // Minimal Handling:
+      // If LCID is US English (0x0409) OR standard Latin1 (0x0409 is very common), use Windows-1252.
+      if (lcid == 0x0409) {
+        return type.cast(new String(data, Charset.forName("windows-1252")));
+      }
+
+      // FALLBACK for "minimal" support:
+      // Most Western SQL Servers default to CP1252 even if the locale varies slightly.
+      return type.cast(new String(data, Charset.forName("windows-1252")));
     }
 
     if (dataType == 0x7F || dataType == 0x26) {
@@ -57,7 +77,7 @@ class TdsRowImpl implements Row {
               long l = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
               yield Long.valueOf(l);
             default:
-              throw new UnsupportedOperationException("Conversion not yet implemented for type: 0x"
+              throw new UnsupportedOperationException("Numeric Conversion not yet implemented for type: 0x"
                   + Integer.toHexString(meta.getDataType() & 0xFF));
 
           }
@@ -102,7 +122,7 @@ class TdsRowImpl implements Row {
       return type.cast(LocalDateTime.of(date, time));
     }
 
-    throw new UnsupportedOperationException("Conversion not yet implemented for type: 0x"
+    throw new UnsupportedOperationException("Conversion not yet implemented for unknown type: 0x"
       + Integer.toHexString(meta.getDataType() & 0xFF));
   }
 
