@@ -16,7 +16,7 @@ import java.util.List;
 class TdsRowImpl implements Row {
   private final List<byte[]> columnData;
   private final List<ColumnMeta> metadata;
-  private final TdsRowMetadataImpl rowMetadata; // Cache metadata for efficiency
+  private final TdsRowMetadataImpl rowMetadata;
 
   TdsRowImpl(List<byte[]> columnData, List<ColumnMeta> metadata) {
     this.columnData = columnData;
@@ -35,95 +35,112 @@ class TdsRowImpl implements Row {
     if (data == null) return null;
 
     ColumnMeta meta = metadata.get(index);
-
-    // Simple check for NVARCHAR (0xE7) - uses UTF-16LE per TDS spec
     int dataType = meta.getDataType() & 0xFF;
 
-// 1. NVARCHAR (0xE7) is ALWAYS UTF-16LE
-    if (dataType == 0xE7) {
-      return type.cast(new String(data, StandardCharsets.UTF_16LE));
-    }
+    switch (dataType) {
+      // --- Strings ---
+      case TdsDataType.NVARCHAR:
+      case TdsDataType.NCHAR:
+      case TdsDataType.NTEXT:
+        return type.cast(new String(data, StandardCharsets.UTF_16LE));
 
-// 2. VARCHAR (0xA7) requires Code Page lookup
-    else if (dataType == 0xA7) {
-      byte[] coll = meta.getCollation();
-      // Safe extraction of LCID (first 2 bytes, Little Endian)
-      int lcid = (coll[0] & 0xFF) | ((coll[1] & 0xFF) << 8);
-
-      // Minimal Handling:
-      // If LCID is US English (0x0409) OR standard Latin1 (0x0409 is very common), use Windows-1252.
-      if (lcid == 0x0409) {
+      case TdsDataType.BIGVARCHR:
+      case TdsDataType.VARCHAR:
+      case TdsDataType.CHAR:
+      case TdsDataType.TEXT:
+        // Simplification: Using Windows-1252 as fallback for now.
+        // Real impl should check collation LCID.
         return type.cast(new String(data, Charset.forName("windows-1252")));
-      }
 
-      // FALLBACK for "minimal" support:
-      // Most Western SQL Servers default to CP1252 even if the locale varies slightly.
-      return type.cast(new String(data, Charset.forName("windows-1252")));
+      // --- Integers ---
+      case TdsDataType.INTN:
+      case TdsDataType.INT8:
+      case TdsDataType.INT4:
+      case TdsDataType.INT2:
+      case TdsDataType.INT1:
+        long val = 0;
+        // Read based on data length (which handles the N-type variations)
+        if (data.length == 1) val = data[0];
+        else if (data.length == 2) val = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort();
+        else if (data.length == 4) val = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
+        else if (data.length == 8) val = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong();
+
+        if (type == Long.class) return type.cast(val);
+        if (type == Integer.class) return type.cast((int) val);
+        if (type == Short.class) return type.cast((short) val);
+        if (type == Byte.class) return type.cast((byte) val);
+        throw new IllegalArgumentException("Cannot convert INT type to " + type.getName());
+
+        // --- Bit ---
+      case TdsDataType.BIT:
+      case TdsDataType.BITN:
+        boolean b = data[0] != 0;
+        return type.cast(b);
+
+      // --- Date/Time ---
+      case TdsDataType.DATE:
+        long days = ((data[2] & 0xFFL) << 16) | ((data[1] & 0xFFL) << 8) | (data[0] & 0xFFL);
+        return type.cast(LocalDate.of(1, 1, 1).plusDays(days));
+
+      case TdsDataType.DATETIME2:
+        // Simplified parser for example (assuming scale 3 or 7 structure)
+        // See previous impl for full logic
+        return parseDateTime2(data, type);
+
+      case TdsDataType.DATETIME:
+      case TdsDataType.DATETIMN:
+        // TODO: Implement DateTime 8-byte parsing
+        throw new UnsupportedOperationException("DATETIME (Classic) not implemented yet");
+
+        // --- Floats ---
+      case TdsDataType.FLTN:
+      case TdsDataType.FLT8:
+        return type.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble());
+      case TdsDataType.FLT4:
+        return type.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
+
+      // --- Binary ---
+      case TdsDataType.BIGVARBIN:
+      case TdsDataType.VARBINARY:
+      case TdsDataType.BINARY:
+      case TdsDataType.IMAGE:
+        if (type == byte[].class) return type.cast(data);
+        throw new UnsupportedOperationException("Binary conversion to " + type.getName() + " not supported");
+
+        // --- Not Implemented Stubs ---
+      case TdsDataType.MONEY:
+      case TdsDataType.MONEY4:
+      case TdsDataType.MONEYN:
+        throw new UnsupportedOperationException("MONEY types not implemented");
+
+      case TdsDataType.NUMERIC:
+      case TdsDataType.NUMERICN:
+      case TdsDataType.DECIMAL:
+      case TdsDataType.DECIMALN:
+        throw new UnsupportedOperationException("DECIMAL/NUMERIC types not implemented");
+
+      case TdsDataType.GUID:
+        throw new UnsupportedOperationException("GUID type not implemented");
+
+      case TdsDataType.XML:
+        throw new UnsupportedOperationException("XML type not implemented");
+
+      default:
+        throw new UnsupportedOperationException("Unknown DataType: 0x" + Integer.toHexString(dataType));
     }
+  }
 
-    if (dataType == 0x7F || dataType == 0x26) {
-      return type.cast(
-          switch (meta.getMaxLength()) {
-            case 1:
-              byte byt = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).get();
-              yield Byte.valueOf(byt);
-            case 2:
-              short sht = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort();
-              yield Short.valueOf(sht);
-            case 4:
-              int i = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
-              yield Integer.valueOf(i);
-            case 8:
-              long l = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
-              yield Long.valueOf(l);
-            default:
-              throw new UnsupportedOperationException("Numeric Conversion not yet implemented for type: 0x"
-                  + Integer.toHexString(meta.getDataType() & 0xFF));
-
-          }
-      );
-    }
-
-    if (dataType == 0x28) {
-      // Little-endian unsigned 24-bit integer
-      long days = ((data[2] & 0xFFL) << 16) |
-          ((data[1] & 0xFFL) <<  8) |
-          (data[0] & 0xFFL);
-
-      // SQL Server DATE epoch = 0001-01-01
-      return type.cast(LocalDate.of(1, 1, 1).plusDays(days));
-
-    }
-
-    if (dataType == 0x2a) {
-      if (data.length == 0) {
-        return type.cast(null);
-      }
-      if (data.length != 7) {
-        throw new IllegalArgumentException("DATETIME2(3) bytes must be 7 bytes long");
-      }
-
-      // 1. Extract Time (Bytes 0-3, Little-Endian)
-      // Ticks are in milliseconds for precision (3)
-      long millisSinceMidnight = (data[0] & 0xFF) |
-          ((data[1] & 0xFF) << 8) |
-          ((data[2] & 0xFF) << 16) |
-          ((long)(data[3] & 0xFF) << 24);
-
-      // 2. Extract Date (Bytes 4-6, Little-Endian)
-      int daysSinceEpoch = (data[4] & 0xFF) |
-          ((data[5] & 0xFF) << 8) |
-          ((data[6] & 0xFF) << 16);
-
-      // 3. Construct the result
-      LocalDate date = LocalDate.of(1, 1, 1).plusDays(daysSinceEpoch);
-      LocalTime time = LocalTime.ofNanoOfDay(millisSinceMidnight * 1_000_000); // ms to ns
-
+  // Helper for DateTime2
+  private <T> T parseDateTime2(byte[] data, Class<T> type) {
+    // Reusing logic from your previous snippet
+    if (data.length == 7) {
+      long millis = (data[0] & 0xFF) | ((data[1] & 0xFF) << 8) | ((data[2] & 0xFF) << 16) | ((long)(data[3] & 0xFF) << 24);
+      int days = (data[4] & 0xFF) | ((data[5] & 0xFF) << 8) | ((data[6] & 0xFF) << 16);
+      LocalDate date = LocalDate.of(1, 1, 1).plusDays(days);
+      LocalTime time = LocalTime.ofNanoOfDay(millis * 1_000_000);
       return type.cast(LocalDateTime.of(date, time));
     }
-
-    throw new UnsupportedOperationException("Conversion not yet implemented for unknown type: 0x"
-      + Integer.toHexString(meta.getDataType() & 0xFF));
+    throw new UnsupportedOperationException("Only DATETIME2(3) supported in stub");
   }
 
   @Override
