@@ -197,7 +197,7 @@ class TdsRowImpl implements Row {
       // --- Not Implemented Stubs ---
       // ... inside TdsRowImpl.get() ...
 
-// --- Money ---
+      // --- Money ---
       case TdsDataType.MONEY:
       case TdsDataType.MONEYN:
       case TdsDataType.MONEY4:
