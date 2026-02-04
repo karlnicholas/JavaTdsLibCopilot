@@ -35,7 +35,7 @@ class TdsRowImpl implements Row {
 
   @Override
   public <T> T get(int index, Class<T> type) {
-    log.debug("TdsRowImpl::get: index: {} type: {}", index, type);
+    log.trace("TdsRowImpl::get: index: {} type: {}", index, type);
     byte[] data = columnData.get(index);
     if (data == null) return null;
 
@@ -105,21 +105,24 @@ class TdsRowImpl implements Row {
         }
         throw new UnsupportedOperationException("DateTime2 conversion to " + type.getName() + " not supported");
 
-      case TdsDataType.DATETIMEOFFSET: // 0x2B
+      case TdsDataType.DATETIMEOFFSET:
         if (type == OffsetDateTime.class) {
-          // Offset is the last 2 bytes (signed short minutes)
-          int offsetMin = ByteBuffer.wrap(data, data.length - 2, 2)
-                  .order(ByteOrder.LITTLE_ENDIAN).getShort();
-
-          // The rest is just like DateTime2
+          // 1. Read UTC Time from bytes
           byte[] dtData = new byte[data.length - 2];
           System.arraycopy(data, 0, dtData, 0, dtData.length);
+          LocalDateTime utcDateTime = readDateTime2(dtData, meta.getScale() & 0xFF);
 
-          LocalDateTime ldt = readDateTime2(dtData, meta.getScale() & 0xFF);
+          // 2. Read Offset (minutes)
+          int offsetMin = ByteBuffer.wrap(data, data.length - 2, 2)
+                  .order(ByteOrder.LITTLE_ENDIAN).getShort();
           ZoneOffset offset = ZoneOffset.ofTotalSeconds(offsetMin * 60);
-          return type.cast(OffsetDateTime.of(ldt, offset));
+
+          // 3. Convert UTC Instant to Target Offset
+          // Create the time as UTC, then project it to the target offset
+          return type.cast(OffsetDateTime.of(utcDateTime, ZoneOffset.UTC)
+                  .withOffsetSameInstant(offset));
         }
-        throw new UnsupportedOperationException("DateTimeOffset conversion not supported");
+        break;
       // --- Legacy DateTime (DATETIME / SMALLDATETIME) ---
       case TdsDataType.DATETIMN: // 0x6F (Nullable)
       case TdsDataType.DATETIME: // 0x3D (Fixed 8-byte)
@@ -194,28 +197,29 @@ class TdsRowImpl implements Row {
       // --- Not Implemented Stubs ---
       // ... inside TdsRowImpl.get() ...
 
-      // --- Money ---
+// --- Money ---
       case TdsDataType.MONEY:
       case TdsDataType.MONEYN:
-      case TdsDataType.MONEY4: // SmallMoney
+      case TdsDataType.MONEY4:
         if (type == BigDecimal.class) {
           if (data.length == 4) {
-            // SmallMoney: 4-byte int, scale is 4
+            // SmallMoney: Standard 4-byte Little Endian int
             int valM = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
             return type.cast(BigDecimal.valueOf(valM, 4));
-          } else if (data.length == 8) {
-            // Money: 8-byte long, high 4 bytes first, then low 4 bytes (Big Endian logic for 2 chunks)
-            // BUT TDS standard says it's two 4-byte integers: [High 4 bytes] [Low 4 bytes]
-            // However, in practice, it behaves like a Little Endian long for the pure value.
-            long valM = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong();
+          } else {
+            // Money: 8 bytes, split into [High 4 bytes] + [Low 4 bytes]
+            ByteBuffer bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+            int high = bb.getInt(); // Read first 4 bytes
+            int low = bb.getInt();  // Read next 4 bytes
 
-            // Money is explicitly scaled by 10,000 (4 decimal places)
+            // Combine them: (High << 32) | Unsigned Low
+            long valM = ((long) high << 32) | (low & 0xFFFFFFFFL);
+
             return type.cast(BigDecimal.valueOf(valM, 4));
           }
         }
-        throw new UnsupportedOperationException("Money conversion to " + type.getName() + " not supported");
-      // --- Decimal / Numeric ---
-      case TdsDataType.NUMERIC:
+        throw new UnsupportedOperationException("Money conversion to " + type.getName() + " not supported");      case TdsDataType.NUMERIC:
+
       case TdsDataType.NUMERICN:
       case TdsDataType.DECIMAL:
       case TdsDataType.DECIMALN:
