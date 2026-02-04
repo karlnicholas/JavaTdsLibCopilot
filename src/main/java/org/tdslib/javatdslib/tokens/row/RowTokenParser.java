@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens.row;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsDataType;
 import org.tdslib.javatdslib.tokens.Token;
@@ -14,6 +16,8 @@ import java.util.List;
 
 public class RowTokenParser implements TokenParser {
 
+  private static final Logger log = LoggerFactory.getLogger(RowTokenParser.class);
+
   @Override
   public Token parse(final ByteBuffer payload, final byte tokenType,
                      final ConnectionContext context, final QueryContext queryContext) {
@@ -26,13 +30,18 @@ public class RowTokenParser implements TokenParser {
 
     for (final ColumnMeta col : columns) {
       final int dataType = col.getDataType() & 0xFF;
+      log.trace("col {} DataType {}", col, dataType);
       byte[] data = null;
 
       // 1. Check for PLP (Partially Length Prefixed) Types
       // These types (NVARCHAR(MAX), VARBINARY(MAX), XML, UDT) have MaxLength = 0xFFFF in ColMetaData
-      boolean isPlp = (dataType == TdsDataType.NVARCHAR || dataType == TdsDataType.VARBINARY
-          || dataType == TdsDataType.XML || dataType == TdsDataType.UDT)
-          && col.getMaxLength() == 65535;
+      boolean isPlp = (dataType == TdsDataType.XML)
+              || ((dataType == TdsDataType.NVARCHAR
+              || dataType == TdsDataType.BIGVARCHR
+              || dataType == TdsDataType.VARBINARY
+              || dataType == TdsDataType.BIGVARBIN
+              || dataType == TdsDataType.UDT)
+              && col.getMaxLength() == 65535);
 
       if (isPlp) {
         data = readPlp(payload);
@@ -58,14 +67,10 @@ public class RowTokenParser implements TokenParser {
           case TdsDataType.DATETIME:
             data = readBytes(payload, 8);
             break;
-          case TdsDataType.GUID:
-            // NOTE: If you encounter nullable GUIDs, move this to the section below.
-            // Standard fixed GUID is 16 bytes.
-            data = readBytes(payload, 16);
-            break;
 
           // --- Length-Prefixed (Nullable) Types ---
           // DATE is here because in ROW tokens it has a 1-byte length prefix (0x03)
+          case TdsDataType.GUID:
           case TdsDataType.DATE:
           case TdsDataType.INTN:
           case TdsDataType.BITN:
@@ -92,20 +97,46 @@ public class RowTokenParser implements TokenParser {
 
           // --- Standard Variable Length (Short Prefix) ---
           case TdsDataType.BIGVARCHR:
+          case TdsDataType.BIGCHAR:
           case TdsDataType.NVARCHAR:
           case TdsDataType.VARCHAR:
           case TdsDataType.NCHAR:
           case TdsDataType.CHAR:
           case TdsDataType.BIGVARBIN:
+          case TdsDataType.BIGBINARY:
           case TdsDataType.VARBINARY:
           case TdsDataType.BINARY:
           case TdsDataType.SSVARIANT:
-          case TdsDataType.IMAGE:
-          case TdsDataType.TEXT:
-          case TdsDataType.NTEXT:
             int varLen = payload.getShort() & 0xFFFF;
             if (varLen != 0xFFFF) { // 0xFFFF = NULL for standard varlen
               data = readBytes(payload, varLen);
+            }
+            break;
+
+          case TdsDataType.TEXT:
+          case TdsDataType.NTEXT:
+          case TdsDataType.IMAGE:
+            int textPtrLen = payload.get() & 0xFF; // 1 byte length
+            if (textPtrLen != 0) {
+              // 1. Read Text Pointer
+              readBytes(payload, textPtrLen);
+
+              // 2. Read Timestamp (8 bytes)
+              // TODO: What to do with timestamp
+              readBytes(payload, 8);
+
+              // 3. Read Data Length (4 bytes)
+              int dataLen = payload.getInt();
+
+              // 4. Read Actual Data
+              if (dataLen > 0) {
+                data = readBytes(payload, dataLen);
+              } else {
+                data = new byte[0];
+              }
+            } else {
+              // If textPtrLen is 0, the value is NULL
+              data = null;
             }
             break;
 

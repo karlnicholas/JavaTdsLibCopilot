@@ -53,12 +53,14 @@ public final class TdsDataType {
   public static final int NVARCHAR  = 0xE7;   // Variable NChar (Legacy & Modern)
   public static final int NTEXT     = 0x63;   // NText
   public static final int BIGVARCHR = 0xA7;   // Large Variable Char (VARCHAR(MAX))
+  public static final int BIGCHAR   = 0xAF;   // Large Fixed Char (Modern CHAR)
 
   // --- Binary ---
   public static final int BINARY    = 0x2D;   // Fixed Binary
   public static final int VARBINARY = 0x25;   // Variable Binary (Legacy)
   public static final int IMAGE     = 0x22;   // Image
   public static final int BIGVARBIN = 0xA5;   // Large Variable Binary (VARBINARY(MAX))
+  public static final int BIGBINARY = 0xAD;   // Large Fixed Binary (Binary(n))
 
   // --- Specialized ---
   public static final int GUID      = 0x24;   // UniqueIdentifier

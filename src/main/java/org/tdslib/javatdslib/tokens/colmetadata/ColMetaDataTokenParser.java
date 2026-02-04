@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens.colmetadata;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsDataType;
 import org.tdslib.javatdslib.tokens.Token;
@@ -12,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ColMetaDataTokenParser implements TokenParser {
-
+  private static Logger log = LoggerFactory.getLogger(ColMetaDataTokenParser.class);
   @Override
   public Token parse(final ByteBuffer payload, final byte tokenType,
                      final ConnectionContext context, final QueryContext queryContext) {
@@ -29,7 +31,7 @@ public class ColMetaDataTokenParser implements TokenParser {
       final int userType = payload.getInt();
       final short flags    = payload.getShort();
       final int dataType   = payload.get() & 0xFF; // Treat as unsigned int for switch
-
+      log.trace("colIndex: {} userType: {} flags: {} dataType: {}", colIndex, userType, flags, dataType);
       int maxLength = -1;
       byte[] collation = null;
       int lengthByte = -1;
@@ -39,27 +41,49 @@ public class ColMetaDataTokenParser implements TokenParser {
 
       switch (dataType) {
         // --- 1. Variable-Length with Collation (Strings) ---
+        // REMOVED: TdsDataType.TEXT and TdsDataType.NTEXT from here
         case TdsDataType.BIGVARCHR: // 0xA7
+        case TdsDataType.BIGCHAR:   // 0xAF
         case TdsDataType.NVARCHAR:  // 0xE7
         case TdsDataType.VARCHAR:   // 0x27 (Legacy)
         case TdsDataType.NCHAR:     // 0xEF
         case TdsDataType.CHAR:      // 0x2F
-        case TdsDataType.TEXT:      // 0x23
-        case TdsDataType.NTEXT:     // 0x63
-          maxLength = payload.getShort() & 0xFFFF;
+          maxLength = payload.getShort() & 0xFFFF; // 2-byte length
           collation = new byte[5];
           payload.get(collation);
           break;
 
-        // --- 2. Variable-Length without Collation (Binary/Image/GUID) ---
+        // --- NEW: TEXT and NTEXT (4-byte Length + Table Names) ---
+        case TdsDataType.TEXT:      // 0x23
+        case TdsDataType.NTEXT:     // 0x63
+          maxLength = payload.getInt(); // <--- FIX 1: Read 4 bytes
+          collation = new byte[5];
+          payload.get(collation);
+          readTableNames(payload);      // <--- FIX 2: Consume Table Names
+          break;
+
+        // --- 2. Variable-Length without Collation ---
+        // REMOVED: TdsDataType.IMAGE from here
         case TdsDataType.BIGVARBIN: // 0xA5
+        case TdsDataType.BIGBINARY: // 0xAD
         case TdsDataType.VARBINARY: // 0x25
         case TdsDataType.BINARY:    // 0x2D
-        case TdsDataType.IMAGE:     // 0x22
-        case TdsDataType.UDT:       // 0xF0 (Geography/Geometry)
-        case TdsDataType.XML:       // 0xF1
+        case TdsDataType.UDT:       // 0xF0
         case TdsDataType.SSVARIANT: // 0x62
           maxLength = payload.getShort() & 0xFFFF;
+          break;
+
+        // --- NEW: IMAGE (4-byte Length + Table Names, No Collation) ---
+        case TdsDataType.IMAGE:     // 0x22
+          maxLength = payload.getInt(); // <--- FIX: Read 4 bytes
+          readTableNames(payload);      // <--- FIX: Consume Table Names
+          break;
+
+        // --- XML (Special Case mentioned previously) ---
+        case TdsDataType.XML:       // 0xF1
+          byte schemaPresent = payload.get();
+          if (schemaPresent != 0) throw new UnsupportedOperationException("XML Schema not supported");
+          maxLength = -1; // XML is always PLP
           break;
 
         // --- 3. Fixed-Length Types ---
@@ -146,5 +170,14 @@ public class ColMetaDataTokenParser implements TokenParser {
     final ColMetaDataToken token = new ColMetaDataToken(tokenType, columnCount, columns);
     queryContext.setColMetaDataToken(token);
     return token;
+  }
+  // Add this helper method to your ColMetaDataTokenParser class
+  private void readTableNames(ByteBuffer payload) {
+    int numParts = payload.get() & 0xFF; // Number of parts (e.g., 2 for "dbo.AllDataTypes")
+    for (int i = 0; i < numParts; i++) {
+      int len = payload.getShort() & 0xFFFF; // Length in characters
+      byte[] nameBytes = new byte[len * 2];  // 2 bytes per char (Unicode)
+      payload.get(nameBytes);
+    }
   }
 }
