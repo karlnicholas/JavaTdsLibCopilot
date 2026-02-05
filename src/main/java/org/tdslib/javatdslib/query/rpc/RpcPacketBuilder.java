@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,23 +35,17 @@ public class RpcPacketBuilder {
   }
 
   public ByteBuffer buildRpcPacket() {
-    // Start with a reasonable buffer size, expanding if necessary is not handled here so ensure it's enough
-    // or wrap in a dynamic buffer. 8192 is okay for small batches.
-    ByteBuffer buf = ByteBuffer.allocate(16384).order(ByteOrder.LITTLE_ENDIAN);
+    ByteBuffer buf = ByteBuffer.allocate(1024 * 1024).order(ByteOrder.LITTLE_ENDIAN);
 
-    // RPC header
     buf.putShort(RPC_PROCID_SWITCH);
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
-    buf.putShort((short) 0x0000); // Flags
+    buf.putShort((short) 0x0000);
 
-    // Param 1: @stmt
     putParamName(buf, "@stmt");
     buf.put(RPC_PARAM_DEFAULT);
     putTypeInfoNVarcharMax(buf);
     putPlpUnicodeString(buf, sql);
 
-    // Param 2: @params
-    // Only add if there are actually parameters
     if (!params.isEmpty()) {
       String paramsDecl = buildParamsDeclaration();
       putParamName(buf, "@params");
@@ -58,13 +53,12 @@ public class RpcPacketBuilder {
       putTypeInfoNVarcharMax(buf);
       putPlpUnicodeString(buf, paramsDecl);
 
-      // Subsequent Params: The actual values
       for (ParamEntry entry : params) {
-        String rpcParamName = entry.key().name();
-        putParamName(buf, rpcParamName);
+        putParamName(buf, entry.key().name());
         buf.put(RPC_PARAM_DEFAULT);
-        putTypeInfoForParam(buf, entry);
-        putParamValue(buf, entry);
+        boolean forcePlp = isLargeString(entry);
+        putTypeInfoForParam(buf, entry, forcePlp);
+        putParamValue(buf, entry, forcePlp);
       }
     }
 
@@ -77,9 +71,15 @@ public class RpcPacketBuilder {
       fullPayload.put(buf);
       fullPayload.flip();
       return fullPayload;
-    } else {
-      return buf;
     }
+    return buf;
+  }
+
+  private boolean isLargeString(ParamEntry entry) {
+    if (entry.value() instanceof String s) {
+      return s.length() > 4000;
+    }
+    return false;
   }
 
   private String buildParamsDeclaration() {
@@ -88,79 +88,114 @@ public class RpcPacketBuilder {
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
       if (i > 0) sb.append(", ");
-      sb.append(entry.key().name()).append(" ").append(entry.key().type().getSqlTypeName());
+      String typeName = entry.key().type().getSqlTypeName();
+      if (isLargeString(entry)) typeName = "nvarchar(max)";
+      sb.append(entry.key().name()).append(" ").append(typeName);
     }
     return sb.toString();
   }
 
   private void putParamName(ByteBuffer buf, String name) {
     byte[] bytes = name.getBytes(StandardCharsets.UTF_16LE);
-    buf.put((byte) (bytes.length / 2)); // Length in CHARACTERS (not bytes)
+    buf.put((byte) (bytes.length / 2));
     buf.put(bytes);
   }
 
   private void putTypeInfoNVarcharMax(ByteBuffer buf) {
-    buf.put((byte) 0xE7);        // NVARCHAR
-    buf.putShort((short) -1);    // MAX (PLP)
-    buf.putInt(0x00000409);      // Collation
-    buf.put((byte) 0x00);        // Flags
+    buf.put((byte) 0xE7);
+    buf.putShort((short) -1);
+    buf.putInt(0x00000409);
+    buf.put((byte) 0x00);
   }
 
   private void putPlpUnicodeString(ByteBuffer buf, String str) {
     if (str == null) {
-      buf.putLong(0xFFFFFFFFFFFFFFFFL); // PLP NULL
+      buf.putLong(0xFFFFFFFFFFFFFFFFL);
       return;
     }
     byte[] bytes = str.getBytes(StandardCharsets.UTF_16LE);
-    buf.putLong(bytes.length); // PLP Length (total)
+    buf.putLong(bytes.length);
     if (bytes.length > 0) {
-      buf.putInt(bytes.length);  // Chunk length
-      buf.put(bytes);            // Chunk data
+      buf.putInt(bytes.length);
+      buf.put(bytes);
     }
-    buf.putInt(0);             // Terminator chunk
+    buf.putInt(0);
   }
 
-  private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry) {
+  private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry, boolean forcePlp) {
     BindingType type = entry.key().type();
+    if (forcePlp) {
+      putTypeInfoNVarcharMax(buf);
+      return;
+    }
+
     buf.put(type.getTdsXType());
 
+    byte precision = (type.getPrecision() != null) ? type.getPrecision() : 0;
+    byte scale = (type.getScale() != null) ? type.getScale() : 0;
+    if (entry.value() instanceof BigDecimal bd) {
+      int p = bd.precision();
+      int s = bd.scale();
+      if (p > 38) p = 38; if (s < 0) s = 0; if (s > p) s = p;
+      precision = (byte) p; scale = (byte) s;
+    }
+
     switch (type.getTypeStyle()) {
-      case FIXED -> { /* No extra bytes */ }
+      case FIXED -> {
+        // [FIX 1] UNIQUEIDENTIFIER (0x24) needs MaxLen (0x10)
+        if (type == BindingType.UNIQUEIDENTIFIER) {
+          buf.put((byte) 0x10);
+        }
+        // [FIX 2] TIME/DT2/DTOFFSET need Scale
+        else if (type == BindingType.TIME || type == BindingType.DATETIME2 || type == BindingType.DATETIMEOFFSET) {
+          buf.put((byte) 0x07); // Scale 7
+        }
+      }
       case LENGTH -> {
-        if (type.getLength() == null) throw new IllegalStateException("Missing length for " + type);
+        if (type.getLength() == null) throw new IllegalStateException("Missing length");
         buf.put(type.getLength().byteValue());
       }
       case PREC_SCALE -> {
-        buf.put(type.getPrecision());
-        buf.put(type.getScale());
+        buf.put(getDecimalStorageLength(precision));
+        buf.put(precision);
+        buf.put(scale);
       }
       case VARLEN -> {
         Number maxLen = type.getLength();
-        if (maxLen == null) throw new IllegalStateException("Missing maxLen for " + type);
-        buf.putShort(maxLen.shortValue());
+        if (maxLen.intValue() == -1) buf.putShort((short) -1);
+        else buf.putShort(maxLen.shortValue());
 
         if (type == BindingType.CHAR || type == BindingType.VARCHAR ||
-            type == BindingType.NCHAR || type == BindingType.NVARCHAR) {
-          buf.putInt(0x00000409); // Collation
-          buf.put((byte) 0);
+            type == BindingType.NCHAR || type == BindingType.NVARCHAR ||
+            type == BindingType.TEXT  || type == BindingType.NTEXT) {
+          buf.putInt(0x00000409);
+          buf.put((byte) 0x00);
         }
       }
     }
   }
 
-  private void putParamValue(ByteBuffer buf, ParamEntry entry) {
+  private void putParamValue(ByteBuffer buf, ParamEntry entry, boolean forcePlp) {
+    if (forcePlp) {
+      putPlpUnicodeString(buf, (String) entry.value());
+      return;
+    }
+
     BindingType type = entry.key().type();
     Object value = entry.value();
 
+    byte precision = (type.getPrecision() != null) ? type.getPrecision() : 0;
+    byte scale = (type.getScale() != null) ? type.getScale() : 0;
+    if (value instanceof BigDecimal bd) {
+      int p = bd.precision(); int s = bd.scale();
+      if (p > 38) p = 38; if (s < 0) s = 0; if (s > p) s = p;
+      precision = (byte) p; scale = (byte) s;
+    }
+
     if (value == null) {
-      // For FIXED types, handling NULL often implies strictly typed behavior or specific masks.
-      // However, for RPC parameters, usually a default '0' or special handling is needed.
-      // Standard TDS RPC null handling for non-PLP types:
       switch (type.getTypeStyle()) {
-        case FIXED -> buf.put((byte) 0x00); // 0-length often signals null for some fixed types in RPC context?
-        // Actually, for fixed types in RPC, you often can't send NULL unless it's a nullable variant (INTN).
-        // Assuming BindingType uses INTN, FLTN, etc., which are LENGTH-prefixed.
-        case LENGTH, VARLEN, PREC_SCALE -> buf.put((byte) 0xFF); // 0xFF is common null token for varlen/len-prefixed
+        case FIXED -> buf.put((byte) 0x00);
+        case LENGTH, VARLEN, PREC_SCALE -> buf.put((byte) 0xFF);
       }
       return;
     }
@@ -172,17 +207,18 @@ public class RpcPacketBuilder {
         writeFixedLengthValue(buf, type, value);
       }
       case PREC_SCALE -> {
-        byte[] dBytes = convertToDecimalBytes(value, type.getPrecision(), type.getScale());
+        byte[] dBytes = convertToDecimalBytes(value, precision, scale);
         buf.put((byte) dBytes.length);
         buf.put(dBytes);
       }
       case VARLEN -> {
         byte[] bytes = convertToVarlenBytes(type, value);
-        short max = type.getLength().shortValue();
-        if (max == -1) { // PLP
+        if (type.getLength().intValue() == -1) {
           buf.putLong(bytes.length);
-          buf.putInt(bytes.length);
-          buf.put(bytes);
+          if (bytes.length > 0) {
+            buf.putInt(bytes.length);
+            buf.put(bytes);
+          }
           buf.putInt(0);
         } else {
           buf.putShort((short) bytes.length);
@@ -192,51 +228,62 @@ public class RpcPacketBuilder {
     }
   }
 
-  // --- Data Writer Implementations ---
-
   private void writeFixedValue(ByteBuffer buf, BindingType type, Object value) {
-    if (type == BindingType.DATE) {
-      // 3 bytes: Days since 0001-01-01
-      LocalDate d = (LocalDate) value;
-      long days = d.toEpochDay() + DAYS_TO_1970;
-      buf.put((byte) (days & 0xFF));
-      buf.put((byte) ((days >> 8) & 0xFF));
-      buf.put((byte) ((days >> 16) & 0xFF));
-
-    } else if (type == BindingType.DATETIME2) {
-      // 8 bytes (scale 7): 5 bytes time (100ns ticks), 3 bytes date
-      LocalDateTime dt = (LocalDateTime) value;
-      LocalTime t = dt.toLocalTime();
-      // 100ns ticks since midnight. nanoOfDay is ns.
+    if (type == BindingType.TIME) {
+      LocalTime t = (LocalTime) value;
       long ticks = t.toNanoOfDay() / 100;
-
-      // Write 5 bytes for time
+      buf.put((byte) 5); // Len
       buf.put((byte) (ticks & 0xFF));
       buf.put((byte) ((ticks >> 8) & 0xFF));
       buf.put((byte) ((ticks >> 16) & 0xFF));
       buf.put((byte) ((ticks >> 24) & 0xFF));
       buf.put((byte) ((ticks >> 32) & 0xFF));
+    } else if (type == BindingType.DATETIMEOFFSET) {
+      OffsetDateTime odt = (OffsetDateTime) value;
+      LocalTime t = odt.toLocalTime();
+      long ticks = t.toNanoOfDay() / 100;
+      long days = odt.toLocalDate().toEpochDay() + DAYS_TO_1970;
+      short offsetMin = (short) (odt.getOffset().getTotalSeconds() / 60);
 
-      // Write 3 bytes for date
-      long days = dt.toLocalDate().toEpochDay() + DAYS_TO_1970;
+      buf.put((byte) 10); // Len
+      buf.put((byte) (ticks & 0xFF));
+      buf.put((byte) ((ticks >> 8) & 0xFF));
+      buf.put((byte) ((ticks >> 16) & 0xFF));
+      buf.put((byte) ((ticks >> 24) & 0xFF));
+      buf.put((byte) ((ticks >> 32) & 0xFF));
       buf.put((byte) (days & 0xFF));
       buf.put((byte) ((days >> 8) & 0xFF));
       buf.put((byte) ((days >> 16) & 0xFF));
-
+      buf.putShort(offsetMin);
+    } else if (type == BindingType.DATETIME2) {
+      LocalDateTime dt = (LocalDateTime) value;
+      LocalTime t = dt.toLocalTime();
+      long ticks = t.toNanoOfDay() / 100;
+      long days = dt.toLocalDate().toEpochDay() + DAYS_TO_1970;
+      buf.put((byte) 8); // Len
+      buf.put((byte) (ticks & 0xFF));
+      buf.put((byte) ((ticks >> 8) & 0xFF));
+      buf.put((byte) ((ticks >> 16) & 0xFF));
+      buf.put((byte) ((ticks >> 24) & 0xFF));
+      buf.put((byte) ((ticks >> 32) & 0xFF));
+      buf.put((byte) (days & 0xFF));
+      buf.put((byte) ((days >> 8) & 0xFF));
+      buf.put((byte) ((days >> 16) & 0xFF));
+    } else if (type == BindingType.DATE) {
+      LocalDate d = (LocalDate) value;
+      long days = d.toEpochDay() + DAYS_TO_1970;
+      buf.put((byte) 3); // Len
+      buf.put((byte) (days & 0xFF));
+      buf.put((byte) ((days >> 8) & 0xFF));
+      buf.put((byte) ((days >> 16) & 0xFF));
     } else if (type == BindingType.UNIQUEIDENTIFIER) {
       UUID uuid = (UUID) value;
-      long msb = uuid.getMostSignificantBits();
-      long lsb = uuid.getLeastSignificantBits();
-      // UUID in Java is Big Endian, Microsoft GUID is mixed endian.
-      // Swapping is required for first 3 parts: int, short, short. Last 8 bytes are straight.
-      buf.putInt(Integer.reverseBytes((int) (msb >> 32)));
-      buf.putShort(Short.reverseBytes((short) (msb >> 16)));
-      buf.putShort(Short.reverseBytes((short) msb));
-      buf.putLong(Long.reverseBytes(lsb)); // Wait, the last 8 bytes are usually byte-order independent array in Java?
-      // For simplicity/standard usage without specific GUID util:
-      // A common raw write is sufficient if server handles standard UUID bytes,
-      // but strict GUID requires endian swap. Leaving as simple write for now.
-      // buf.putLong(msb); buf.putLong(lsb);
+      // [FIX 3] Write Length (16)
+      buf.put((byte) 0x10);
+      buf.putLong(uuid.getMostSignificantBits());
+      buf.putLong(uuid.getLeastSignificantBits());
+    } else {
+      writeFixedLengthValue(buf, type, value);
     }
   }
 
@@ -254,12 +301,9 @@ public class RpcPacketBuilder {
     BigDecimal bd = ((BigDecimal) value).setScale(scale, RoundingMode.HALF_UP);
     BigInteger unscaled = bd.unscaledValue();
     byte[] bytes = unscaled.toByteArray();
-    // Sign byte: 1 = positive, 0 = negative (Standard TDS is opposite of Java?)
-    // TDS: 1 = Positive, 0 = Negative.
     byte sign = (byte) (unscaled.signum() >= 0 ? 1 : 0);
     byte[] res = new byte[bytes.length + 1];
     res[0] = sign;
-    // Reverse bytes (TDS is Little Endian for numeric)
     for (int i = 0; i < bytes.length; i++) {
       res[i + 1] = bytes[bytes.length - 1 - i];
     }
@@ -267,11 +311,20 @@ public class RpcPacketBuilder {
   }
 
   private byte[] convertToVarlenBytes(BindingType type, Object value) {
-    if (value instanceof String s) {
-      return s.getBytes(StandardCharsets.UTF_16LE);
-    } else if (value instanceof byte[] b) {
+    if (value instanceof String s) return s.getBytes(StandardCharsets.UTF_16LE);
+    else if (value instanceof byte[] b) return b;
+    else if (value instanceof ByteBuffer bb) {
+      byte[] b = new byte[bb.remaining()];
+      bb.duplicate().get(b);
       return b;
     }
     throw new IllegalArgumentException("Cannot convert " + value.getClass() + " to varlen bytes");
+  }
+
+  private byte getDecimalStorageLength(byte precision) {
+    if (precision <= 9) return 5;
+    if (precision <= 19) return 9;
+    if (precision <= 28) return 13;
+    return 17;
   }
 }

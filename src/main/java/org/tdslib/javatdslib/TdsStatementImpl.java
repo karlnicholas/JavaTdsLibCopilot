@@ -22,18 +22,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * TDS implementation of R2DBC Statement.
- * Supports batch execution via standard Reactive Streams Publisher logic (no Project Reactor).
- */
 public class TdsStatementImpl implements Statement {
 
   private final String query;
   private final TdsTransport transport;
-
-  // Holds sets of parameters for batch execution (e.g. multiple INSERT rows)
   private final List<List<ParamEntry>> batchParams = new ArrayList<>();
-  // The current row's parameters being built
   private List<ParamEntry> currentParams = new ArrayList<>();
 
   public TdsStatementImpl(String sql, TdsTransport transport) {
@@ -46,7 +39,6 @@ public class TdsStatementImpl implements Statement {
 
   @Override
   public Statement add() {
-    // Snapshot current params into the batch list and prepare for next row
     if (!currentParams.isEmpty()) {
       batchParams.add(new ArrayList<>(currentParams));
       currentParams.clear();
@@ -58,7 +50,9 @@ public class TdsStatementImpl implements Statement {
   public Statement bind(String param, Object value) {
     if (value == null) throw new IllegalArgumentException("value cannot be null. Use bindNull.");
     BindingType type = inferBindingType(value.getClass());
-    if (type == null) throw new IllegalArgumentException("Unsupported Java type: " + value.getClass().getName());
+    if (type == null) {
+      throw new IllegalArgumentException("Unsupported Java type: " + value.getClass().getName());
+    }
     currentParams.add(new ParamEntry(new BindingKey(type, param), value));
     return this;
   }
@@ -83,27 +77,22 @@ public class TdsStatementImpl implements Statement {
 
   @Override
   public Publisher<Result> execute() {
-    // 1. Finalize the last set of params if 'add()' wasn't called explicitly
     if (!currentParams.isEmpty()) {
       batchParams.add(new ArrayList<>(currentParams));
       currentParams.clear();
     }
 
-    // 2. Prepare the execution plan
-    // If no params at all, it's a simple SQL Batch (1 execution)
-    // If params exist, it's RPC (N executions)
     final List<List<ParamEntry>> executions;
     final boolean isSimpleBatch;
 
     if (batchParams.isEmpty()) {
       isSimpleBatch = true;
-      executions = Collections.emptyList(); // Not used for simple batch
+      executions = Collections.emptyList();
     } else {
       isSimpleBatch = false;
-      executions = new ArrayList<>(batchParams); // Snapshot for safety
+      executions = new ArrayList<>(batchParams);
     }
 
-    // 3. Return a Publisher that iterates the executions
     return new Publisher<Result>() {
       @Override
       public void subscribe(Subscriber<? super Result> subscriber) {
@@ -120,17 +109,14 @@ public class TdsStatementImpl implements Statement {
               TdsMessage messageToSend = null;
 
               if (isSimpleBatch) {
-                // Single SQL Batch Execution
                 if (index.compareAndSet(0, 1)) {
                   messageToSend = createSqlBatchMessage(query);
                 } else {
-                  // Already done
                   completed.set(true);
                   subscriber.onComplete();
                   return;
                 }
               } else {
-                // Parameterized RPC Execution
                 int i = index.getAndIncrement();
                 if (i < executions.size()) {
                   messageToSend = createRpcMessage(query, executions.get(i));
@@ -142,13 +128,10 @@ public class TdsStatementImpl implements Statement {
               }
 
               if (messageToSend != null) {
-                // Send Request & Wrap Response
-                // Note: The TokenVisitor processes the response stream for THIS specific message
                 Result result = new TdsResultImpl(new QueryResponseTokenVisitor(transport, messageToSend));
                 subscriber.onNext(result);
                 processed++;
 
-                // If simple batch, we are done after 1 iteration
                 if (isSimpleBatch) {
                   completed.set(true);
                   subscriber.onComplete();
@@ -167,8 +150,6 @@ public class TdsStatementImpl implements Statement {
     };
   }
 
-  // --- Helper Methods ---
-
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     byte[] headers = AllHeaders.forAutoCommit(1).toBytes();
@@ -186,22 +167,42 @@ public class TdsStatementImpl implements Statement {
   }
 
   private BindingType inferBindingType(Class<?> clazz) {
+    // --- Exact Numerics ---
     if (clazz == Integer.class || clazz == int.class) return BindingType.INT;
     if (clazz == Long.class || clazz == long.class) return BindingType.BIGINT;
-    if (clazz == String.class) return BindingType.NVARCHAR;
-    if (clazz == Boolean.class || clazz == boolean.class) return BindingType.BIT;
+    if (clazz == Short.class || clazz == short.class) return BindingType.SMALLINT;
+    if (clazz == Byte.class || clazz == byte.class) return BindingType.TINYINT;
+    if (java.math.BigDecimal.class.isAssignableFrom(clazz)) return BindingType.DECIMAL;
+
+    // --- Approximate Numerics ---
     if (clazz == Double.class || clazz == double.class) return BindingType.FLOAT;
+    if (clazz == Float.class || clazz == float.class) return BindingType.REAL;
+
+    // --- Boolean ---
+    if (clazz == Boolean.class || clazz == boolean.class) return BindingType.BIT;
+
+    // --- Date and Time ---
     if (clazz == java.time.LocalDate.class) return BindingType.DATE;
+    if (clazz == java.time.LocalTime.class) return BindingType.TIME;
     if (clazz == java.time.LocalDateTime.class) return BindingType.DATETIME2;
+    if (clazz == java.time.OffsetDateTime.class) return BindingType.DATETIMEOFFSET;
+
+    // --- Strings (Default to Unicode) ---
+    if (clazz == String.class) return BindingType.NVARCHAR;
+
+    // --- Binary ---
+    if (java.nio.ByteBuffer.class.isAssignableFrom(clazz) || clazz == byte[].class) {
+      return BindingType.VARBINARY;
+    }
+
+    // --- Other ---
     if (clazz == java.util.UUID.class) return BindingType.UNIQUEIDENTIFIER;
-    if (clazz == java.math.BigDecimal.class) return BindingType.DECIMAL;
-    // Add others as needed
+
     return null;
   }
 
   @Override
   public Statement fetchSize(int rows) { return this; }
-
   @Override
   public Statement returnGeneratedValues(String... columns) { return this; }
 }
