@@ -37,15 +37,18 @@ public class RpcPacketBuilder {
   public ByteBuffer buildRpcPacket() {
     ByteBuffer buf = ByteBuffer.allocate(1024 * 1024).order(ByteOrder.LITTLE_ENDIAN);
 
+    // 1. RPC Header
     buf.putShort(RPC_PROCID_SWITCH);
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
-    buf.putShort((short) 0x0000);
+    buf.putShort((short) 0x0000); // Flags
 
+    // 2. Param @stmt
     putParamName(buf, "@stmt");
     buf.put(RPC_PARAM_DEFAULT);
     putTypeInfoNVarcharMax(buf);
     putPlpUnicodeString(buf, sql);
 
+    // 3. Param @params
     if (!params.isEmpty()) {
       String paramsDecl = buildParamsDeclaration();
       putParamName(buf, "@params");
@@ -53,6 +56,7 @@ public class RpcPacketBuilder {
       putTypeInfoNVarcharMax(buf);
       putPlpUnicodeString(buf, paramsDecl);
 
+      // 4. Actual Parameter Values
       for (ParamEntry entry : params) {
         putParamName(buf, entry.key().name());
         buf.put(RPC_PARAM_DEFAULT);
@@ -88,8 +92,40 @@ public class RpcPacketBuilder {
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
       if (i > 0) sb.append(", ");
-      String typeName = entry.key().type().getSqlTypeName();
-      if (isLargeString(entry)) typeName = "nvarchar(max)";
+
+      BindingType type = entry.key().type();
+      Object value = entry.value();
+      String typeName = type.getSqlTypeName();
+
+      // [FIX] Dynamic Parameter Declaration Logic
+      if (type == BindingType.DECIMAL || type == BindingType.NUMERIC) {
+        // Default to binding definition
+        int p = (type.getPrecision() != null) ? type.getPrecision() : 18;
+        int s = (type.getScale() != null) ? type.getScale() : 0;
+
+        // If value is BigDecimal, use its actual precision/scale to avoid rounding
+        if (value instanceof BigDecimal bd) {
+          p = bd.precision();
+          s = bd.scale();
+          // Clamp to SQL Server limits
+          if (p > 38) p = 38;
+          if (s < 0) s = 0;
+          if (s > 38) s = 38;
+        }
+        typeName = String.format("%s(%d,%d)", type.getSqlTypeName(), p, s);
+      }
+      else if (type == BindingType.NVARCHAR) {
+        // Match JDBC: nvarchar(4000) normally, nvarchar(max) if large
+        typeName = isLargeString(entry) ? "nvarchar(max)" : "nvarchar(4000)";
+      }
+      else if (type == BindingType.VARCHAR) {
+        typeName = isLargeString(entry) ? "varchar(max)" : "varchar(8000)";
+      }
+      else if (type == BindingType.VARBINARY) {
+        typeName = "varbinary(8000)"; // Or max if value is huge, but start here
+      }
+      // Add other overrides as needed, e.g. datetime2(7) vs datetime2
+
       sb.append(entry.key().name()).append(" ").append(typeName);
     }
     return sb.toString();
@@ -123,30 +159,33 @@ public class RpcPacketBuilder {
   }
 
   private void putTypeInfoForParam(ByteBuffer buf, ParamEntry entry, boolean forcePlp) {
-    BindingType type = entry.key().type();
     if (forcePlp) {
       putTypeInfoNVarcharMax(buf);
       return;
     }
 
+    BindingType type = entry.key().type();
     buf.put(type.getTdsXType());
 
+    // Dynamic Precision/Scale logic (MUST match declaration)
     byte precision = (type.getPrecision() != null) ? type.getPrecision() : 0;
     byte scale = (type.getScale() != null) ? type.getScale() : 0;
+
     if (entry.value() instanceof BigDecimal bd) {
       int p = bd.precision();
       int s = bd.scale();
-      if (p > 38) p = 38; if (s < 0) s = 0; if (s > p) s = p;
-      precision = (byte) p; scale = (byte) s;
+      if (p > 38) p = 38;
+      if (s < 0) s = 0;
+      if (s > 38) s = 38;
+      precision = (byte) p;
+      scale = (byte) s;
     }
 
     switch (type.getTypeStyle()) {
       case FIXED -> {
-        // [FIX 1] UNIQUEIDENTIFIER (0x24) needs MaxLen (0x10)
         if (type == BindingType.UNIQUEIDENTIFIER) {
           buf.put((byte) 0x10);
         }
-        // [FIX 2] TIME/DT2/DTOFFSET need Scale
         else if (type == BindingType.TIME || type == BindingType.DATETIME2 || type == BindingType.DATETIMEOFFSET) {
           buf.put((byte) 0x07); // Scale 7
         }
@@ -184,12 +223,18 @@ public class RpcPacketBuilder {
     BindingType type = entry.key().type();
     Object value = entry.value();
 
+    // Consistent Dynamic Logic
     byte precision = (type.getPrecision() != null) ? type.getPrecision() : 0;
     byte scale = (type.getScale() != null) ? type.getScale() : 0;
+
     if (value instanceof BigDecimal bd) {
-      int p = bd.precision(); int s = bd.scale();
-      if (p > 38) p = 38; if (s < 0) s = 0; if (s > p) s = p;
-      precision = (byte) p; scale = (byte) s;
+      int p = bd.precision();
+      int s = bd.scale();
+      if (p > 38) p = 38;
+      if (s < 0) s = 0;
+      if (s > 38) s = 38;
+      precision = (byte) p;
+      scale = (byte) s;
     }
 
     if (value == null) {
@@ -278,8 +323,7 @@ public class RpcPacketBuilder {
       buf.put((byte) ((days >> 16) & 0xFF));
     } else if (type == BindingType.UNIQUEIDENTIFIER) {
       UUID uuid = (UUID) value;
-      // [FIX 3] Write Length (16)
-      buf.put((byte) 0x10);
+      buf.put((byte) 0x10); // Len
       buf.putLong(uuid.getMostSignificantBits());
       buf.putLong(uuid.getLeastSignificantBits());
     } else {
