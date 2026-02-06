@@ -257,11 +257,11 @@ public class TdsClient implements AutoCloseable {
    * @throws IOException on I/O or transport errors
    */
   public Statement queryAsync(String sql) {
-    return new TdsStatementImpl(sql, transport);
+    return new TdsStatementImpl(this.transport, sql);
   }
 
   public Statement queryRpc(String sql) {
-    return new TdsStatementImpl(sql, transport);
+    return new TdsStatementImpl(this.transport, sql);
   }
 
   /**

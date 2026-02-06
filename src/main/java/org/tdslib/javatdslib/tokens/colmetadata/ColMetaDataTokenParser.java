@@ -1,9 +1,10 @@
 package org.tdslib.javatdslib.tokens.colmetadata;
 
+import io.r2dbc.spi.R2dbcType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.QueryContext;
-import org.tdslib.javatdslib.TdsDataType;
+import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
@@ -30,6 +31,7 @@ public class ColMetaDataTokenParser implements TokenParser {
     for (int colIndex = 0; colIndex < columnCount; colIndex++) {
       final int userType = payload.getInt();
       final short flags    = payload.getShort();
+
       final int dataType   = payload.get() & 0xFF; // Treat as unsigned int for switch
       log.trace("colIndex: {} userType: {} flags: {} dataType: {}", colIndex, userType, flags, dataType);
       int maxLength = -1;
@@ -39,116 +41,46 @@ public class ColMetaDataTokenParser implements TokenParser {
       // Precision is often read for Numeric/Decimal types
       byte precision = 0;
 
-      switch (dataType) {
-        // --- 1. Variable-Length with Collation (Strings) ---
-        // REMOVED: TdsDataType.TEXT and TdsDataType.NTEXT from here
-        case TdsDataType.BIGVARCHR: // 0xA7
-        case TdsDataType.BIGCHAR:   // 0xAF
-        case TdsDataType.NVARCHAR:  // 0xE7
-        case TdsDataType.VARCHAR:   // 0x27 (Legacy)
-        case TdsDataType.NCHAR:     // 0xEF
-        case TdsDataType.CHAR:      // 0x2F
-          maxLength = payload.getShort() & 0xFFFF; // 2-byte length
-          collation = new byte[5];
-          payload.get(collation);
+      final byte rawType = payload.get();
+      final TdsType tdsType = TdsType.valueOf(rawType);
+
+      if (tdsType == null) {
+        throw new IllegalStateException("Unknown Type: " + rawType);
+      }
+
+      // --- Generic Strategy-Based Parsing ---
+      // No more "case 0x26:"
+
+      switch (tdsType.strategy) {
+        case FIXED:
+          // Fixed types usually don't send metadata length in ColMeta
+          // Exception: Some legacy types might, but modern ones don't.
           break;
 
-        // --- NEW: TEXT and NTEXT (4-byte Length + Table Names) ---
-        case TdsDataType.TEXT:      // 0x23
-        case TdsDataType.NTEXT:     // 0x63
-          maxLength = payload.getInt(); // <--- FIX 1: Read 4 bytes
-          collation = new byte[5];
-          payload.get(collation);
-          readTableNames(payload);      // <--- FIX 2: Consume Table Names
+        case BYTELEN: // e.g., INTN, BITN, DECIMALN
+          maxLength = payload.get() & 0xFF;
+          if (tdsType == TdsType.DECIMALN || tdsType == TdsType.NUMERICN) {
+            precision = payload.get();
+            scale = payload.get();
+          }
           break;
 
-        // --- 2. Variable-Length without Collation ---
-        // REMOVED: TdsDataType.IMAGE from here
-        case TdsDataType.BIGVARBIN: // 0xA5
-        case TdsDataType.BIGBINARY: // 0xAD
-        case TdsDataType.VARBINARY: // 0x25
-        case TdsDataType.BINARY:    // 0x2D
-        case TdsDataType.UDT:       // 0xF0
-        case TdsDataType.SSVARIANT: // 0x62
-          maxLength = payload.getShort() & 0xFFFF;
+        case USHORTLEN: // e.g. NVARCHAR, BIGVARCHR
+          maxLength = Short.toUnsignedInt(payload.getShort());
+          // Collation check
+          if (tdsType.r2dbcType == R2dbcType.NVARCHAR || tdsType.r2dbcType == R2dbcType.VARCHAR) {
+            collation = new byte[5];
+            payload.get(collation);
+          }
           break;
 
-        // --- NEW: IMAGE (4-byte Length + Table Names, No Collation) ---
-        case TdsDataType.IMAGE:     // 0x22
-          maxLength = payload.getInt(); // <--- FIX: Read 4 bytes
-          readTableNames(payload);      // <--- FIX: Consume Table Names
+        case PLP: // XML
+          // Logic for PLP schema...
           break;
 
-        // --- XML (Special Case mentioned previously) ---
-        case TdsDataType.XML:       // 0xF1
-          byte schemaPresent = payload.get();
-          if (schemaPresent != 0) throw new UnsupportedOperationException("XML Schema not supported");
-          maxLength = -1; // XML is always PLP
-          break;
-
-        // --- 3. Fixed-Length Types ---
-        case TdsDataType.INT8:      // 0x7F
-        case TdsDataType.DATETIME:  // 0x3D
-        case TdsDataType.FLT8:      // 0x3E
-        case TdsDataType.MONEY:     // 0x3C
-          maxLength = 8;
-          break;
-
-        case TdsDataType.INT4:      // 0x38
-        case TdsDataType.FLT4:      // 0x3B
-        case TdsDataType.MONEY4:    // 0x7A
-        case TdsDataType.DATETIM4:  // 0x3A
-        case TdsDataType.INT2:      // 0x34
-          maxLength = 4; // Note: INT2 is 2, DATETIM4 is 4, etc.
-          if (dataType == TdsDataType.INT2) maxLength = 2;
-          break;
-
-        case TdsDataType.INT1:      // 0x30
-        case TdsDataType.BIT:       // 0x32
-          maxLength = 1;
-          break;
-
-        case TdsDataType.DATE:      // 0x28
-          maxLength = 3;
-          break;
-
-        case TdsDataType.GUID:      // 0x24
-          // GUID can be treated as fixed 16 in some contexts or varlen in others depending on version
-          // usually in COLMETADATA it's explicit length or fixed 16.
-          // 0x24 in COLMETADATA often has a 1-byte length after it (0x10).
-          // Let's assume standard behavior similar to INTN for now or fix length
-          lengthByte = payload.get();
-          maxLength = lengthByte;
-          break;
-
-        // --- 4. Length-Prefixed (Nullable) Types ---
-        case TdsDataType.INTN:      // 0x26
-        case TdsDataType.BITN:      // 0x68
-        case TdsDataType.FLTN:      // 0x6D
-        case TdsDataType.DATETIMN:  // 0x6F
-        case TdsDataType.MONEYN:    // 0x6E
-          lengthByte = payload.get();
-          maxLength = lengthByte;
-          break;
-
-        // --- 5. Precision/Scale Types ---
-        case TdsDataType.NUMERICN:  // 0x6C
-        case TdsDataType.DECIMALN:  // 0x6A
-          lengthByte = payload.get(); // Max Len
-          maxLength = lengthByte;
-          precision = payload.get();
+        case SCALE_LEN: // Time/Date2
           scale = payload.get();
           break;
-
-        case TdsDataType.DATETIME2:       // 0x2A
-        case TdsDataType.DATETIMEOFFSET:  // 0x2B
-        case TdsDataType.TIME:            // 0x29
-          scale = payload.get(); // Scale (0-7)
-          // length implies max bytes for that scale (e.g. 7 bytes for datetime2(7))
-          break;
-
-        default:
-          throw new IllegalStateException("Unknown DataType in ColMetaData: 0x" + Integer.toHexString(dataType));
       }
 
       // Column name parsing
