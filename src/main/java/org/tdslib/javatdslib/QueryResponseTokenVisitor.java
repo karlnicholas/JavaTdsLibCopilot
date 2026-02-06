@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Row;
+import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -89,31 +89,6 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
   @Override
   public void onToken(Token token) {
     switch (token.getType()) {
-//      case COL_METADATA:
-//        currentMetadata = (ColMetaDataToken) token;
-//        break;
-//
-//      case ROW:
-//        if (currentMetadata == null) {
-//          logger.warn("ROW token without preceding COL_METADATA - ignoring");
-//          return;
-//        }
-//        RowToken row = (RowToken) token;
-//        subscriber.onNext(null);
-//        logger.trace("fired onNext for Row ({} columns)", row.getColumnData().size());
-//        break;
-//
-//      case DONE:
-//      case DONE_IN_PROC:
-//      case DONE_PROC:
-//        DoneToken done = (DoneToken) token;
-//        // 2. Check for More Result Sets (Mask 0x01)
-//        if (!done.getStatus().hasMoreResults()) {
-//          // No more results = truly done
-//          subscriber.onComplete();
-//          logger.debug("fired onComplete");
-//        }
-//        break;
       case COL_METADATA:
         currentMetadata = (ColMetaDataToken) token;
         break;
@@ -131,14 +106,12 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         // 2. Check for More Result Sets (Mask 0x01)
         if (!done.getStatus().hasMoreResults()) {
           // No more results = truly done
-//          if ( currentMetadata == null) {
-//            subscriber.onNext(new TdsRow(Collections.emptyList(), Collections.emptyList()));
-//          }
-          subscriber.onComplete();
+          if (!hasError) {
+            subscriber.onComplete();
+            logger.debug("fired onComplete");
+          }
           currentMetadata = null;
-          logger.debug("fired onComplete");
         }
-        // ... existing done logic ...
         break;
       case INFO:
         InfoToken info = (InfoToken) token;
@@ -153,8 +126,55 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         ErrorToken error = (ErrorToken) token;
         logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
 
-        // should probably fire onError
         if (error.isError()) {
+          // 1. Extract and sanitize values
+          String message = error.getMessage();
+          // Convert raw state byte to string (masking to unsigned for clarity)
+          String sqlState = String.valueOf(error.getState() & 0xFF);
+          // Safe cast: SQL Server error numbers fit in integer
+          int errorCode = (int) error.getNumber();
+
+          R2dbcException exception;
+
+          // 2. Map SQL Server Error Numbers to R2DBC Exception Types
+          switch (errorCode) {
+            case 1205: // Deadlock victim
+            case -2:   // Timeout (client-side driver often uses negative numbers)
+            case 11:   // General network error
+            case 10054:// Connection reset by peer
+            case 10060:// Connection timed out
+              exception = new R2dbcTransientResourceException(message, sqlState, errorCode);
+              break;
+
+            case 2627: // Violation of PRIMARY KEY constraint
+            case 2601: // Cannot insert duplicate key row
+            case 547:  // The INSERT statement conflicted with the FOREIGN KEY constraint
+            case 515:  // Cannot insert the value NULL into column
+              exception = new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
+              break;
+
+            case 208: // Invalid object name (Table not found)
+            case 207: // Invalid column name
+            case 102: // Incorrect syntax near ...
+            case 156: // Incorrect syntax near the keyword ...
+              exception = new R2dbcBadGrammarException(message, sqlState, errorCode);
+              break;
+
+            case 229: // The permission was denied on the object...
+            case 230: // The permission was denied on the column...
+            case 18456:// Login failed for user
+              exception = new R2dbcPermissionDeniedException(message, sqlState, errorCode);
+              break;
+
+            default:
+              // Fallback for all other errors (assumed permanent/fatal)
+              exception = new R2dbcNonTransientResourceException(message, sqlState, errorCode);
+              break;
+          }
+
+          // 3. Terminate the stream
+          subscriber.onError(exception);
+          logger.debug("fired onError");
           hasError = true;
         }
         break;

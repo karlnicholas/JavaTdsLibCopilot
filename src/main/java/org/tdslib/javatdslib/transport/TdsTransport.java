@@ -588,14 +588,81 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
         break;
 
       case SQL_COLLATION:
+        // New collation
         int newInfoLen = buf.get() & 0xFF;
         byte[] newCollationData = new byte[newInfoLen];
         buf.get(newCollationData);
+
+        // Old collation
         int oldInfoLen = buf.get() & 0xFF;
         byte[] oldCollationData = new byte[oldInfoLen];
         buf.get(oldCollationData);
+
+        // Store the new collation data raw (most clients do this)
         setCollationBytes(newCollationData);
-        logger.debug("SQL Collation updated ({} bytes)", newInfoLen);
+
+        // Decode and log meaningful collation info
+        if (newInfoLen >= 5) {
+          ByteBuffer collationBuf = ByteBuffer.wrap(newCollationData)
+                  .order(ByteOrder.LITTLE_ENDIAN);
+
+          final int fullLcid = collationBuf.getInt(); // bytes 0-3: LCID + flags
+          final byte verSortByte = collationBuf.get(); // byte 4: version+sort nibble
+
+          final int flags = (fullLcid >>> 20) & 0xFF; // sensitivity flags
+
+          final int fullSortOrderId = verSortByte & 0xFF;
+          final int versionNibble = (fullSortOrderId >>> 4) & 0x0F;
+          final int sortNibble = fullSortOrderId & 0x0F;
+
+          final String friendlyName = COMMON_SORTID_NAMES.getOrDefault(
+                  fullSortOrderId,
+                  "Unknown legacy SQL collation (sort order " + fullSortOrderId + ")"
+          );
+
+          // Build detailed flag description
+          StringBuilder flagDesc = new StringBuilder();
+          if ((flags & 0x01) != 0) {
+            flagDesc.append("CI, ");
+          }
+          if ((flags & 0x02) != 0) {
+            flagDesc.append("AI, ");
+          }
+          if ((flags & 0x04) != 0) {
+            flagDesc.append("WI, ");
+          }
+          if ((flags & 0x08) != 0) {
+            flagDesc.append("KI, ");
+          }
+          if ((flags & 0x10) != 0) {
+            flagDesc.append("BIN, ");
+          }
+          if ((flags & 0x20) != 0) {
+            flagDesc.append("BIN2, ");
+          }
+          if ((flags & 0x40) != 0) {
+            flagDesc.append("UTF8, ");
+          }
+
+          final String flagsStr = flagDesc.length() > 0
+                  ? flagDesc.substring(0, flagDesc.length() - 2)
+                  : "none";
+
+          final int baseLcid = fullLcid & 0x000FFFFF; // lower 20 bits = locale ID
+
+          // Shortened log message to satisfy LineLength check
+          logger.info(
+                  "SQL Collation updated: {} (LCID={}, flags={}, ver={}, sort={}, id={})",
+                  friendlyName,
+                  baseLcid,
+                  flagsStr,
+                  versionNibble,
+                  sortNibble,
+                  fullSortOrderId
+          );
+        } else {
+          logger.debug("SQL Collation updated (empty or too short: {} bytes)", newInfoLen);
+        }
         break;
 
       case RESET_CONNECTION:

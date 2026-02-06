@@ -114,17 +114,16 @@ public class ErrorToken extends Token {
 
   @Override
   public String toString() {
-    final String fmt = "ErrorToken{number=%d, severity=%d, state=%d, "
-        + "message='%s', server='%s', proc='%s', line=%d}";
     return String.format(
-        fmt,
-        number,
-        severity,
-        state,
-        message,
-        serverName,
-        procName,
-        lineNumber
+            "ErrorToken{Msg %d, Level %d, State %d, Line %d, %s: '%s', Server: '%s', Proc: '%s'}",
+            number,
+            severity & 0xFF,       // Mask to unsigned integer for display
+            state & 0xFF,          // Mask to unsigned integer for display
+            lineNumber,
+            isError() ? "Error" : "Info",
+            message,
+            serverName,
+            procName
     );
   }
 }

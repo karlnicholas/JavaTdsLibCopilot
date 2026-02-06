@@ -9,8 +9,6 @@ import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;
 import org.tdslib.javatdslib.tokens.done.DoneTokenParser;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeTokenParser;
-import org.tdslib.javatdslib.tokens.error.ErrorTokenParser;
-import org.tdslib.javatdslib.tokens.info.InfoTokenParser;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.returnstatus.ReturnStatusTokenParser;
 import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueTokenParser;
@@ -36,8 +34,8 @@ public class TokenDispatcher {
   public TokenDispatcher() {
     register(TokenType.ENV_CHANGE, new EnvChangeTokenParser());
     register(TokenType.LOGIN_ACK, new LoginAckTokenParser());
-    register(TokenType.ERROR, new ErrorTokenParser());
-    register(TokenType.INFO, new InfoTokenParser());
+    register(TokenType.ERROR, new MessageTokenParser());
+    register(TokenType.INFO, new MessageTokenParser());
     register(TokenType.DONE, new DoneTokenParser());
 
     // Add more parsers as implemented
