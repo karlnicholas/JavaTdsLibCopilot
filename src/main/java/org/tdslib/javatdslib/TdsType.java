@@ -4,9 +4,6 @@ import io.r2dbc.spi.R2dbcType;
 import java.util.HashMap;
 import java.util.Map;
 
-// NO IMPORTS from java.sql.*
-// NO IMPORTS from TdsDataType
-
 public enum TdsType {
 
   // --- Integers ---
@@ -26,16 +23,21 @@ public enum TdsType {
   BITN(0x68, R2dbcType.BOOLEAN, LengthStrategy.BYTELEN, 1),
 
   // --- Decimals ---
+  // Legacy types (0x37/0x3F) use PREC_SCALE strategy (Len, Prec, Scale)
   NUMERIC(0x3F, R2dbcType.NUMERIC, LengthStrategy.PREC_SCALE, 17),
   DECIMAL(0x37, R2dbcType.DECIMAL, LengthStrategy.PREC_SCALE, 17),
+
+  // Modern types (0x6A/0x6C/0x6E) use BYTELEN strategy
   NUMERICN(0x6C, R2dbcType.NUMERIC, LengthStrategy.BYTELEN, 17),
-  DECIMALN(0x37, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 17), // Note: 0x37 reused
-  MONEYN(0x7A, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 8),
+  DECIMALN(0x6A, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 17),
+  MONEYN(0x6E, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 8),
+
   MONEY(0x3C, R2dbcType.DECIMAL, LengthStrategy.FIXED, 8),
   SMALLMONEY(0x7A, R2dbcType.DECIMAL, LengthStrategy.FIXED, 4),
 
   // --- Dates ---
   DATE(0x28, R2dbcType.DATE, LengthStrategy.FIXED, 3),
+
   TIME(0x29, R2dbcType.TIME, LengthStrategy.SCALE_LEN, 5),
   DATETIME2(0x2A, R2dbcType.TIMESTAMP, LengthStrategy.SCALE_LEN, 8),
   DATETIMEOFFSET(0x2B, R2dbcType.TIMESTAMP_WITH_TIME_ZONE, LengthStrategy.SCALE_LEN, 10),
@@ -44,25 +46,27 @@ public enum TdsType {
   SMALLDATETIME(0x3A, R2dbcType.TIMESTAMP, LengthStrategy.FIXED, 4),
 
   // --- Strings & Binary ---
-  BIGVARCHR(0xA7, R2dbcType.VARCHAR, LengthStrategy.USHORTLEN, -1), // Modern VARCHAR(MAX)
+  BIGVARCHR(0xA7, R2dbcType.VARCHAR, LengthStrategy.USHORTLEN, -1),
+  BIGCHAR(0xAF, R2dbcType.CHAR, LengthStrategy.USHORTLEN, -1),
+  BIGBINARY(0xAD, R2dbcType.BINARY, LengthStrategy.USHORTLEN, -1),
   NVARCHAR(0xE7, R2dbcType.NVARCHAR, LengthStrategy.USHORTLEN, -1),
   BIGVARBIN(0xA5, R2dbcType.VARBINARY, LengthStrategy.USHORTLEN, -1),
-
-  // Legacy String/Binary (Added to fix switch case errors)
-  CHAR(0x2F, R2dbcType.CHAR, LengthStrategy.FIXED, -1),
-  VARCHAR(0x27, R2dbcType.VARCHAR, LengthStrategy.FIXED, -1),   // Legacy VARCHAR
   NCHAR(0xEF, R2dbcType.NCHAR, LengthStrategy.USHORTLEN, -1),
-  BINARY(0x2D, R2dbcType.BINARY, LengthStrategy.FIXED, -1),
-  VARBINARY(0x25, R2dbcType.VARBINARY, LengthStrategy.FIXED, -1), // Legacy VARBINARY
+
+  // Legacy Types
+  CHAR(0x2F, R2dbcType.CHAR, LengthStrategy.USHORTLEN, -1),
+  VARCHAR(0x27, R2dbcType.VARCHAR, LengthStrategy.USHORTLEN, -1),
+  BINARY(0x2D, R2dbcType.BINARY, LengthStrategy.USHORTLEN, -1),
+  VARBINARY(0x25, R2dbcType.VARBINARY, LengthStrategy.USHORTLEN, -1),
 
   // --- Large Objects ---
   XML(0xF1, R2dbcType.NVARCHAR, LengthStrategy.PLP, -1),
-  TEXT(0x23, R2dbcType.VARCHAR, LengthStrategy.FIXED, -1),
-  NTEXT(0x63, R2dbcType.NVARCHAR, LengthStrategy.FIXED, -1),
-  IMAGE(0x22, R2dbcType.VARBINARY, LengthStrategy.FIXED, -1),
+  TEXT(0x23, R2dbcType.VARCHAR, LengthStrategy.LONGLEN, -1),
+  NTEXT(0x63, R2dbcType.NVARCHAR, LengthStrategy.LONGLEN, -1),
+  IMAGE(0x22, R2dbcType.VARBINARY, LengthStrategy.LONGLEN, -1),
 
   // --- GUID ---
-  GUID(0x24, R2dbcType.CHAR, LengthStrategy.FIXED, 16);
+  GUID(0x24, R2dbcType.CHAR, LengthStrategy.BYTELEN, 16);
 
   // --- Implementation ---
   public final int byteVal;
@@ -95,7 +99,9 @@ public enum TdsType {
   public static TdsType valueOf(byte b) { return BYTE_MAP.getOrDefault(b & 0xFF, null); }
   public static TdsType forR2dbcType(R2dbcType type) { return R2DBC_MAP.get(type); }
 
-  public enum LengthStrategy { FIXED, BYTELEN, USHORTLEN, SCALE_LEN, PLP, PREC_SCALE }
+  public enum LengthStrategy {
+    FIXED, BYTELEN, USHORTLEN, SCALE_LEN, PLP, PREC_SCALE, LONGLEN
+  }
 
   public static TdsType inferFromJavaType(Class<?> clazz) {
     if (clazz == Integer.class || clazz == int.class) return INTN;

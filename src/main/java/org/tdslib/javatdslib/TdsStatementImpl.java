@@ -109,38 +109,73 @@ public class TdsStatementImpl implements Statement {
       batchParams.add(new ArrayList<>(currentParams));
       currentParams.clear();
     }
+
+    final List<List<ParamEntry>> executions;
+    final boolean isSimpleBatch;
+
     if (batchParams.isEmpty()) {
-      // Simple execution without params
-      return MonoJust(createSqlBatchMessage(query));
+      isSimpleBatch = true;
+      executions = Collections.emptyList();
+    } else {
+      isSimpleBatch = false;
+      executions = new ArrayList<>(batchParams);
     }
-    // Parameterized execution (RPC)
+
     return new Publisher<Result>() {
       @Override
       public void subscribe(Subscriber<? super Result> subscriber) {
-        // ... (Keep your existing execution logic, omitting for brevity if unchanged) ...
-        // If you need the execution logic reposted, let me know.
-        // It generally delegates to createRpcMessage below.
-        executeRpcBatch(subscriber);
+        subscriber.onSubscribe(new Subscription() {
+          private final AtomicInteger index = new AtomicInteger(0);
+          private final AtomicBoolean completed = new AtomicBoolean(false);
+
+          @Override
+          public void request(long n) {
+            if (completed.get() || n <= 0) return;
+
+            long processed = 0;
+            while (processed < n && !completed.get()) {
+              TdsMessage messageToSend = null;
+
+              if (isSimpleBatch) {
+                if (index.compareAndSet(0, 1)) {
+                  messageToSend = createSqlBatchMessage(query);
+                } else {
+                  completed.set(true);
+                  subscriber.onComplete();
+                  return;
+                }
+              } else {
+                int i = index.getAndIncrement();
+                if (i < executions.size()) {
+                  messageToSend = createRpcMessage(query, executions.get(i));
+                } else {
+                  completed.set(true);
+                  subscriber.onComplete();
+                  return;
+                }
+              }
+
+              if (messageToSend != null) {
+                Result result = new TdsResultImpl(new QueryResponseTokenVisitor(transport, messageToSend));
+                subscriber.onNext(result);
+                processed++;
+
+                if (isSimpleBatch) {
+                  completed.set(true);
+                  subscriber.onComplete();
+                  return;
+                }
+              }
+            }
+          }
+
+          @Override
+          public void cancel() {
+            completed.set(true);
+          }
+        });
       }
     };
-  }
-
-  // --- Helper to execute batch (Simplified from your snippet) ---
-  private void executeRpcBatch(Subscriber<? super Result> subscriber) {
-    subscriber.onSubscribe(new Subscription() {
-      // ... existing subscription logic ...
-      public void request(long n) {
-        // For each set of params in batchParams:
-        for (List<ParamEntry> params : batchParams) {
-          TdsMessage msg = createRpcMessage(query, params);
-          // send msg...
-          // receive result...
-          // subscriber.onNext(new TdsResultImpl(...));
-        }
-        subscriber.onComplete();
-      }
-      public void cancel() {}
-    });
   }
 
   private TdsMessage createSqlBatchMessage(String sql) {
@@ -184,19 +219,5 @@ public class TdsStatementImpl implements Statement {
       return TdsType.inferFromJavaType(p.getValue().getClass());
     }
     return null;
-  }
-
-  // Simple Mono helper to match your previous code style
-  private Publisher<Result> MonoJust(TdsMessage msg) {
-    return subscriber -> {
-      subscriber.onSubscribe(new Subscription() {
-        public void request(long n) {
-          Result result = new TdsResultImpl(new QueryResponseTokenVisitor(transport, msg));
-          subscriber.onNext(result);
-          subscriber.onComplete();
-        }
-        public void cancel() {}
-      });
-    };
   }
 }

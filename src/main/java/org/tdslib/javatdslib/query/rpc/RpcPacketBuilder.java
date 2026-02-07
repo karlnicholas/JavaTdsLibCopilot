@@ -38,46 +38,36 @@ public class RpcPacketBuilder {
   }
 
   public ByteBuffer buildRpcPacket() {
-    // 1. Calculate approximate size (start with 4KB, resize if needed)
-    // For production, you'd calculate exact size to avoid reallocation
-    ByteBuffer buf = ByteBuffer.allocate(8192);
+    ByteBuffer buf = ByteBuffer.allocate(1024 * 1024);
     buf.order(ByteOrder.LITTLE_ENDIAN);
 
-    // 2. Write RPC Header for sp_executesql
     writeRpcHeader(buf);
 
-    // 3. Parameter 1: @stmt (The SQL Query)
+    // 1. @stmt
     writeParamName(buf, "@stmt");
-    buf.put(RPC_PARAM_DEFAULT); // Status
-
-    // @stmt Type Info: NVARCHAR(MAX)
+    buf.put(RPC_PARAM_DEFAULT);
     buf.put((byte) TdsType.NVARCHAR.byteVal);
-    buf.putShort((short) -1); // 0xFFFF = MAX
+    buf.putShort((short) -1);
     writeCollation(buf);
 
-    // @stmt Value
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     buf.putShort((short) sqlBytes.length);
     buf.put(sqlBytes);
 
-    // 4. Parameter 2: @params (The declaration string)
-    // e.g. "@p0 int, @p1 bit"
+    // 2. @params
     if (!params.isEmpty()) {
       writeParamName(buf, "@params");
-      buf.put(RPC_PARAM_DEFAULT); // Status
-
-      // @params Type Info: NVARCHAR(MAX)
+      buf.put(RPC_PARAM_DEFAULT);
       buf.put((byte) TdsType.NVARCHAR.byteVal);
-      buf.putShort((short) -1); // MAX
+      buf.putShort((short) -1);
       writeCollation(buf);
 
-      // @params Value
       String paramDecl = buildParamDecl();
       byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
       buf.putShort((short) declBytes.length);
       buf.put(declBytes);
 
-      // 5. Write Actual Parameter Values (@p0, @p1...)
+      // 3. Values
       for (ParamEntry param : params) {
         writeParam(buf, param);
       }
@@ -88,62 +78,49 @@ public class RpcPacketBuilder {
   }
 
   private void writeRpcHeader(ByteBuffer buf) {
-    // Length of Procedure Name (0xFFFF means we use ProcID)
     buf.putShort((short) 0xFFFF);
-    // ProcID for sp_executesql
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
-    // Option Flags (0x0000)
     buf.putShort((short) 0);
   }
 
   private void writeParam(ByteBuffer buf, ParamEntry param) {
-    // 1. Name
     writeParamName(buf, param.key().name());
-
-    // 2. Status
     buf.put(RPC_PARAM_DEFAULT);
 
-    // 3. Type Info
     TdsType type = param.key().type();
     buf.put((byte) type.byteVal);
 
-    // 4. Type Meta (Length, Precision, Scale, Collation) based on Strategy
     switch (type.strategy) {
       case FIXED:
-        // No extra metadata for pure fixed types
         break;
 
       case BYTELEN:
-        // Writes the "Max Length" byte (e.g. 4 for INTN, 8 for FLTN)
         buf.put((byte) type.fixedSize);
-        // Extra metadata for Decimal/Numeric
         if (type == TdsType.DECIMALN || type == TdsType.NUMERICN) {
-          buf.put((byte) 18); // Precision (Hardcoded max for now)
-          buf.put((byte) 0);  // Scale (Hardcoded default)
+          buf.put((byte) 18);
+          buf.put((byte) 0);
         }
         break;
 
       case USHORTLEN:
-        // Writes 0xFFFF (-1) for MAX or 8000 for standard
         buf.putShort((short) 8000);
-        // Collation for Strings
         if (type == TdsType.NVARCHAR || type == TdsType.BIGVARCHR) {
           writeCollation(buf);
         }
         break;
 
       case SCALE_LEN:
-        // Time/Date2/DateTimeOffset need Scale
         buf.put((byte) 7);
         break;
 
       case PLP:
-        // XML schema present flag (0 = none)
         buf.put((byte) 0);
+        break;
+
+      case LONGLEN:
         break;
     }
 
-    // 5. Value
     writeValue(buf, type, param.value());
   }
 
@@ -153,11 +130,19 @@ public class RpcPacketBuilder {
       return;
     }
 
-    // --- Switch based on the User's Intent (R2dbcType) ---
-    // This handles "Java Integer -> TinyInt" downcasting automatically
+    // FIX 1: Handle GUID explicitly (prevents ClassCastException)
+    if (type == TdsType.GUID) {
+      buf.put((byte) 16); // Length
+      UUID u = (UUID) value;
+      // Write as two Little-Endian longs to match TdsRowImpl reading logic
+      buf.putLong(u.getMostSignificantBits());
+      buf.putLong(u.getLeastSignificantBits());
+      return;
+    }
+
     switch (type.r2dbcType) {
       case TINYINT:
-        buf.put((byte) 1); // Length
+        buf.put((byte) 1);
         buf.put(((Number) value).byteValue());
         break;
       case SMALLINT:
@@ -195,14 +180,14 @@ public class RpcPacketBuilder {
         buf.put(decBytes);
         break;
 
-      case VARCHAR: // Non-Unicode
+      case VARCHAR:
       case CHAR:
         byte[] ascii = ((String) value).getBytes(WINDOWS_1252);
         buf.putShort((short) ascii.length);
         buf.put(ascii);
         break;
 
-      case NVARCHAR: // Unicode
+      case NVARCHAR:
       case NCHAR:
         byte[] utf16 = ((String) value).getBytes(StandardCharsets.UTF_16LE);
         buf.putShort((short) utf16.length);
@@ -217,13 +202,39 @@ public class RpcPacketBuilder {
         break;
 
       case DATE:
-        // Example simplified date writing (3 bytes)
-        // In production, use Days from 0001-01-01
+        LocalDate d = (LocalDate) value;
+        long days = d.toEpochDay() + DAYS_TO_1970;
         buf.put((byte) 3);
-        buf.put((byte) 0); buf.put((byte)0); buf.put((byte)0); // Placeholder
+        write3ByteInt(buf, (int) days);
         break;
 
-      // ... Add other types (Time, DateTime2, UUID) as needed
+      case TIME:
+        LocalTime t = (LocalTime) value;
+        long tTicks = t.toNanoOfDay() / 100;
+        buf.put((byte) 5);
+        write5ByteInt(buf, tTicks);
+        break;
+
+      case TIMESTAMP:
+        LocalDateTime ldt = (LocalDateTime) value;
+        long dtTicks = ldt.toLocalTime().toNanoOfDay() / 100;
+        long dtDays = ldt.toLocalDate().toEpochDay() + DAYS_TO_1970;
+        buf.put((byte) 8);
+        write5ByteInt(buf, dtTicks);
+        write3ByteInt(buf, (int) dtDays);
+        break;
+
+      case TIMESTAMP_WITH_TIME_ZONE:
+        OffsetDateTime odt = (OffsetDateTime) value;
+        long odtTicks = odt.toLocalTime().toNanoOfDay() / 100;
+        long odtDays = odt.toLocalDate().toEpochDay() + DAYS_TO_1970;
+        int offsetMins = odt.getOffset().getTotalSeconds() / 60;
+        buf.put((byte) 10);
+        write5ByteInt(buf, odtTicks);
+        write3ByteInt(buf, (int) odtDays);
+        buf.putShort((short) offsetMins);
+        break;
+
       default:
         throw new IllegalArgumentException("Unsupported Type for Serialization: " + type.r2dbcType);
     }
@@ -231,42 +242,44 @@ public class RpcPacketBuilder {
 
   private void writeNull(ByteBuffer buf, TdsType type) {
     switch (type.strategy) {
-      case BYTELEN -> buf.put((byte) 0);      // 0 length
-      case USHORTLEN -> buf.putShort((short) 0xFFFF); // 0xFFFF = Null
-      case PLP -> buf.putLong(0xFFFFFFFFFFFFFFFFL); // PLP Null
+      case BYTELEN -> buf.put((byte) 0);
+      case USHORTLEN -> buf.putShort((short) 0xFFFF);
+      case PLP -> buf.putLong(0xFFFFFFFFFFFFFFFFL);
       default -> buf.put((byte) 0);
     }
   }
-
-  // --- Helpers ---
 
   private void writeParamName(ByteBuffer buf, String name) {
     if (name == null || name.isEmpty()) {
       buf.put((byte) 0);
       return;
     }
-    buf.put((byte) name.length()); // Len in chars
+    buf.put((byte) name.length());
     buf.put(name.getBytes(StandardCharsets.UTF_16LE));
   }
 
   private void writeCollation(ByteBuffer buf) {
-    // SQL_Latin1_General_CP1_CI_AS
     buf.put(new byte[]{0x09, 0x04, (byte) 0xD0, 0x00, 0x34});
   }
 
   private String buildParamDecl() {
     return params.stream()
-            .map(p -> p.key().name() + " " + getSqlTypeDeclaration(p.key().type()))
-            .collect(Collectors.joining(", "));
+        .map(p -> p.key().name() + " " + getSqlTypeDeclaration(p.key().type()))
+        .collect(Collectors.joining(", "));
   }
 
   private String getSqlTypeDeclaration(TdsType type) {
-    // Map Enum to SQL String (e.g. INTN -> "int")
-    // You can add a field to TdsType enum for "sqlName" to make this cleaner
+    // FIX 2: Return correct SQL type for GUID
+    if (type == TdsType.GUID) return "uniqueidentifier";
+
     if (type == TdsType.NVARCHAR) return "nvarchar(max)";
     if (type == TdsType.INTN) return "int";
     if (type == TdsType.BITN) return "bit";
-    // ... simplistic fallback for now
+    if (type == TdsType.DATE) return "date";
+    if (type == TdsType.TIME) return "time(7)";
+    if (type == TdsType.DATETIME2) return "datetime2(7)";
+    if (type == TdsType.DATETIMEOFFSET) return "datetimeoffset(7)";
+
     return type.r2dbcType.name().toLowerCase();
   }
 
@@ -291,5 +304,19 @@ public class RpcPacketBuilder {
       res[i + 1] = bytes[bytes.length - 1 - i];
     }
     return res;
+  }
+
+  private void write3ByteInt(ByteBuffer buf, int val) {
+    buf.put((byte) (val & 0xFF));
+    buf.put((byte) ((val >> 8) & 0xFF));
+    buf.put((byte) ((val >> 16) & 0xFF));
+  }
+
+  private void write5ByteInt(ByteBuffer buf, long val) {
+    buf.put((byte) (val & 0xFF));
+    buf.put((byte) ((val >> 8) & 0xFF));
+    buf.put((byte) ((val >> 16) & 0xFF));
+    buf.put((byte) ((val >> 24) & 0xFF));
+    buf.put((byte) ((val >> 32) & 0xFF));
   }
 }

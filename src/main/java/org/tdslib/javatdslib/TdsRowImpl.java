@@ -13,8 +13,6 @@ import java.time.*;
 import java.util.List;
 import java.util.UUID;
 
-// REMOVED: import static io.r2dbc.spi.R2dbcType.VARCHAR; (Avoid collision)
-
 class TdsRowImpl implements Row {
   private final List<byte[]> columnData;
   private final List<ColumnMeta> metadata;
@@ -60,8 +58,13 @@ class TdsRowImpl implements Row {
         throw new IllegalStateException("Unexpected INTN length");
 
       case FLT4: return type.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
-      case FLT8:
+
       case FLTN:
+        if (data.length == 4) {
+          return type.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
+        }
+        // Fallthrough if length is 8
+      case FLT8:
         double dVal = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
         if (type == Float.class) return type.cast((float) dVal);
         return type.cast(dVal);
@@ -81,22 +84,28 @@ class TdsRowImpl implements Row {
       case MONEYN:
         return type.cast(readDecimal(data, meta.getScale()));
 
+      // FIX: Added BIGCHAR to this block
+      case BIGCHAR:
       case BIGVARCHR:
-      case VARCHAR: // Now refers to TdsType.VARCHAR (0x27)
+      case VARCHAR:
       case CHAR:
       case TEXT:
+        // These are single-byte charsets (usually Windows-1252 or ASCII)
         return type.cast(new String(data, java.nio.charset.Charset.forName("windows-1252")));
 
       case NVARCHAR:
       case NCHAR:
       case NTEXT:
       case XML:
+        // These are UTF-16LE
         return type.cast(new String(data, StandardCharsets.UTF_16LE));
 
       case BIGVARBIN:
       case VARBINARY:
       case BINARY:
       case IMAGE:
+        // FIX: Added BIGBINARY support just in case
+      case BIGBINARY:
         if (type == ByteBuffer.class) return type.cast(ByteBuffer.wrap(data));
         return type.cast(data);
 
@@ -113,10 +122,15 @@ class TdsRowImpl implements Row {
       case DATETIMEOFFSET:
         return type.cast(readDateTimeOffset(data, meta.getScale()));
 
+      case DATETIMN:
+      case DATETIME:
+      case SMALLDATETIME:
+        return type.cast(readDateTime(data));
+
       case GUID:
         if (type == UUID.class) {
           ByteBuffer bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
-          long msb = bb.getLong(); // Note: Actual SQL GUID endianness is mixed, simple impl for now
+          long msb = bb.getLong();
           long lsb = bb.getLong();
           return type.cast(new UUID(msb, lsb));
         }
@@ -145,6 +159,30 @@ class TdsRowImpl implements Row {
     BigInteger bi = new BigInteger(1, mag);
     if (sign == 0) bi = bi.negate();
     return new BigDecimal(bi, scale);
+  }
+
+  private LocalDateTime readDateTime(byte[] data) {
+    LocalDate baseDate = LocalDate.of(1900, 1, 1);
+
+    if (data.length == 8) {
+      int days = ByteBuffer.wrap(data, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+      int ticks = ByteBuffer.wrap(data, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+
+      LocalDate date = baseDate.plusDays(days);
+      long nanos = (long) ((ticks * 1000000000.0) / 300.0);
+      LocalTime time = LocalTime.ofNanoOfDay(nanos);
+
+      return LocalDateTime.of(date, time);
+    } else if (data.length == 4) {
+      int days = ByteBuffer.wrap(data, 0, 2).order(ByteOrder.LITTLE_ENDIAN).getShort() & 0xFFFF;
+      int minutes = ByteBuffer.wrap(data, 2, 2).order(ByteOrder.LITTLE_ENDIAN).getShort() & 0xFFFF;
+
+      LocalDate date = baseDate.plusDays(days);
+      LocalTime time = LocalTime.of(0, 0).plusMinutes(minutes);
+
+      return LocalDateTime.of(date, time);
+    }
+    throw new IllegalStateException("Invalid data length for DateTime: " + data.length);
   }
 
   private LocalTime readTime(byte[] data, int scale) {

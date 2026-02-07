@@ -41,11 +41,10 @@ public class ColMetaDataTokenParser implements TokenParser {
       // Precision is often read for Numeric/Decimal types
       byte precision = 0;
 
-      final byte rawType = payload.get();
-      final TdsType tdsType = TdsType.valueOf(rawType);
+      final TdsType tdsType = TdsType.valueOf((byte) dataType);
 
       if (tdsType == null) {
-        throw new IllegalStateException("Unknown Type: " + rawType);
+        throw new IllegalStateException("Unknown Type: " + dataType);
       }
 
       // --- Generic Strategy-Based Parsing ---
@@ -57,26 +56,67 @@ public class ColMetaDataTokenParser implements TokenParser {
           // Exception: Some legacy types might, but modern ones don't.
           break;
 
-        case BYTELEN: // e.g., INTN, BITN, DECIMALN
+        case BYTELEN:
+          // Reads 1 byte of length (e.g. 0x08 for MONEYN, 0x10 for GUID)
           maxLength = payload.get() & 0xFF;
+
+          // Special handling ONLY for Decimal/Numeric to read Precision/Scale
           if (tdsType == TdsType.DECIMALN || tdsType == TdsType.NUMERICN) {
             precision = payload.get();
             scale = payload.get();
           }
           break;
 
-        case USHORTLEN: // e.g. NVARCHAR, BIGVARCHR
+        case PREC_SCALE:
+          // Legacy DECIMAL (0x37) / NUMERIC (0x3F)
+          // Spec: <Length><Precision><Scale>
+          maxLength = payload.get() & 0xFF;
+          precision = payload.get();
+          scale = payload.get();
+          break;
+
+        case USHORTLEN: // e.g. NVARCHAR, BIGVARCHR, BIGCHAR
           maxLength = Short.toUnsignedInt(payload.getShort());
-          // Collation check
-          if (tdsType.r2dbcType == R2dbcType.NVARCHAR || tdsType.r2dbcType == R2dbcType.VARCHAR) {
+
+          // FIX: Add R2dbcType.CHAR and R2dbcType.NCHAR to this check
+          if (tdsType.r2dbcType == R2dbcType.NVARCHAR ||
+              tdsType.r2dbcType == R2dbcType.VARCHAR ||
+              tdsType.r2dbcType == R2dbcType.CHAR ||
+              tdsType.r2dbcType == R2dbcType.NCHAR) {
+
             collation = new byte[5];
             payload.get(collation);
           }
           break;
 
-        case PLP: // XML
-          // Logic for PLP schema...
+        case LONGLEN: // For TEXT, NTEXT, IMAGE
+          // 1. Read 4-byte Max Length (unsigned int)
+          maxLength = payload.getInt();
+
+          // 2. Read Collation (only for text types, not Image)
+          if (tdsType == TdsType.TEXT || tdsType == TdsType.NTEXT) {
+            collation = new byte[5];
+            payload.get(collation);
+          }
+
+          // 3. Read Table Names (Crucial! These types send table metadata)
+          // Your file has this helper method defined at the bottom.
+          readTableNames(payload);
           break;
+
+        case PLP: // XML
+          // FIX: Read the "Schema Present" byte (0x00 or 0x01)
+          // [MS-TDS] 2.2.5.5.1.1: XMLTYPE = TYPE_VARLEN [SCHEMA_PRESENT]
+          byte schemaPresent = payload.get();
+
+          if (schemaPresent != 0) {
+            // If this is 1, the stream contains DbName, OwningSchema, etc.
+            // For now, we assume 0 (common case). If you hit 1, the parser needs
+            // to read those strings to stay aligned.
+            throw new UnsupportedOperationException("XML with Schema validation is not yet supported");
+          }
+          break;
+
 
         case SCALE_LEN: // Time/Date2
           scale = payload.get();
