@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.query.rpc;
 
 import io.r2dbc.spi.R2dbcType;
 import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.headers.AllHeaders;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -47,7 +48,7 @@ public class RpcPacketBuilder {
     writeParamName(buf, "@stmt");
     buf.put(RPC_PARAM_DEFAULT);
     buf.put((byte) TdsType.NVARCHAR.byteVal);
-    buf.putShort((short) -1);
+    buf.putShort((short) 8000);
     writeCollation(buf);
 
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
@@ -59,7 +60,7 @@ public class RpcPacketBuilder {
       writeParamName(buf, "@params");
       buf.put(RPC_PARAM_DEFAULT);
       buf.put((byte) TdsType.NVARCHAR.byteVal);
-      buf.putShort((short) -1);
+      buf.putShort((short) 8000);
       writeCollation(buf);
 
       String paramDecl = buildParamDecl();
@@ -74,6 +75,15 @@ public class RpcPacketBuilder {
     }
 
     buf.flip();
+    if (update) {
+      byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
+      ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
+          .order(ByteOrder.LITTLE_ENDIAN);
+      fullPayload.put(allHeadersBytes);
+      fullPayload.put(buf);
+      fullPayload.flip();
+      return fullPayload;
+    }
     return buf;
   }
 
@@ -82,6 +92,80 @@ public class RpcPacketBuilder {
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
     buf.putShort((short) 0);
   }
+
+  // --- Parameter Declaration Logic ---
+
+  private String buildParamDecl() {
+    if (params.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < params.size(); i++) {
+      ParamEntry entry = params.get(i);
+      if (i > 0) sb.append(", ");
+
+      String decl = getSqlTypeDeclaration(entry);
+      sb.append(entry.key().name()).append(" ").append(decl);
+    }
+    return sb.toString();
+  }
+
+  private String getSqlTypeDeclaration(ParamEntry entry) {
+    TdsType type = entry.key().type();
+    Object value = entry.value();
+
+    // 1. Handle Integers (INTN Polymorphism)
+    if (type == TdsType.INTN) {
+      if (value instanceof Long) return "bigint";
+      if (value instanceof Short) return "smallint";
+      if (value instanceof Byte) return "tinyint";
+      return "int";
+    }
+
+    // 2. Handle Numerics (Dynamic Precision/Scale)
+    if (type == TdsType.DECIMAL || type == TdsType.NUMERIC ||
+        type == TdsType.DECIMALN || type == TdsType.NUMERICN) {
+      int p = 18;
+      int s = 0;
+      if (value instanceof BigDecimal bd) {
+        p = getDecimalPrecision(bd);
+        s = getDecimalScale(bd);
+      }
+      String base = (type == TdsType.NUMERIC || type == TdsType.NUMERICN) ? "numeric" : "decimal";
+      return String.format("%s(%d,%d)", base, p, s);
+    }
+
+    // 3. Handle Strings
+    if (type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT) {
+      return isLargeString(entry) ? "nvarchar(max)" : "nvarchar(4000)";
+    }
+    if (type == TdsType.BIGVARCHR || type == TdsType.VARCHAR || type == TdsType.CHAR || type == TdsType.TEXT) {
+      return isLargeString(entry) ? "varchar(max)" : "varchar(8000)";
+    }
+    if (type == TdsType.BIGVARBIN || type == TdsType.VARBINARY || type == TdsType.IMAGE) {
+      return "varbinary(max)";
+    }
+
+    // 4. Handle Other Types
+    if (type == TdsType.GUID) return "uniqueidentifier";
+    if (type == TdsType.BITN) return "bit";
+    if (type == TdsType.FLTN) return "float";
+    if (type == TdsType.DATE) return "date";
+    if (type == TdsType.TIME) return "time(7)";
+    if (type == TdsType.DATETIME2) return "datetime2(7)";
+    if (type == TdsType.DATETIMEOFFSET) return "datetimeoffset(7)";
+
+    // Fallback
+    return type.r2dbcType.name().toLowerCase();
+  }
+
+  private boolean isLargeString(ParamEntry entry) {
+    Object val = entry.value();
+    if (val instanceof String s) {
+      return s.length() > 4000;
+    }
+    return false;
+  }
+
+  // --- Binary Writing Logic ---
 
   private void writeParam(ByteBuffer buf, ParamEntry param) {
     writeParamName(buf, param.key().name());
@@ -95,16 +179,39 @@ public class RpcPacketBuilder {
         break;
 
       case BYTELEN:
-        buf.put((byte) type.fixedSize);
+        // FIX: INTN and FLTN are polymorphic. Metadata length must match data length.
+        byte len = (byte) type.fixedSize;
+
+        if (type == TdsType.INTN) {
+          Object val = param.value();
+          if (val instanceof Long) len = 8;
+          else if (val instanceof Integer) len = 4;
+          else if (val instanceof Short) len = 2;
+          else if (val instanceof Byte) len = 1;
+          else len = 4; // default
+        } else if (type == TdsType.FLTN) {
+          if (param.value() instanceof Float) len = 4;
+          else len = 8; // Double
+        }
+
+        buf.put(len);
+
         if (type == TdsType.DECIMALN || type == TdsType.NUMERICN) {
-          buf.put((byte) 18);
-          buf.put((byte) 0);
+          byte p = 18;
+          byte s = 0;
+          if (param.value() instanceof BigDecimal bd) {
+            p = (byte) getDecimalPrecision(bd);
+            s = (byte) getDecimalScale(bd);
+          }
+          buf.put(p);
+          buf.put(s);
         }
         break;
 
       case USHORTLEN:
         buf.putShort((short) 8000);
-        if (type == TdsType.NVARCHAR || type == TdsType.BIGVARCHR) {
+        if (type == TdsType.NVARCHAR || type == TdsType.BIGVARCHR ||
+            type == TdsType.NCHAR || type == TdsType.CHAR) {
           writeCollation(buf);
         }
         break;
@@ -130,11 +237,33 @@ public class RpcPacketBuilder {
       return;
     }
 
-    // FIX 1: Handle GUID explicitly (prevents ClassCastException)
+    // FIX: Handle INTN polymorphism (Long vs Integer vs Short vs Byte)
+    if (type == TdsType.INTN) {
+      if (value instanceof Long) {
+        buf.put((byte) 8);
+        buf.putLong((Long) value);
+        return;
+      }
+      if (value instanceof Integer) {
+        buf.put((byte) 4);
+        buf.putInt((Integer) value);
+        return;
+      }
+      if (value instanceof Short) {
+        buf.put((byte) 2);
+        buf.putShort((Short) value);
+        return;
+      }
+      if (value instanceof Byte) {
+        buf.put((byte) 1);
+        buf.put((Byte) value);
+        return;
+      }
+    }
+
     if (type == TdsType.GUID) {
-      buf.put((byte) 16); // Length
+      buf.put((byte) 16);
       UUID u = (UUID) value;
-      // Write as two Little-Endian longs to match TdsRowImpl reading logic
       buf.putLong(u.getMostSignificantBits());
       buf.putLong(u.getLeastSignificantBits());
       return;
@@ -175,7 +304,13 @@ public class RpcPacketBuilder {
 
       case DECIMAL:
       case NUMERIC:
-        byte[] decBytes = convertToDecimalBytes(value, (byte)18, (byte)0);
+        byte prec = 18;
+        byte scale = 0;
+        if (value instanceof BigDecimal bd) {
+          prec = (byte) getDecimalPrecision(bd);
+          scale = (byte) getDecimalScale(bd);
+        }
+        byte[] decBytes = convertToDecimalBytes(value, prec, scale);
         buf.put((byte) decBytes.length);
         buf.put(decBytes);
         break;
@@ -262,27 +397,6 @@ public class RpcPacketBuilder {
     buf.put(new byte[]{0x09, 0x04, (byte) 0xD0, 0x00, 0x34});
   }
 
-  private String buildParamDecl() {
-    return params.stream()
-        .map(p -> p.key().name() + " " + getSqlTypeDeclaration(p.key().type()))
-        .collect(Collectors.joining(", "));
-  }
-
-  private String getSqlTypeDeclaration(TdsType type) {
-    // FIX 2: Return correct SQL type for GUID
-    if (type == TdsType.GUID) return "uniqueidentifier";
-
-    if (type == TdsType.NVARCHAR) return "nvarchar(max)";
-    if (type == TdsType.INTN) return "int";
-    if (type == TdsType.BITN) return "bit";
-    if (type == TdsType.DATE) return "date";
-    if (type == TdsType.TIME) return "time(7)";
-    if (type == TdsType.DATETIME2) return "datetime2(7)";
-    if (type == TdsType.DATETIMEOFFSET) return "datetimeoffset(7)";
-
-    return type.r2dbcType.name().toLowerCase();
-  }
-
   private byte[] convertToBytes(Object value) {
     if (value instanceof byte[]) return (byte[]) value;
     if (value instanceof ByteBuffer bb) {
@@ -318,5 +432,17 @@ public class RpcPacketBuilder {
     buf.put((byte) ((val >> 16) & 0xFF));
     buf.put((byte) ((val >> 24) & 0xFF));
     buf.put((byte) ((val >> 32) & 0xFF));
+  }
+
+  // --- Numeric Helper Methods ---
+
+  private int getDecimalPrecision(BigDecimal bd) {
+    // SQL Server Precision is total digits. Must be >= scale.
+    int p = Math.max(bd.precision(), bd.scale());
+    return Math.min(38, p); // Cap at 38
+  }
+
+  private int getDecimalScale(BigDecimal bd) {
+    return Math.max(0, Math.min(38, bd.scale()));
   }
 }
