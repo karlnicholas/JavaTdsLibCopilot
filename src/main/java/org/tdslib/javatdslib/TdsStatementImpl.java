@@ -9,13 +9,9 @@ import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
-// REMOVED: import org.tdslib.javatdslib.query.rpc.BindingType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
-
-// ADDED: New Enum
-import org.tdslib.javatdslib.TdsType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -130,7 +126,10 @@ public class TdsStatementImpl implements Statement {
 
           @Override
           public void request(long n) {
-            if (completed.get() || n <= 0) return;
+            if (completed.get() || n <= 0) {
+              subscriber.onError(new IllegalStateException("Statement already completed"));
+              return;
+            }
 
             long processed = 0;
             while (processed < n && !completed.get()) {
@@ -165,6 +164,8 @@ public class TdsStatementImpl implements Statement {
                   subscriber.onComplete();
                   return;
                 }
+              } else {
+                subscriber.onError(new IllegalStateException("Cannot determine request for SQL SERVER"));
               }
             }
           }

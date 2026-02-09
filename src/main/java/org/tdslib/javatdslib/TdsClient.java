@@ -3,7 +3,6 @@ package org.tdslib.javatdslib;
 import io.r2dbc.spi.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;

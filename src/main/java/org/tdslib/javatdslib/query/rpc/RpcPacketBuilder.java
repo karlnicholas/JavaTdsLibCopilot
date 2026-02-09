@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.query.rpc;
 
-import io.r2dbc.spi.R2dbcType;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 

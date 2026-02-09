@@ -2,8 +2,8 @@ package org.tdslib.javatdslib;
 
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Nullability;
+import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Type;
-import io.r2dbc.spi.R2dbcType; // Use R2dbcType instead of CommonType
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
 class TdsColumnMetadataImpl implements ColumnMetadata {

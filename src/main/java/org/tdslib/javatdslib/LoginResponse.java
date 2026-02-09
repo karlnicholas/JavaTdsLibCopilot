@@ -9,7 +9,6 @@ import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
-import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.util.ArrayList;

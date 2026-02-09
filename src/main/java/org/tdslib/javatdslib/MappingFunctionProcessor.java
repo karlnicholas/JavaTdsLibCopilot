@@ -6,7 +6,6 @@ import org.reactivestreams.Processor;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
-import java.util.concurrent.Flow;
 import java.util.function.BiFunction;
 
 // A generic version of your IncrementProcessor logic
