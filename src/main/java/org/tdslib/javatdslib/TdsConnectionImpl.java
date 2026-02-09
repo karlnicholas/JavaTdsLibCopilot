@@ -1,6 +1,8 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Statement;
+import io.r2dbc.spi.*;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -18,26 +20,27 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.List;
 
 /**
  * High-level TDS client facade.
  * Provides a simple connect + execute interface, hiding protocol details.
  */
-public class TdsClient implements AutoCloseable {
-  private static final Logger logger = LoggerFactory.getLogger(TdsClient.class);
+public class TdsConnectionImpl implements Connection {
+  private static final Logger logger = LoggerFactory.getLogger(TdsConnectionImpl.class);
 
   private final TdsTransport transport;
   private boolean connected;
 
   /**
-   * Create a new TdsClient backed by a TCP transport to the given host/port.
+   * Create a new TdsConnectionImpl backed by a TCP transport to the given host/port.
    *
    * @param host remote host name or IP
    * @param port remote TCP port
    * @throws IOException if the underlying transport cannot be created
    */
-  public TdsClient(String host, int port) throws IOException {
+  public TdsConnectionImpl(String host, int port) throws IOException {
     this.transport = new TdsTransport(host, port);
     this.connected = false;
   }
@@ -249,21 +252,6 @@ public class TdsClient implements AutoCloseable {
   }
 
   /**
-   * Execute a SQL query and return the high-level QueryResponse.
-   *
-   * @param sql SQL text to execute
-   * @return QueryResponse containing results or errors
-   * @throws IOException on I/O or transport errors
-   */
-  public Statement queryAsync(String sql) {
-    return new TdsStatementImpl(this.transport, sql);
-  }
-
-  public Statement queryRpc(String sql) {
-    return new TdsStatementImpl(this.transport, sql);
-  }
-
-  /**
    * Combine payload buffers from a list of messages into a single
    * big\-endian ByteBuffer containing the concatenated payload bytes.
    *
@@ -284,16 +272,116 @@ public class TdsClient implements AutoCloseable {
   }
 
 
+  @Override
+  public Publisher<Void> beginTransaction() {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> beginTransaction(TransactionDefinition definition) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> close() {
+    return subscriber->new Subscription() {
+      @Override
+      public void request(long n) {
+        logger.debug("Closing TdsConnectionImpl");
+        try {
+          transport.close();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+        connected = false;
+      }
+
+      @Override
+      public void cancel() {
+      }
+    };
+  }
+
+  @Override
+  public Publisher<Void> commitTransaction() {
+    return null;
+  }
+
+  @Override
+  public Batch createBatch() {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> createSavepoint(String name) {
+    return null;
+  }
+
   /**
-   * Close the client and release underlying resources.
+   * Execute a SQL query and return the high-level QueryResponse.
    *
-   * @throws IOException when closing the underlying message handler fails.
+   * @param sql SQL text to execute
+   * @return QueryResponse containing results or errors
+   * @throws IOException on I/O or transport errors
    */
   @Override
-  public void close() throws IOException {
-    logger.debug("Closing TdsClient");
-    transport.close();
-    connected = false;
+  public Statement createStatement(String sql) {
+    return new TdsStatementImpl(this.transport, sql);
+  }
+
+  @Override
+  public boolean isAutoCommit() {
+    return false;
+  }
+
+  @Override
+  public ConnectionMetadata getMetadata() {
+    return null;
+  }
+
+  @Override
+  public IsolationLevel getTransactionIsolationLevel() {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> releaseSavepoint(String name) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> rollbackTransaction() {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> rollbackTransactionToSavepoint(String name) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> setAutoCommit(boolean autoCommit) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> setLockWaitTimeout(Duration timeout) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> setStatementTimeout(Duration timeout) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Void> setTransactionIsolationLevel(IsolationLevel isolationLevel) {
+    return null;
+  }
+
+  @Override
+  public Publisher<Boolean> validate(ValidationDepth depth) {
+    return null;
   }
 
   public boolean isConnected() {
