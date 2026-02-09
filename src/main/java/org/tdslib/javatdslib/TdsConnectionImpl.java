@@ -5,23 +5,11 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.payloads.login7.Login7Options;
-import org.tdslib.javatdslib.payloads.login7.Login7Payload;
-import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
-import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.List;
 
 /**
  * High-level TDS client facade.

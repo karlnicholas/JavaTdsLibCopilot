@@ -1,8 +1,10 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.*;
+import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.ConnectionFactoryMetadata;
+import io.r2dbc.spi.ConnectionFactoryOptions;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
@@ -10,7 +12,6 @@ import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
-import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
