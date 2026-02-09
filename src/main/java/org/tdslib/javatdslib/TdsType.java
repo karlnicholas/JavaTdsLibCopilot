@@ -15,6 +15,7 @@ public enum TdsType {
 
   // --- Floats ---
   FLT4(0x3B, R2dbcType.REAL, LengthStrategy.FIXED, 4),
+  REAL(0x3B, R2dbcType.REAL, LengthStrategy.FIXED, 4), // Alias for FLT4 logic
   FLT8(0x3E, R2dbcType.DOUBLE, LengthStrategy.FIXED, 8),
   FLTN(0x6D, R2dbcType.DOUBLE, LengthStrategy.BYTELEN, 8),
 
@@ -23,21 +24,16 @@ public enum TdsType {
   BITN(0x68, R2dbcType.BOOLEAN, LengthStrategy.BYTELEN, 1),
 
   // --- Decimals ---
-  // Legacy types (0x37/0x3F) use PREC_SCALE strategy (Len, Prec, Scale)
   NUMERIC(0x3F, R2dbcType.NUMERIC, LengthStrategy.PREC_SCALE, 17),
   DECIMAL(0x37, R2dbcType.DECIMAL, LengthStrategy.PREC_SCALE, 17),
-
-  // Modern types (0x6A/0x6C/0x6E) use BYTELEN strategy
   NUMERICN(0x6C, R2dbcType.NUMERIC, LengthStrategy.BYTELEN, 17),
   DECIMALN(0x6A, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 17),
   MONEYN(0x6E, R2dbcType.DECIMAL, LengthStrategy.BYTELEN, 8),
-
   MONEY(0x3C, R2dbcType.DECIMAL, LengthStrategy.FIXED, 8),
   SMALLMONEY(0x7A, R2dbcType.DECIMAL, LengthStrategy.FIXED, 4),
 
   // --- Dates ---
   DATE(0x28, R2dbcType.DATE, LengthStrategy.FIXED, 3),
-
   TIME(0x29, R2dbcType.TIME, LengthStrategy.SCALE_LEN, 5),
   DATETIME2(0x2A, R2dbcType.TIMESTAMP, LengthStrategy.SCALE_LEN, 8),
   DATETIMEOFFSET(0x2B, R2dbcType.TIMESTAMP_WITH_TIME_ZONE, LengthStrategy.SCALE_LEN, 10),
@@ -53,7 +49,7 @@ public enum TdsType {
   BIGVARBIN(0xA5, R2dbcType.VARBINARY, LengthStrategy.USHORTLEN, -1),
   NCHAR(0xEF, R2dbcType.NCHAR, LengthStrategy.USHORTLEN, -1),
 
-  // Legacy Types
+  // Legacy Types (Avoid using these in RPC)
   CHAR(0x2F, R2dbcType.CHAR, LengthStrategy.USHORTLEN, -1),
   VARCHAR(0x27, R2dbcType.VARCHAR, LengthStrategy.USHORTLEN, -1),
   BINARY(0x2D, R2dbcType.BINARY, LengthStrategy.USHORTLEN, -1),
@@ -68,7 +64,6 @@ public enum TdsType {
   // --- GUID ---
   GUID(0x24, R2dbcType.CHAR, LengthStrategy.BYTELEN, 16);
 
-  // --- Implementation ---
   public final int byteVal;
   public final R2dbcType r2dbcType;
   public final LengthStrategy strategy;
@@ -85,15 +80,51 @@ public enum TdsType {
   private static final Map<R2dbcType, TdsType> R2DBC_MAP = new HashMap<>();
 
   static {
+    // 1. Populate Byte Map
     for (TdsType t : values()) {
       BYTE_MAP.put(t.byteVal, t);
-      if (t == INTN || t == FLTN || t == BITN || t == NVARCHAR || t == BIGVARCHR || t == BIGVARBIN || t == GUID) {
-        R2DBC_MAP.put(t.r2dbcType, t);
-      }
     }
-    for (R2dbcType r : R2dbcType.values()) R2DBC_MAP.putIfAbsent(r, NVARCHAR);
+
+    // 2. Populate R2DBC Map with explicit preferences
+    // Integers - MAP ALL TO INTN (0x26) FOR RPC COMPATIBILITY
+    R2DBC_MAP.put(R2dbcType.TINYINT, INTN);
+    R2DBC_MAP.put(R2dbcType.SMALLINT, INTN);
     R2DBC_MAP.put(R2dbcType.INTEGER, INTN);
+    R2DBC_MAP.put(R2dbcType.BIGINT, INTN);
+
+    // Floats
+    R2DBC_MAP.put(R2dbcType.REAL, REAL);   // Float -> Real (4 bytes)
+    R2DBC_MAP.put(R2dbcType.DOUBLE, FLTN); // Double -> Float (8 bytes)
+
+    // Numerics
+    R2DBC_MAP.put(R2dbcType.DECIMAL, DECIMALN);
+    R2DBC_MAP.put(R2dbcType.NUMERIC, NUMERICN);
+
+    // Booleans
     R2DBC_MAP.put(R2dbcType.BOOLEAN, BITN);
+
+    // Dates
+    R2DBC_MAP.put(R2dbcType.DATE, DATE);
+    R2DBC_MAP.put(R2dbcType.TIME, TIME);
+    R2DBC_MAP.put(R2dbcType.TIMESTAMP, DATETIME2);
+    R2DBC_MAP.put(R2dbcType.TIMESTAMP_WITH_TIME_ZONE, DATETIMEOFFSET);
+
+    // Strings & Binary -- USE "BIG" TYPES FOR RPC COMPATIBILITY
+    R2DBC_MAP.put(R2dbcType.VARCHAR, BIGVARCHR); // 0xA7
+    R2DBC_MAP.put(R2dbcType.NVARCHAR, NVARCHAR); // 0xE7
+    R2DBC_MAP.put(R2dbcType.CHAR, BIGCHAR);      // 0xAF (Not 0x2F)
+    R2DBC_MAP.put(R2dbcType.NCHAR, NCHAR);       // 0xEF
+    R2DBC_MAP.put(R2dbcType.BINARY, BIGBINARY);  // 0xAD (Not 0x2D)
+    R2DBC_MAP.put(R2dbcType.VARBINARY, BIGVARBIN);// 0xA5 (Not 0x25)
+
+    // Other
+    R2DBC_MAP.put(R2dbcType.CLOB, TEXT);
+    R2DBC_MAP.put(R2dbcType.BLOB, IMAGE);
+
+    // Ensure fallback for any missed types
+    for (R2dbcType r : R2dbcType.values()) {
+      R2DBC_MAP.putIfAbsent(r, NVARCHAR);
+    }
   }
 
   public static TdsType valueOf(byte b) { return BYTE_MAP.getOrDefault(b & 0xFF, null); }
@@ -108,9 +139,9 @@ public enum TdsType {
     if (clazz == Long.class || clazz == long.class) return INTN;
     if (clazz == Short.class || clazz == short.class) return INTN;
     if (clazz == Byte.class || clazz == byte.class) return INTN;
-    if (java.math.BigDecimal.class.isAssignableFrom(clazz)) return NUMERICN;
+    if (java.math.BigDecimal.class.isAssignableFrom(clazz)) return DECIMALN;
     if (clazz == Double.class || clazz == double.class) return FLTN;
-    if (clazz == Float.class || clazz == float.class) return FLT4;
+    if (clazz == Float.class || clazz == float.class) return REAL;
     if (clazz == Boolean.class || clazz == boolean.class) return BITN;
     if (clazz == java.time.LocalDate.class) return DATE;
     if (clazz == java.time.LocalTime.class) return TIME;

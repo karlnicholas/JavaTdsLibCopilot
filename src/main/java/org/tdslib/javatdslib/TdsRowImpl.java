@@ -79,10 +79,36 @@ class TdsRowImpl implements Row {
       case DECIMAL:
       case NUMERICN:
       case DECIMALN:
-      case MONEY:
-      case SMALLMONEY:
-      case MONEYN:
+        // These types have a specific Sign byte + Magnitude format
         return type.cast(readDecimal(data, meta.getScale()));
+
+      // --- FIX: Separate Money Handling ---
+//      case SMALLMONEY:
+//        // 4-byte integer, scaled by 10,000
+//        int smVal = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
+//        return type.cast(BigDecimal.valueOf(smVal, 4));
+
+      case MONEY:
+      case MONEYN:
+      case SMALLMONEY:
+        if (type == BigDecimal.class) {
+          if (data.length == 4) {
+            // SmallMoney: Standard 4-byte Little Endian int
+            int valM = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
+            return type.cast(BigDecimal.valueOf(valM, 4));
+          } else {
+            // Money: 8 bytes, split into [High 4 bytes] + [Low 4 bytes]
+            ByteBuffer bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+            int high = bb.getInt(); // Read first 4 bytes
+            int low = bb.getInt();  // Read next 4 bytes
+
+            // Combine them: (High << 32) | Unsigned Low
+            long valM = ((long) high << 32) | (low & 0xFFFFFFFFL);
+
+            return type.cast(BigDecimal.valueOf(valM, 4));
+          }
+        }
+        throw new UnsupportedOperationException("Money conversion to " + type.getName() + " not supported");
 
       // FIX: Added BIGCHAR to this block
       case BIGCHAR:
@@ -209,10 +235,17 @@ class TdsRowImpl implements Row {
     int dt2Len = offsetBytesStart;
     byte[] dt2Bytes = new byte[dt2Len];
     System.arraycopy(data, 0, dt2Bytes, 0, dt2Len);
-    LocalDateTime ldt = readDateTime2(dt2Bytes, scale);
 
+    // 1. Read the Time/Date components as if they are UTC
+    LocalDateTime utcDateTime = readDateTime2(dt2Bytes, scale);
+
+    // 2. Read the Offset
     short offsetMinutes = ByteBuffer.wrap(data, offsetBytesStart, 2).order(ByteOrder.LITTLE_ENDIAN).getShort();
-    return OffsetDateTime.of(ldt, ZoneOffset.ofTotalSeconds(offsetMinutes * 60));
+    ZoneOffset offset = ZoneOffset.ofTotalSeconds(offsetMinutes * 60);
+
+    // 3. Combine: Treat the read time as UTC instant, then apply the target offset
+    // Note: readDateTime2 returns a 'LocalDateTime', we must treat that as being in UTC.
+    return OffsetDateTime.ofInstant(utcDateTime.toInstant(ZoneOffset.UTC), offset);
   }
 
   private String convertBytesToHex(byte[] bytes) {
