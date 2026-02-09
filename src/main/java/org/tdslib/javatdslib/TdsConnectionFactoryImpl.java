@@ -1,9 +1,6 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.ConnectionFactoryMetadata;
-import io.r2dbc.spi.ConnectionFactoryOptions;
+import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -22,8 +19,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
-import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
-import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
+import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
 public class TdsConnectionFactoryImpl implements ConnectionFactory {
   private final ConnectionFactoryOptions options;
@@ -33,58 +29,105 @@ public class TdsConnectionFactoryImpl implements ConnectionFactory {
 
   @Override
   public Publisher<? extends Connection> create() {
+    requireOption(HOST);
+    requireOption(PORT);
+    requireOption(USER);
+    requireOption(PASSWORD);
+    requireOption(DATABASE);
+
     return subscriber -> subscriber.onSubscribe(new Subscription() {
+
+      // Flag to handle cancellation safely
+      private volatile boolean cancelled = false;
 
       @Override
       public void request(long n) {
+        if (cancelled) {
+          return;
+        }
+
+        TdsTransport transport = null;
         try {
+          // 1. Safety: Validate required options exist before attempting connection
+          // 2. Extraction: Get values safely
           String hostname = (String) options.getValue(HOST);
           int port = (Integer) options.getValue(PORT);
-          String username = (String) options.getValue(ConnectionFactoryOptions.USER);
-          String password = (String) options.getValue(ConnectionFactoryOptions.PASSWORD);
-          String database = (String) options.getValue(ConnectionFactoryOptions.DATABASE);
+          String username = (String) options.getValue(USER);
+          String password = (String) options.getValue(PASSWORD);
+          String database = (String) options.getValue(DATABASE);
 
-          TdsTransport transport = new TdsTransport(hostname, port);
+          // 3. Connection: Initialize transport
+          transport = new TdsTransport(hostname, port);
+
+          // 4. Handshake: PreLogin and TLS
           preLoginInternal(transport);
-          transport.tlsHandshake();
-          LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database);
+          transport.tlsHandshake(); //
+
+          // 5. Login: Perform authentication
+          LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database); //
 
           if (!loginResponse.isSuccess()) {
             throw new IOException("Login failed: " + loginResponse.getErrorMessage());
           }
 
-          transport.tlsComplete();
+          transport.tlsComplete(); //
 
-          // Switch socket to non-blocking + register to selector
-          transport.enterAsyncMode();
+          // 6. Async Switch: Switch socket to non-blocking + register to selector
+          transport.enterAsyncMode(); //
 
+          // 7. Emission: Emit the active connection
           subscriber.onNext(new TdsConnectionImpl(transport));
           subscriber.onComplete();
 
-        } catch (Exception e) {
-          throw new RuntimeException(e);
+        } catch (Throwable t) {
+          // 8. Cleanup: If ANY step fails, ensure the transport (socket) is closed
+          if (transport != null) {
+            try {
+              transport.close();
+            } catch (IOException closeEx) {
+              t.addSuppressed(closeEx); // Attach close error to the original error
+            }
+          }
+          // Signal the error downstream to the client
+          subscriber.onError(t);
         }
-
       }
 
       @Override
       public void cancel() {
-
+        this.cancelled = true;
       }
+
     });
+  }
+
+  private void requireOption(Option<?> option) {
+    if (!options.hasOption(option)) {
+      throw new IllegalArgumentException("Connection Factory is missing required option: " + option.name());
+    }
   }
 
   @Override
   public ConnectionFactoryMetadata getMetadata() {
-    return null;
+    return TdsConnectionFactoryMetadataImpl.INSTANCE;
   }
-  public void connect(String hostname, String username, String password, String database,
-                      String appName, String serverName, String language
-  ) throws IOException, NoSuchAlgorithmException, KeyManagementException {
-//    if (connected) {
-//      throw new IllegalStateException("Already connected");
-//    }
 
+  /**
+   * Metadata implementation for the TDS Connection Factory.
+   * Identifies the database product name.
+   */
+  static class TdsConnectionFactoryMetadataImpl implements ConnectionFactoryMetadata {
+
+    static final TdsConnectionFactoryMetadataImpl INSTANCE = new TdsConnectionFactoryMetadataImpl();
+
+    private TdsConnectionFactoryMetadataImpl() {
+    }
+
+    @Override
+    public String getName() {
+      // Returns the name of the database product this factory connects to
+      return "JavaTdsLib MS SQL Server";
+    }
   }
 
   /**

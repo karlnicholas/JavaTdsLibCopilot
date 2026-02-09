@@ -6,7 +6,7 @@ import io.r2dbc.spi.ConnectionFactoryProvider;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
 
-public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
+public class TdsConnectionFactoryProviderImpl implements ConnectionFactoryProvider {
 
   // Define your unique driver name
   public static final String TDS_DRIVER = "javatdslib";
