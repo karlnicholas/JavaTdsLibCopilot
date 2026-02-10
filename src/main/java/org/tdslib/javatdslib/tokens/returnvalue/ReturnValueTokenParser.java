@@ -47,7 +47,7 @@ public class ReturnValueTokenParser implements TokenParser {
 //    byte[] value = new byte[len];
 //    payload.get(value);
 
-    return new ReturnValueToken(tokenType, paramName, statusFlags, typeInfo, value);
+    return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, value);
   }
 
 }
