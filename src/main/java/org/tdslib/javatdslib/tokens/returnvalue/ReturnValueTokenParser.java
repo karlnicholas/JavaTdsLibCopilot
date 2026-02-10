@@ -27,10 +27,11 @@ public class ReturnValueTokenParser implements TokenParser {
     }
 
     // 1. Parameter name length (1 byte) + name (Unicode)
+    short ordinal = payload.getShort();
     int nameLen = payload.get() & 0xFF;           // byte count (not characters)
     String paramName = "";
     if (nameLen > 0) {
-      byte[] nameBytes = new byte[nameLen];
+      byte[] nameBytes = new byte[nameLen*2];
       payload.get(nameBytes);
       paramName = new String(nameBytes, context.getEffectiveCharset()); // usually UTF-16LE
     }
@@ -39,14 +40,17 @@ public class ReturnValueTokenParser implements TokenParser {
     byte statusFlags = payload.get();
 
     // 3. User type (usually ignored / 0)
-    payload.getInt();  // userType – 4 bytes, often 0
+    int userType = payload.getInt();  // userType – 4 bytes, often 0
 
     // 4. Flags (1 byte) – e.g. nullable, etc.
-    payload.get();     // flags byte
+    short flags = payload.getShort();     // flags byte
 
     // 5. TYPE_INFO (variable length – type, max length, precision, scale, etc.)
     // For simplicity we read a basic value here – real impl needs full type parsing
     // This is a placeholder; replace with your actual value decoder
+    byte type = payload.get();
+    byte maxLength = payload.get();
+    byte dataLength = payload.get();
     Object value = readValue(payload, context, queryContext); // ← implement this
 
     return new ReturnValueToken(tokenType, paramName, statusFlags, value);

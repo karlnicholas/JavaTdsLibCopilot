@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.query.rpc;
 
+import io.r2dbc.spi.Parameter;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 
@@ -100,8 +101,8 @@ public class RpcPacketBuilder {
 
       String decl = getSqlTypeDeclaration(entry);
       sb.append(entry.key().name()).append(" ").append(decl);
-      if ( entry.key().name().equalsIgnoreCase("@retval")) {
-        sb.append(" output ");
+      if ( entry.value() instanceof Parameter.Out) {
+        sb.append(" output");
       }
     }
     return sb.toString();
@@ -177,7 +178,7 @@ public class RpcPacketBuilder {
 
   private void writeParam(ByteBuffer buf, ParamEntry param) {
     writeParamName(buf, param.key().name());
-    if ( param.key().name().equalsIgnoreCase("@retval")) {
+    if ( param.value() instanceof Parameter.Out) {
       buf.put((byte) 0x01);
     } else {
       buf.put(RPC_PARAM_DEFAULT);
