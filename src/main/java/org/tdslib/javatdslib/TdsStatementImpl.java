@@ -71,7 +71,7 @@ public class TdsStatementImpl implements Statement {
 
     // 3. Add to parameters
     // Note: Ensure your BindingKey class is updated to accept TdsType!
-    currentParams.add(new ParamEntry(new BindingKey(tdsType, name), p.getValue()));
+    currentParams.add(new ParamEntry(new BindingKey(tdsType, name), p));
     return this;
   }
 

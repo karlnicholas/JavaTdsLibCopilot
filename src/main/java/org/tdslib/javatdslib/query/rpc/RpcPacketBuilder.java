@@ -100,13 +100,16 @@ public class RpcPacketBuilder {
 
       String decl = getSqlTypeDeclaration(entry);
       sb.append(entry.key().name()).append(" ").append(decl);
+      if ( entry.key().name().equalsIgnoreCase("@retval")) {
+        sb.append(" output ");
+      }
     }
     return sb.toString();
   }
 
   private String getSqlTypeDeclaration(ParamEntry entry) {
     TdsType type = entry.key().type();
-    Object value = entry.value();
+    Object value = entry.value().getValue();
 
     if (type == TdsType.INT1) return "tinyint";
     if (type == TdsType.INT2) return "smallint";
@@ -157,13 +160,13 @@ public class RpcPacketBuilder {
   }
 
   private boolean isLargeString(ParamEntry entry) {
-    Object val = entry.value();
+    Object val = entry.value().getValue();
     if (val instanceof String s) return s.length() > 4000;
     return false;
   }
 
   private boolean isLargeBinary(ParamEntry entry) {
-    Object val = entry.value();
+    Object val = entry.value().getValue();
     int len = 0;
     if (val instanceof ByteBuffer bb) len = bb.remaining();
     else if (val instanceof byte[] b) len = b.length;
@@ -174,7 +177,11 @@ public class RpcPacketBuilder {
 
   private void writeParam(ByteBuffer buf, ParamEntry param) {
     writeParamName(buf, param.key().name());
-    buf.put(RPC_PARAM_DEFAULT);
+    if ( param.key().name().equalsIgnoreCase("@retval")) {
+      buf.put((byte) 0x01);
+    } else {
+      buf.put(RPC_PARAM_DEFAULT);
+    }
 
     TdsType type = param.key().type();
 
@@ -185,7 +192,7 @@ public class RpcPacketBuilder {
       // (Copy your existing INT logic here)
       buf.put((byte) TdsType.INTN.byteVal);
       byte maxLen = 4;
-      Object val = param.value();
+      Object val = param.value().getValue();
       if (type == TdsType.INT1 || val instanceof Byte) maxLen = 1;
       else if (type == TdsType.INT2 || val instanceof Short) maxLen = 2;
       else if (type == TdsType.INT8 || val instanceof Long) maxLen = 8;
@@ -199,13 +206,13 @@ public class RpcPacketBuilder {
       // ... existing FLT logic ...
       buf.put((byte) TdsType.FLTN.byteVal);
       buf.put((byte) 4);
-      writeValue(buf, type, param.value());
+      writeValue(buf, type, param.value().getValue());
       return;
     }
     if (type == TdsType.FLT8) {
       buf.put((byte) TdsType.FLTN.byteVal);
       buf.put((byte) 8);
-      writeValue(buf, type, param.value());
+      writeValue(buf, type, param.value().getValue());
       return;
     }
 
@@ -220,21 +227,21 @@ public class RpcPacketBuilder {
         byte len = (byte) type.fixedSize;
         if (type == TdsType.INTN) {
           // ... existing logic ...
-          Object val = param.value();
+          Object val = param.value().getValue();
           if (val instanceof Long) len = 8;
           else if (val instanceof Integer) len = 4;
           else if (val instanceof Short) len = 2;
           else if (val instanceof Byte) len = 1;
           else len = 4;
         } else if (type == TdsType.FLTN) {
-          if (param.value() instanceof Float) len = 4;
+          if (param.value().getValue() instanceof Float) len = 4;
           else len = 8;
         }
         buf.put(len);
         if (type == TdsType.DECIMALN || type == TdsType.NUMERICN) {
           byte p = 38;
           byte s = 0;
-          if (param.value() instanceof BigDecimal bd) s = (byte) getDecimalScale(bd);
+          if (param.value().getValue() instanceof BigDecimal bd) s = (byte) getDecimalScale(bd);
           buf.put(p);
           buf.put(s);
         }
@@ -242,7 +249,7 @@ public class RpcPacketBuilder {
 
       case USHORTLEN:
         // --- FIX: Dynamic Max Length Calculation ---
-        int encodedLen = getEncodedLength(type, param.value());
+        int encodedLen = getEncodedLength(type, param.value().getValue());
 
         if (encodedLen > 8000) {
           // Signal NVARCHAR(MAX) / VARCHAR(MAX)
@@ -272,7 +279,7 @@ public class RpcPacketBuilder {
         break;
     }
 
-    writeValue(buf, type, param.value());
+    writeValue(buf, type, param.value().getValue());
   }
 
   private void writeValue(ByteBuffer buf, TdsType type, Object value) {
