@@ -11,6 +11,7 @@ import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
@@ -21,6 +22,7 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -96,8 +98,8 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
       case ROW:
         // Push the row data into the result's internal stream
         RowToken rowToken = (RowToken) token;
-        TdsRowImpl row = new TdsRowImpl(rowToken.getColumnData(), currentMetadata.getColumns());
-        subscriber.onNext(row);
+        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), currentMetadata.getColumns());
+        subscriber.onNext(rowRow);
         break;
       case DONE:
       case DONE_IN_PROC:
@@ -190,6 +192,9 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
 
       case RETURN_VALUE:
         ReturnValueToken returnValueToken = (ReturnValueToken) token;
+        ColumnMeta columnMeta = new ColumnMeta(1, returnValueToken.getParamName(), returnValueToken.getTypeInfo().getTdsType().byteVal, returnValueToken.getStatusFlags(), returnValueToken.getTypeInfo());
+        TdsRowImpl rowReturnValue = new TdsRowImpl(Collections.singletonList(returnValueToken.getValue()), Collections.singletonList(columnMeta));
+        subscriber.onNext(rowReturnValue);
         logger.info("Server return value: {}", returnValueToken.toString());
         break;
 

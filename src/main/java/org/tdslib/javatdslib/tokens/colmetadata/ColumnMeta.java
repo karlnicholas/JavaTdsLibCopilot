@@ -1,114 +1,42 @@
 package org.tdslib.javatdslib.tokens.colmetadata;
 
+import org.tdslib.javatdslib.tokens.TypeInfo;
+
 /**
  * Column metadata holder used by COLMETADATA token parser.
  */
 public class ColumnMeta {
   private final int columnNumber;
   private final String name;
-  private final byte dataType;
-  private final byte scale;
-  private final int maxLength;
-  private final short flags;
   private final int userType;
-  private final byte[] collation; // may be null
-  private final int lengthByte;
+  private final short flags;
+  private final TypeInfo typeInfo; // Replaces individual fields
 
-  /**
-   * Create a ColumnMeta instance.
-   *
-   * @param columnNumber 1-based column number
-   * @param name         column name
-   * @param dataType     TDS data type byte
-   * @param maxLength    maximum length in bytes (or -1)
-   * @param flags        column flags
-   * @param userType     user type value
-   * @param collation    optional 5-byte collation (may be null)
-   */
   public ColumnMeta(final int columnNumber, final String name,
-                    final byte dataType, final byte scale, final int maxLength, final short flags,
-                    final int userType, final byte[] collation, int lengthByte) {
+                    final int userType, final short flags, final TypeInfo typeInfo) {
     this.columnNumber = columnNumber;
     this.name = name;
-    this.dataType = dataType;
-    this.scale = scale;
-    this.maxLength = maxLength;
-    this.flags = flags;
     this.userType = userType;
-    this.collation = collation != null ? collation.clone() : null;
-    this.lengthByte = lengthByte;
+    this.flags = flags;
+    this.typeInfo = typeInfo;
   }
 
-  /**
-   * Column name accessor.
-   *
-   * @return column name
-   */
-  public String getName() {
-    return name;
-  }
+  public String getName() { return name; }
+  public int getUserType() { return userType; }
+  public short getFlags() { return flags; }
 
-  /**
-   * Data type accessor.
-   *
-   * @return data type byte
-   */
-  public byte getDataType() {
-    return dataType;
-  }
+  // Delegates
+  public byte getDataType() { return (byte) typeInfo.getTdsType().byteVal; }
+  public int getMaxLength() { return typeInfo.getMaxLength(); }
+  public byte getScale() { return typeInfo.getScale(); }
+  public byte getPrecision() { return typeInfo.getPrecision(); }
+  public byte[] getCollation() { return typeInfo.getCollation(); }
 
-  /**
-   * Max length accessor.
-   *
-   * @return maximum length in bytes
-   */
-  public int getMaxLength() {
-    return maxLength;
-  }
-
-  /**
-   * Flags accessor.
-   *
-   * @return flags value
-   */
-  public short getFlags() {
-    return flags;
-  }
-
-  /**
-   * User type accessor.
-   *
-   * @return user type
-   */
-  public int getUserType() {
-    return userType;
-  }
-
-  /**
-   * Collation accessor. Returns the raw 5-byte collation or null.
-   *
-   * @return collation bytes or null
-   */
-  public byte[] getCollation() {
-    return collation;
-  }
-
-  public int getLengthByte() {
-    return lengthByte;
-  }
-
-  public byte getScale() {
-    return scale;
-  }
+  public TypeInfo getTypeInfo() { return typeInfo; }
 
   @Override
   public String toString() {
-    return "Column " + columnNumber
-        + ": " + name
-        + " (type=0x" + Integer.toHexString(dataType & 0xFF)
-        + ", maxLen=" + maxLength
-        + ", nameLen=" + name.length()
-        + (lengthByte != -1 ? ", nameLen=" + name.length() : "")
-        + ")";
+    return String.format("Column %d: %s (type=%s, maxLen=%d)",
+        columnNumber, name, typeInfo.getTdsType(), typeInfo.getMaxLength());
   }
 }

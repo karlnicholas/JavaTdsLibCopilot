@@ -4,15 +4,12 @@ import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
+import org.tdslib.javatdslib.tokens.TypeInfo;
+import org.tdslib.javatdslib.tokens.TypeInfoParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
 
-/**
- * Parser for RETURNVALUE token (0xAC).
- *
- * <p>Decodes the parameter name, status flags, type info, and value.</p>
- */
 public class ReturnValueTokenParser implements TokenParser {
 
   @Override
@@ -21,51 +18,37 @@ public class ReturnValueTokenParser implements TokenParser {
                      final ConnectionContext context,
                      final QueryContext queryContext) {
     if (tokenType != TokenType.RETURN_VALUE.getValue()) {
-      final String hex = Integer.toHexString(tokenType & 0xFF);
-      throw new IllegalArgumentException(
-          "Expected RETURNVALUE token (0xAC), got 0x" + hex);
+      throw new IllegalArgumentException("Expected RETURNVALUE token (0xAC)");
     }
 
-    // 1. Parameter name length (1 byte) + name (Unicode)
+    // 1. Ordinal & Parameter Name
     short ordinal = payload.getShort();
-    int nameLen = payload.get() & 0xFF;           // byte count (not characters)
+    int nameLen = payload.get() & 0xFF;
     String paramName = "";
     if (nameLen > 0) {
-      byte[] nameBytes = new byte[nameLen*2];
+      byte[] nameBytes = new byte[nameLen * 2];
       payload.get(nameBytes);
-      paramName = new String(nameBytes, context.getEffectiveCharset()); // usually UTF-16LE
+      paramName = new String(nameBytes, context.getEffectiveCharset());
     }
 
-    // 2. Status flags (1 byte)
+    // 2. Status flags
     byte statusFlags = payload.get();
 
-    // 3. User type (usually ignored / 0)
-    int userType = payload.getInt();  // userType – 4 bytes, often 0
+    // 3. User type
+    int userType = payload.getInt();
 
-    // 4. Flags (1 byte) – e.g. nullable, etc.
-    short flags = payload.getShort();     // flags byte
+    // 4. Flags
+    short flags = payload.getShort();
 
-    // 5. TYPE_INFO (variable length – type, max length, precision, scale, etc.)
-    // For simplicity we read a basic value here – real impl needs full type parsing
-    // This is a placeholder; replace with your actual value decoder
-    byte type = payload.get();
-    byte maxLength = payload.get();
-    byte dataLength = payload.get();
-    Object value = readValue(payload, context, queryContext); // ← implement this
+    // 5. TYPE_INFO (Robust Parsing)
+    TypeInfo typeInfo = TypeInfoParser.parse(payload);
 
-    return new ReturnValueToken(tokenType, paramName, statusFlags, value);
+    // 6. Value (Decode using TypeInfo)
+    int len = Byte.toUnsignedInt(payload.get());
+    byte[] value = new byte[len];
+    payload.get(value);
+
+    return new ReturnValueToken(tokenType, paramName, statusFlags, typeInfo, value);
   }
 
-  /**
-   * Placeholder: read the actual value based on the TYPE_INFO that was just parsed.
-   * In a real implementation, you would:
-   * - Parse the full TYPE_INFO structure
-   * - Use the type byte to decide how many bytes to read
-   * - Decode using the appropriate method (getInt, getLong, getString, etc.)
-   */
-  private Object readValue(ByteBuffer payload, ConnectionContext context, QueryContext queryContext) {
-    // Example: assume it's an integer for demo purposes
-    // Replace with real type-aware decoding
-    return payload.getInt();
-  }
 }
