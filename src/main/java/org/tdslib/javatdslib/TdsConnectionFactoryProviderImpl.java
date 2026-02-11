@@ -3,8 +3,12 @@ package org.tdslib.javatdslib;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import io.r2dbc.spi.ConnectionFactoryProvider;
+import io.r2dbc.spi.Option;
 
-import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
+import static io.r2dbc.spi.ConnectionFactoryOptions.*;
+import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
+import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
+import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
 public class TdsConnectionFactoryProviderImpl implements ConnectionFactoryProvider {
 
@@ -28,10 +32,22 @@ public class TdsConnectionFactoryProviderImpl implements ConnectionFactoryProvid
   public ConnectionFactory create(ConnectionFactoryOptions options) {
     // Validation (ensure required options exist)
     // ...
+    requireOption(HOST, options);
+    requireOption(PORT, options);
+    requireOption(USER, options);
+    requireOption(PASSWORD, options);
+    requireOption(DATABASE, options);
 
     // Return your main entry point
     return new TdsConnectionFactoryImpl(options);
   }
+
+  private void requireOption(Option<?> option, ConnectionFactoryOptions options) {
+    if (!options.hasOption(option)) {
+      throw new IllegalArgumentException("Connection Factory is missing required option: " + option.name());
+    }
+  }
+
 
   /**
    * This logic determines if your driver claims the user's request.

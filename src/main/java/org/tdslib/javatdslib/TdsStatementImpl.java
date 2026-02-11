@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Statement;
+import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -58,11 +57,12 @@ public class TdsStatementImpl implements Statement {
 
     // 1. Canonicalize to R2DBC Parameter
     // (If user passed raw Int, wrap it. If they passed Parameters.in(), use it)
-    io.r2dbc.spi.Parameter p = (value instanceof io.r2dbc.spi.Parameter)
-            ? (io.r2dbc.spi.Parameter) value
-            : io.r2dbc.spi.Parameters.in(value);
+    Parameter p = (value instanceof Parameter)
+            ? (Parameter) value
+            : Parameters.in(value);
 
     // 2. Resolve TdsType
+    ((R2dbcType)p.getType()).
     TdsType tdsType = resolveTdsType(p);
 
     if (tdsType == null) {
@@ -201,24 +201,24 @@ public class TdsStatementImpl implements Statement {
     return this;
   }
 
-  // --- Helper to resolve TdsType from R2DBC Parameter ---
-  private TdsType resolveTdsType(io.r2dbc.spi.Parameter p) {
-    io.r2dbc.spi.Type t = p.getType();
-
-    // A. Explicit R2DBC Type
-    if (t instanceof io.r2dbc.spi.R2dbcType rType) {
-      return TdsType.forR2dbcType(rType);
-    }
-
-    // B. Inferred Type (Class)
-    if (t instanceof io.r2dbc.spi.Type.InferredType iType) {
-      return TdsType.inferFromJavaType(iType.getJavaType());
-    }
-
-    // C. Value Fallback
-    if (p.getValue() != null) {
-      return TdsType.inferFromJavaType(p.getValue().getClass());
-    }
-    return null;
-  }
+//  // --- Helper to resolve TdsType from R2DBC Parameter ---
+//  private TdsType resolveTdsType(Parameter p) {
+//    Type t = p.getType();
+//
+//    // A. Explicit R2DBC Type
+//    if (t instanceof R2dbcType rType) {
+//      return TdsType.forR2dbcType(rType);
+//    }
+//
+//    // B. Inferred Type (Class)
+//    if (t instanceof Type.InferredType iType) {
+//      return TdsType.inferFromJavaType(iType.getJavaType());
+//    }
+//
+//    // C. Value Fallback
+//    if (p.getValue() != null) {
+//      return TdsType.inferFromJavaType(p.getValue().getClass());
+//    }
+//    return null;
+//  }
 }

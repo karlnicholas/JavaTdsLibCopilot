@@ -78,7 +78,7 @@ public enum TdsType {
   }
 
   private static final Map<Integer, TdsType> BYTE_MAP = new HashMap<>();
-  private static final Map<R2dbcType, TdsType> R2DBC_MAP = new HashMap<>();
+//  private static final Map<R2dbcType, TdsType> R2DBC_MAP = new HashMap<>();
 
   static {
     // 1. Populate Byte Map
@@ -86,50 +86,50 @@ public enum TdsType {
       BYTE_MAP.put(t.byteVal, t);
     }
 
-    // 2. Populate R2DBC Map with explicit preferences
-    // Integers - MAP ALL TO INTN (0x26) FOR RPC COMPATIBILITY
-    R2DBC_MAP.put(R2dbcType.TINYINT, INTN);
-    R2DBC_MAP.put(R2dbcType.SMALLINT, INTN);
-    R2DBC_MAP.put(R2dbcType.INTEGER, INTN);
-    R2DBC_MAP.put(R2dbcType.BIGINT, INTN);
-
-    // Floats
-    R2DBC_MAP.put(R2dbcType.REAL, REAL);   // Float -> Real (4 bytes)
-    R2DBC_MAP.put(R2dbcType.DOUBLE, FLTN); // Double -> Float (8 bytes)
-
-    // Numerics
-    R2DBC_MAP.put(R2dbcType.DECIMAL, DECIMALN);
-    R2DBC_MAP.put(R2dbcType.NUMERIC, NUMERICN);
-
-    // Booleans
-    R2DBC_MAP.put(R2dbcType.BOOLEAN, BITN);
-
-    // Dates
-    R2DBC_MAP.put(R2dbcType.DATE, DATE);
-    R2DBC_MAP.put(R2dbcType.TIME, TIME);
-    R2DBC_MAP.put(R2dbcType.TIMESTAMP, DATETIME2);
-    R2DBC_MAP.put(R2dbcType.TIMESTAMP_WITH_TIME_ZONE, DATETIMEOFFSET);
-
-    // Strings & Binary -- USE "BIG" TYPES FOR RPC COMPATIBILITY
-    R2DBC_MAP.put(R2dbcType.VARCHAR, BIGVARCHR); // 0xA7
-    R2DBC_MAP.put(R2dbcType.NVARCHAR, NVARCHAR); // 0xE7
-    R2DBC_MAP.put(R2dbcType.CHAR, BIGCHAR);      // 0xAF (Not 0x2F)
-    R2DBC_MAP.put(R2dbcType.NCHAR, NCHAR);       // 0xEF
-    R2DBC_MAP.put(R2dbcType.BINARY, BIGBINARY);  // 0xAD (Not 0x2D)
-    R2DBC_MAP.put(R2dbcType.VARBINARY, BIGVARBIN);// 0xA5 (Not 0x25)
-
-    // Other
-    R2DBC_MAP.put(R2dbcType.CLOB, TEXT);
-    R2DBC_MAP.put(R2dbcType.BLOB, IMAGE);
-
-    // Ensure fallback for any missed types
-    for (R2dbcType r : R2dbcType.values()) {
-      R2DBC_MAP.putIfAbsent(r, NVARCHAR);
-    }
+//    // 2. Populate R2DBC Map with explicit preferences
+//    // Integers - MAP ALL TO INTN (0x26) FOR RPC COMPATIBILITY
+//    R2DBC_MAP.put(R2dbcType.TINYINT, INTN);
+//    R2DBC_MAP.put(R2dbcType.SMALLINT, INTN);
+//    R2DBC_MAP.put(R2dbcType.INTEGER, INTN);
+//    R2DBC_MAP.put(R2dbcType.BIGINT, INTN);
+//
+//    // Floats
+//    R2DBC_MAP.put(R2dbcType.REAL, REAL);   // Float -> Real (4 bytes)
+//    R2DBC_MAP.put(R2dbcType.DOUBLE, FLTN); // Double -> Float (8 bytes)
+//
+//    // Numerics
+//    R2DBC_MAP.put(R2dbcType.DECIMAL, DECIMALN);
+//    R2DBC_MAP.put(R2dbcType.NUMERIC, NUMERICN);
+//
+//    // Booleans
+//    R2DBC_MAP.put(R2dbcType.BOOLEAN, BITN);
+//
+//    // Dates
+//    R2DBC_MAP.put(R2dbcType.DATE, DATE);
+//    R2DBC_MAP.put(R2dbcType.TIME, TIME);
+//    R2DBC_MAP.put(R2dbcType.TIMESTAMP, DATETIME2);
+//    R2DBC_MAP.put(R2dbcType.TIMESTAMP_WITH_TIME_ZONE, DATETIMEOFFSET);
+//
+//    // Strings & Binary -- USE "BIG" TYPES FOR RPC COMPATIBILITY
+//    R2DBC_MAP.put(R2dbcType.VARCHAR, BIGVARCHR); // 0xA7
+//    R2DBC_MAP.put(R2dbcType.NVARCHAR, NVARCHAR); // 0xE7
+//    R2DBC_MAP.put(R2dbcType.CHAR, BIGCHAR);      // 0xAF (Not 0x2F)
+//    R2DBC_MAP.put(R2dbcType.NCHAR, NCHAR);       // 0xEF
+//    R2DBC_MAP.put(R2dbcType.BINARY, BIGBINARY);  // 0xAD (Not 0x2D)
+//    R2DBC_MAP.put(R2dbcType.VARBINARY, BIGVARBIN);// 0xA5 (Not 0x25)
+//
+//    // Other
+//    R2DBC_MAP.put(R2dbcType.CLOB, TEXT);
+//    R2DBC_MAP.put(R2dbcType.BLOB, IMAGE);
+//
+//    // Ensure fallback for any missed types
+//    for (R2dbcType r : R2dbcType.values()) {
+//      R2DBC_MAP.putIfAbsent(r, NVARCHAR);
+//    }
   }
 
   public static TdsType valueOf(byte b) { return BYTE_MAP.getOrDefault(b & 0xFF, null); }
-  public static TdsType forR2dbcType(R2dbcType type) { return R2DBC_MAP.get(type); }
+//  public static TdsType forR2dbcType(R2dbcType type) { return R2DBC_MAP.get(type); }
 
   public enum LengthStrategy {
     FIXED, BYTELEN, USHORTLEN, SCALE_LEN, PLP, PREC_SCALE, LONGLEN

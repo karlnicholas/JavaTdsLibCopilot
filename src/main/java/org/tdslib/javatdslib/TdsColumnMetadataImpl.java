@@ -6,7 +6,7 @@ import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Type;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
-class TdsColumnMetadataImpl implements ColumnMetadata {
+public class TdsColumnMetadataImpl implements ColumnMetadata {
   private final ColumnMeta meta;
 
   TdsColumnMetadataImpl(ColumnMeta meta) {
@@ -25,12 +25,7 @@ class TdsColumnMetadataImpl implements ColumnMetadata {
   @Override
   public Type getType() {
     byte tdsType = meta.getDataType();
-    // 0xE7 is NVARCHAR, 0xEF is NCHAR
-    if ((tdsType & 0xFF) == 0xE7 || (tdsType & 0xFF) == 0xEF) {
-      return R2dbcType.NVARCHAR; // Map to NVARCHAR for Unicode strings
-    }
-    // Fallback to a generic type if unknown
-    return R2dbcType.VARBINARY;
+    return TdsType.valueOf(tdsType).r2dbcType;
   }
 
   /**
@@ -40,10 +35,7 @@ class TdsColumnMetadataImpl implements ColumnMetadata {
   @Override
   public Class<?> getJavaType() {
     byte tdsType = meta.getDataType();
-    if ((tdsType & 0xFF) == 0xE7 || (tdsType & 0xFF) == 0xEF) {
-      return String.class;
-    }
-    return Object.class;
+    return TdsType.valueOf(tdsType).r2dbcType.getJavaType();
   }
 
   @Override

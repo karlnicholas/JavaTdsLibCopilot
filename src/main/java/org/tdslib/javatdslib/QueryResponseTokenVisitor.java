@@ -96,7 +96,11 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
       case ROW:
         // Push the row data into the result's internal stream
         RowToken rowToken = (RowToken) token;
-        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), queryContext.getColMetaDataToken().getColumns());
+        List<ColumnMetadata> columnMetadataList = new ArrayList<>();
+        for(ColumnMeta columnMeta :queryContext.getColMetaDataToken().getColumns()) {
+          columnMetadataList.add(new TdsColumnMetadataImpl(columnMeta));
+        }
+        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), columnMetadataList);
         subscriber.onNext(rowRow);
         break;
       case DONE:
@@ -111,7 +115,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
               // 1. Optimization: Pre-size the lists to avoid resizing overhead
               int size = queryContext.getReturnValues().size();
               List<byte[]> data = new ArrayList<>(size);
-              List<ColumnMeta> columns = new ArrayList<>(size);
+              List<ColumnMetadata> columns = new ArrayList<>(size);
 
               for (int i = 0; i < size; i++) {
                 ReturnValueToken rv = queryContext.getReturnValues().get(i);
@@ -120,13 +124,13 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
                 data.add((byte[]) rv.getValue());
 
                 // 2. Fix: Use dynamic column index (i + 1)
-                columns.add(new ColumnMeta(
+                columns.add(new TdsColumnMetadataImpl(new ColumnMeta(
                     i + 1,
                     rv.getParamName(),
                     rv.getTypeInfo().getTdsType().byteVal,
                     rv.getStatusFlags(),
                     rv.getTypeInfo()
-                ));
+                )));
               }
 
               subscriber.onNext(new TdsRowImpl(data, columns));

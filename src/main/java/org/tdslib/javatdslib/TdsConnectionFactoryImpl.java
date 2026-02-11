@@ -29,12 +29,6 @@ public class TdsConnectionFactoryImpl implements ConnectionFactory {
 
   @Override
   public Publisher<? extends Connection> create() {
-    requireOption(HOST);
-    requireOption(PORT);
-    requireOption(USER);
-    requireOption(PASSWORD);
-    requireOption(DATABASE);
-
     return subscriber -> subscriber.onSubscribe(new Subscription() {
 
       // Flag to handle cancellation safely
@@ -99,12 +93,6 @@ public class TdsConnectionFactoryImpl implements ConnectionFactory {
       }
 
     });
-  }
-
-  private void requireOption(Option<?> option) {
-    if (!options.hasOption(option)) {
-      throw new IllegalArgumentException("Connection Factory is missing required option: " + option.name());
-    }
   }
 
   @Override

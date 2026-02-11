@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib;
 
+import io.r2dbc.spi.ColumnMetadata;
+import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
@@ -15,13 +17,13 @@ import java.util.UUID;
 
 class TdsRowImpl implements Row {
   private final List<byte[]> columnData;
-  private final List<ColumnMeta> metadata;
+  private final List<ColumnMetadata> columnMetadata;
   private final TdsRowMetadataImpl rowMetadata;
 
-  TdsRowImpl(List<byte[]> columnData, List<ColumnMeta> metadata) {
+  TdsRowImpl(List<byte[]> columnData, List<ColumnMetadata> columnMetadata) {
     this.columnData = columnData;
-    this.metadata = metadata;
-    this.rowMetadata = new TdsRowMetadataImpl(metadata);
+    this.columnMetadata = columnMetadata;
+    this.rowMetadata = new TdsRowMetadataImpl(columnMetadata);
   }
 
   @Override
@@ -36,14 +38,15 @@ class TdsRowImpl implements Row {
     }
 
     byte[] data = columnData.get(index);
-    ColumnMeta meta = metadata.get(index);
+    ColumnMetadata meta = columnMetadata.get(index);
 
     if (data == null) return null;
 
-    TdsType tdsType = TdsType.valueOf((byte) meta.getDataType());
-    if (tdsType == null) {
-      throw new IllegalStateException("Unknown TDS Type: " + meta.getDataType());
-    }
+//    TdsType tdsType1 = TdsType.forR2dbcType((R2dbcType) meta.getType());
+    TdsType tdsType = ((ColumnMeta)meta.getNativeTypeMetadata()).getTypeInfo().getTdsType();
+//    if (tdsType == null) {
+//      throw new IllegalStateException("Unknown TDS Type: " + meta.getName());
+//    }
 
     switch (tdsType) {
       case INT1: return convert(data[0], type);
@@ -256,8 +259,8 @@ class TdsRowImpl implements Row {
 
   @Override
   public <T> T get(String name, Class<T> type) {
-    for (int i = 0; i < metadata.size(); i++) {
-      if (metadata.get(i).getName().equalsIgnoreCase(name)) return get(i, type);
+    for (int i = 0; i < columnMetadata.size(); i++) {
+      if (columnMetadata.get(i).getName().equalsIgnoreCase(name)) return get(i, type);
     }
     throw new IllegalArgumentException("Column not found: " + name);
   }
