@@ -62,7 +62,7 @@ public class TdsStatementImpl implements Statement {
             : Parameters.in(value);
 
     // 2. Resolve TdsType
-    ((R2dbcType)p.getType()).
+//    ((R2dbcType)p.getType()).
     TdsType tdsType = resolveTdsType(p);
 
     if (tdsType == null) {
@@ -202,23 +202,23 @@ public class TdsStatementImpl implements Statement {
   }
 
 //  // --- Helper to resolve TdsType from R2DBC Parameter ---
-//  private TdsType resolveTdsType(Parameter p) {
-//    Type t = p.getType();
-//
-//    // A. Explicit R2DBC Type
-//    if (t instanceof R2dbcType rType) {
-//      return TdsType.forR2dbcType(rType);
-//    }
-//
-//    // B. Inferred Type (Class)
-//    if (t instanceof Type.InferredType iType) {
-//      return TdsType.inferFromJavaType(iType.getJavaType());
-//    }
-//
-//    // C. Value Fallback
-//    if (p.getValue() != null) {
-//      return TdsType.inferFromJavaType(p.getValue().getClass());
-//    }
-//    return null;
-//  }
+  private TdsType resolveTdsType(Parameter p) {
+    Type t = p.getType();
+
+    // A. Explicit R2DBC Type
+    if (t instanceof R2dbcType rType) {
+      return TdsType.forR2dbcType(rType);
+    }
+
+    // B. Inferred Type (Class)
+    if (t instanceof Type.InferredType iType) {
+      return TdsType.inferFromJavaType(iType.getJavaType());
+    }
+
+    // C. Value Fallback
+    if (p.getValue() != null) {
+      return TdsType.inferFromJavaType(p.getValue().getClass());
+    }
+    return null;
+  }
 }
