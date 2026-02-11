@@ -22,7 +22,9 @@ import org.tdslib.javatdslib.tokens.row.RowToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -39,6 +41,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
 
   // ------------------- State -------------------
   private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
+  private final List<ReturnValueToken> currentReturnValues;
   private boolean hasError = false;
   // ------------------------------------------------
 
@@ -57,6 +60,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
     this.queryTdsMessage = queryTdsMessage;
     this.transport.setClientHandlers(this::messageHander, this::errorHandler);
     this.tokenDispatcher = new TokenDispatcher();
+    this.currentReturnValues = new ArrayList<>();
   }
 
   /**
@@ -109,6 +113,30 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         if (!done.getStatus().hasMoreResults()) {
           // No more results = truly done
           if (!hasError) {
+            if (!currentReturnValues.isEmpty()) {
+              // 1. Optimization: Pre-size the lists to avoid resizing overhead
+              int size = currentReturnValues.size();
+              List<byte[]> data = new ArrayList<>(size);
+              List<ColumnMeta> columns = new ArrayList<>(size);
+
+              for (int i = 0; i < size; i++) {
+                ReturnValueToken rv = currentReturnValues.get(i);
+
+                // Cast securely if getValue() returns Object
+                data.add((byte[]) rv.getValue());
+
+                // 2. Fix: Use dynamic column index (i + 1)
+                columns.add(new ColumnMeta(
+                    i + 1,
+                    rv.getParamName(),
+                    rv.getTypeInfo().getTdsType().byteVal,
+                    rv.getStatusFlags(),
+                    rv.getTypeInfo()
+                ));
+              }
+
+              subscriber.onNext(new TdsRowImpl(data, columns));
+            }
             subscriber.onComplete();
             logger.debug("fired onComplete");
           }
@@ -191,11 +219,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         break;
 
       case RETURN_VALUE:
-        ReturnValueToken returnValueToken = (ReturnValueToken) token;
-        ColumnMeta columnMeta = new ColumnMeta(1, returnValueToken.getParamName(), returnValueToken.getTypeInfo().getTdsType().byteVal, returnValueToken.getStatusFlags(), returnValueToken.getTypeInfo());
-        TdsRowImpl rowReturnValue = new TdsRowImpl(Collections.singletonList(returnValueToken.getValue()), Collections.singletonList(columnMeta));
-        subscriber.onNext(rowReturnValue);
-        logger.info("Server return value: {}", returnValueToken.toString());
+        currentReturnValues.add((ReturnValueToken) token);
         break;
 
       default:
