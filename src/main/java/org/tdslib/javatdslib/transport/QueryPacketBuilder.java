@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class QueryPacketBuilder {
-  private static Logger LOGGER = LoggerFactory.getLogger(QueryPacketBuilder.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(QueryPacketBuilder.class);
   /**
    * Builds one or more TDS packets from a payload.
    *
