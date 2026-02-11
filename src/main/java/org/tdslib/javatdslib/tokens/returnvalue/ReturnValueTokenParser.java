@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.tokens.returnvalue;
 
 import org.tdslib.javatdslib.QueryContext;
-import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.tokens.*;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 

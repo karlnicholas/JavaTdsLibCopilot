@@ -10,7 +10,6 @@ import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
