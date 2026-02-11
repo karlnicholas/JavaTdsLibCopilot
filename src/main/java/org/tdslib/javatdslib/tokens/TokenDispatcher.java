@@ -88,7 +88,7 @@ public class TokenDispatcher {
       // Parser consumes exactly the bytes for this token
       final Token token = parser.parse(payload, tokenTypeByte, connectionContext, queryContext);
       // Notify the visitor (caller decides what to do)
-      visitor.onToken(token);
+      visitor.onToken(token,queryContext);
     }
 
     // Handle resetConnection flag after all tokens in this tdsMessage

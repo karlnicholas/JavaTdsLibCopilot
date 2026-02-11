@@ -40,7 +40,7 @@ public class LoginResponse implements TokenVisitor {
   }
 
   @Override
-  public void onToken(Token token) {
+  public void onToken(Token token, QueryContext queryContext) {
     if (token instanceof EnvChangeToken envChange) {
       transport.applyEnvChange(envChange);
     } else if (token instanceof LoginAckToken ack) {

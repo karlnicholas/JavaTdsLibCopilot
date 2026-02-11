@@ -38,10 +38,6 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
   private final TdsMessage queryTdsMessage;
   private final TokenDispatcher tokenDispatcher;
 
-  // ------------------- State -------------------
-  private ColMetaDataToken currentMetadata;          // last seen COL_METADATA
-  private final List<ReturnValueToken> currentReturnValues;
-  private boolean hasError = false;
   // ------------------------------------------------
 
   private Subscriber<? super Row> subscriber;
@@ -59,7 +55,6 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
     this.queryTdsMessage = queryTdsMessage;
     this.transport.setClientHandlers(this::messageHander, this::errorHandler);
     this.tokenDispatcher = new TokenDispatcher();
-    this.currentReturnValues = new ArrayList<>();
   }
 
   /**
@@ -92,16 +87,16 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
   }
 
   @Override
-  public void onToken(Token token) {
+  public void onToken(Token token, QueryContext queryContext) {
     switch (token.getType()) {
       case COL_METADATA:
-        currentMetadata = (ColMetaDataToken) token;
+        queryContext.setColMetaDataToken((ColMetaDataToken) token);
         break;
 
       case ROW:
         // Push the row data into the result's internal stream
         RowToken rowToken = (RowToken) token;
-        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), currentMetadata.getColumns());
+        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), queryContext.getColMetaDataToken().getColumns());
         subscriber.onNext(rowRow);
         break;
       case DONE:
@@ -111,15 +106,15 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         // 2. Check for More Result Sets (Mask 0x01)
         if (!done.getStatus().hasMoreResults()) {
           // No more results = truly done
-          if (!hasError) {
-            if (!currentReturnValues.isEmpty()) {
+          if (!queryContext.isHasError()) {
+            if (!queryContext.getReturnValues().isEmpty()) {
               // 1. Optimization: Pre-size the lists to avoid resizing overhead
-              int size = currentReturnValues.size();
+              int size = queryContext.getReturnValues().size();
               List<byte[]> data = new ArrayList<>(size);
               List<ColumnMeta> columns = new ArrayList<>(size);
 
               for (int i = 0; i < size; i++) {
-                ReturnValueToken rv = currentReturnValues.get(i);
+                ReturnValueToken rv = queryContext.getReturnValues().get(i);
 
                 // Cast securely if getValue() returns Object
                 data.add((byte[]) rv.getValue());
@@ -139,7 +134,6 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
             subscriber.onComplete();
             logger.debug("fired onComplete");
           }
-          currentMetadata = null;
         }
         break;
       case INFO:
@@ -148,7 +142,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
 
         // should probably fire onError
         if (info.isError()) {
-          hasError = true;
+          queryContext.setHasError(true);
         }
         break;
       case ERROR:
@@ -204,7 +198,7 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
           // 3. Terminate the stream
           subscriber.onError(exception);
           logger.debug("fired onError");
-          hasError = true;
+          queryContext.setHasError(true);
         }
         break;
 
@@ -218,21 +212,12 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         break;
 
       case RETURN_VALUE:
-        currentReturnValues.add((ReturnValueToken) token);
+        queryContext.addReturnValue((ReturnValueToken) token);
         break;
 
       default:
         logger.warn("Unhandled token type: {}", token.getType());
     }
-  }
-
-  /**
-   * Indicates whether any server error/info tokens flagged an error during processing.
-   *
-   * @return {@code true} if an error was observed
-   */
-  public boolean hasError() {
-    return hasError;
   }
 
   @Override

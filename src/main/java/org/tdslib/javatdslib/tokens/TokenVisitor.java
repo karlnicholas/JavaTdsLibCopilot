@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens;
 
+import org.tdslib.javatdslib.QueryContext;
+
 /**
  * Visitor/callback interface that receives each successfully parsed token.
  */
@@ -12,5 +14,5 @@ public interface TokenVisitor {
    * @param token the parsed token object. Examples: LoginAckToken,
    *              EnvChangeToken, ErrorToken, DoneToken, etc.
    */
-  void onToken(Token token);
+  void onToken(Token token, QueryContext queryContext);
 }
