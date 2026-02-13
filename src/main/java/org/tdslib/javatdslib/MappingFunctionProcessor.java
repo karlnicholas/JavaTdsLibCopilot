@@ -30,13 +30,18 @@ public class MappingFunctionProcessor<T extends Row, R> implements Processor<T, 
   @Override
   public void onNext(T row) {
     try {
-      // 1. Attempt the mapping (this executes your lambda)
-      // 2. If successful, pass it downstream
-      downstream.onNext(mapper.apply(row, row.getMetadata()));
+      R result = mapper.apply(row, row.getMetadata());
+      if (result == null) {
+        // Option A: Fail (Strict Spec)
+        onError(new NullPointerException("Mapper returned null"));
+
+        // Option B: Just return (Drop the value - rare but sometimes desired)
+        // return;
+      } else {
+        downstream.onNext(result);
+      }
     } catch (Throwable t) {
-      // 3. If the lambda throws, we MUST catch it and signal onError
-      // This effectively "propagates" the exception to your Client
-      downstream.onError(t);
+      onError(t);
     }
   }
   @Override
