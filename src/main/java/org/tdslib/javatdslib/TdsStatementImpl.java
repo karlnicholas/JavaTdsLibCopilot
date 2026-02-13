@@ -126,47 +126,29 @@ public class TdsStatementImpl implements Statement {
 
           @Override
           public void request(long n) {
-            if (completed.get() || n <= 0) {
-              subscriber.onError(new IllegalStateException("Statement already completed"));
+            if (n <= 0) {
+              subscriber.onError(new IllegalArgumentException("n must be > 0"));
               return;
             }
 
-            long processed = 0;
-            while (processed < n && !completed.get()) {
-              TdsMessage messageToSend = null;
+            if (!completed.compareAndSet(false, true)) {
+              return;
+            }
 
+            try {
               if (isSimpleBatch) {
-                if (index.compareAndSet(0, 1)) {
-                  messageToSend = createSqlBatchMessage(query);
-                } else {
-                  completed.set(true);
-                  subscriber.onComplete();
-                  return;
-                }
+                TdsMessage message = createSqlBatchMessage(query);
+                subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, message)));
               } else {
-                int i = index.getAndIncrement();
-                if (i < executions.size()) {
-                  messageToSend = createRpcMessage(query, executions.get(i));
-                } else {
-                  completed.set(true);
-                  subscriber.onComplete();
-                  return;
+                // Execute ALL batched parameter sets immediately
+                for (List<ParamEntry> params : executions) {
+                  TdsMessage message = createRpcMessage(query, params);
+                  subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, message)));
                 }
               }
-
-              if (messageToSend != null) {
-                Result result = new TdsResultImpl(new QueryResponseTokenVisitor(transport, messageToSend));
-                subscriber.onNext(result);
-                processed++;
-
-                if (isSimpleBatch) {
-                  completed.set(true);
-                  subscriber.onComplete();
-                  return;
-                }
-              } else {
-                subscriber.onError(new IllegalStateException("Cannot determine request for SQL SERVER"));
-              }
+              subscriber.onComplete();
+            } catch (Exception e) {
+              subscriber.onError(e);
             }
           }
 
