@@ -21,9 +21,9 @@ import java.util.List;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
-public class TdsConnectionFactoryImpl implements ConnectionFactory {
+public class TdsConnectionFactory implements ConnectionFactory {
   private final ConnectionFactoryOptions options;
-  public TdsConnectionFactoryImpl(ConnectionFactoryOptions options) {
+  public TdsConnectionFactory(ConnectionFactoryOptions options) {
     this.options = options;
   }
 
@@ -70,7 +70,7 @@ public class TdsConnectionFactoryImpl implements ConnectionFactory {
           transport.enterAsyncMode(); //
 
           // 7. Emission: Emit the active connection
-          subscriber.onNext(new TdsConnectionImpl(transport));
+          subscriber.onNext(new TdsConnection(transport));
           subscriber.onComplete();
 
         } catch (Throwable t) {

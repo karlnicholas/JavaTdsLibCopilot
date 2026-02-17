@@ -1,6 +1,13 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.*;
+import io.r2dbc.spi.Result;
+import io.r2dbc.spi.R2dbcBadGrammarException;
+import io.r2dbc.spi.R2dbcDataIntegrityViolationException;
+import io.r2dbc.spi.R2dbcException;
+import io.r2dbc.spi.R2dbcNonTransientResourceException;
+import io.r2dbc.spi.R2dbcPermissionDeniedException;
+import io.r2dbc.spi.R2dbcTransientResourceException;
+import io.r2dbc.spi.ColumnMetadata;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -27,10 +34,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Stateful visitor that collects the results of one or more result-sets
- * from a SQL batch execution.
+ * Stateful visitor that collects the results as Segments (Rows, Counts, OutParams).
+ * Implements Publisher<Result.Segment> for R2DBC 0.9+.
  */
-public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
+public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(QueryResponseTokenVisitor.class);
   private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
@@ -38,52 +45,27 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
   private final TdsMessage queryTdsMessage;
   private final TokenDispatcher tokenDispatcher;
 
-  // ------------------------------------------------
-
-  private Subscriber<? super Row> subscriber;
+  private Subscriber<? super Result.Segment> subscriber;
   private final AtomicBoolean messageSent = new AtomicBoolean(false);
 
-  /**
-   * Create a new QueryResponseTokenVisitor that will apply ENVCHANGE tokens to
-   * the provided ConnectionContext and collect result sets produced by tokens.
-   *
-   */
-  public QueryResponseTokenVisitor(
-          TdsTransport transport,
-          TdsMessage queryTdsMessage) {
+  public QueryResponseTokenVisitor(TdsTransport transport, TdsMessage queryTdsMessage) {
     this.transport = transport;
     this.queryTdsMessage = queryTdsMessage;
-    this.transport.setClientHandlers(this::messageHander, this::errorHandler);
+    this.transport.setClientHandlers(this::messageHandler, this::errorHandler);
     this.tokenDispatcher = new TokenDispatcher();
   }
 
-  /**
-   * Invoked by the transport when a TDS tdsMessage arrives.
-   *
-   * <p>This method dispatches tokens contained in the provided tdsMessage to the
-   * currently active token visitor (via {@link TokenDispatcher}). The visitor
-   * is responsible for handling token-level semantics (ENVCHANGE, LOGINACK,
-   * row publishing, errors, etc.). After dispatching, if the tdsMessage signals
-   * a connection-level reset (resetConnection flag) the client's session state
-   * is reset to library defaults.
-   *
-   * @param tdsMessage the received {@link TdsMessage}; expected to be non-null and
-   *                containing tokens to process
-   */
-  private void messageHander(TdsMessage tdsMessage) {
-
-    // Dispatch tokens to the visitor (which handles ENVCHANGE, errors, etc.)
+  private void messageHandler(TdsMessage tdsMessage) {
     tokenDispatcher.processMessage(tdsMessage, transport, new QueryContext(), this);
-
-    // Still handle reset flag separately (visitor doesn't cover tdsMessage-level flags)
     if (tdsMessage.isResetConnection()) {
-      // resetToDefaults();
+      // Handle reset logic if needed
     }
-
   }
 
   private void errorHandler(Throwable throwable) {
-    subscriber.onError(throwable);
+    if (subscriber != null) {
+      subscriber.onError(throwable);
+    }
   }
 
   @Override
@@ -94,37 +76,47 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         break;
 
       case ROW:
-        // Push the row data into the result's internal stream
+        // 1. Build the Row
         RowToken rowToken = (RowToken) token;
         List<ColumnMetadata> columnMetadataList = new ArrayList<>();
-        for(ColumnMeta columnMeta :queryContext.getColMetaDataToken().getColumns()) {
-          columnMetadataList.add(new TdsColumnMetadataImpl(columnMeta));
+        // Guard against missing metadata (e.g., triggers with no SELECT)
+        if (queryContext.getColMetaDataToken() != null) {
+          for (ColumnMeta columnMeta : queryContext.getColMetaDataToken().getColumns()) {
+            columnMetadataList.add(new TdsColumnMetadata(columnMeta));
+          }
         }
-        TdsRowImpl rowRow = new TdsRowImpl(rowToken.getColumnData(), columnMetadataList);
-        subscriber.onNext(rowRow);
+        TdsRow row = new TdsRow(rowToken.getColumnData(), columnMetadataList);
+
+        // 2. Emit as RowSegment
+        // Assuming you have created TdsRowSegment as discussed
+        subscriber.onNext(new TdsRowSegment(row));
         break;
+
       case DONE:
       case DONE_IN_PROC:
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
-        // 2. Check for More Result Sets (Mask 0x01)
+
+        // 1. Emit Update Count if available
+        if (done.getStatus().hasCount()) {
+          // Assuming you have created TdsUpdateCount as discussed
+          subscriber.onNext(new TdsUpdateCount(done.getCount()));
+        }
+
+        // 2. Check for End of Response
         if (!done.getStatus().hasMoreResults()) {
-          // No more results = truly done
           if (!queryContext.isHasError()) {
+
+            // 3. Handle OUT Parameters (Return Values)
             if (!queryContext.getReturnValues().isEmpty()) {
-              // 1. Optimization: Pre-size the lists to avoid resizing overhead
               int size = queryContext.getReturnValues().size();
               List<byte[]> data = new ArrayList<>(size);
               List<ColumnMetadata> columns = new ArrayList<>(size);
 
               for (int i = 0; i < size; i++) {
                 ReturnValueToken rv = queryContext.getReturnValues().get(i);
-
-                // Cast securely if getValue() returns Object
                 data.add((byte[]) rv.getValue());
-
-                // 2. Fix: Use dynamic column index (i + 1)
-                columns.add(new TdsColumnMetadataImpl(new ColumnMeta(
+                columns.add(new TdsColumnMetadata(new ColumnMeta(
                     i + 1,
                     rv.getParamName(),
                     rv.getTypeInfo().getTdsType().byteVal,
@@ -133,75 +125,29 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
                 )));
               }
 
-              subscriber.onNext(new TdsRowImpl(data, columns));
+              // Wrap the data in a RowImpl, then delegate via TdsOutParameters
+              TdsRow outDataRow = new TdsRow(data, columns);
+              // Assuming TdsOutSegment and TdsOutParameters exist
+              subscriber.onNext(new TdsOutSegment(new TdsOutParameters(outDataRow)));
             }
+
             subscriber.onComplete();
-            logger.debug("fired onComplete");
           }
         }
         break;
+
       case INFO:
         InfoToken info = (InfoToken) token;
         logger.info(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
-
-        // should probably fire onError
-        if (info.isError()) {
-          queryContext.setHasError(true);
-        }
+        if (info.isError()) queryContext.setHasError(true);
         break;
+
       case ERROR:
         ErrorToken error = (ErrorToken) token;
         logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
-
         if (error.isError()) {
-          // 1. Extract and sanitize values
-          String message = error.getMessage();
-          // Convert raw state byte to string (masking to unsigned for clarity)
-          String sqlState = String.valueOf(error.getState() & 0xFF);
-          // Safe cast: SQL Server error numbers fit in integer
-          int errorCode = (int) error.getNumber();
-
-          R2dbcException exception;
-
-          // 2. Map SQL Server Error Numbers to R2DBC Exception Types
-          switch (errorCode) {
-            case 1205: // Deadlock victim
-            case -2:   // Timeout (client-side driver often uses negative numbers)
-            case 11:   // General network error
-            case 10054:// Connection reset by peer
-            case 10060:// Connection timed out
-              exception = new R2dbcTransientResourceException(message, sqlState, errorCode);
-              break;
-
-            case 2627: // Violation of PRIMARY KEY constraint
-            case 2601: // Cannot insert duplicate key row
-            case 547:  // The INSERT statement conflicted with the FOREIGN KEY constraint
-            case 515:  // Cannot insert the value NULL into column
-              exception = new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
-              break;
-
-            case 208: // Invalid object name (Table not found)
-            case 207: // Invalid column name
-            case 102: // Incorrect syntax near ...
-            case 156: // Incorrect syntax near the keyword ...
-              exception = new R2dbcBadGrammarException(message, sqlState, errorCode);
-              break;
-
-            case 229: // The permission was denied on the object...
-            case 230: // The permission was denied on the column...
-            case 18456:// Login failed for user
-              exception = new R2dbcPermissionDeniedException(message, sqlState, errorCode);
-              break;
-
-            default:
-              // Fallback for all other errors (assumed permanent/fatal)
-              exception = new R2dbcNonTransientResourceException(message, sqlState, errorCode);
-              break;
-          }
-
-          // 3. Terminate the stream
+          R2dbcException exception = mapErrorToException(error);
           subscriber.onError(exception);
-          logger.debug("fired onError");
           queryContext.setHasError(true);
         }
         break;
@@ -210,37 +156,32 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         transport.applyEnvChange((EnvChangeToken) token);
         break;
 
-      case RETURN_STATUS:
-        ReturnStatusToken returnStatusToken = (ReturnStatusToken) token;
-        logger.info("Server return status: {}", returnStatusToken.getValue());
-        break;
-
       case RETURN_VALUE:
         queryContext.addReturnValue((ReturnValueToken) token);
         break;
 
+      case RETURN_STATUS:
+        logger.debug("Return Status: {}", ((ReturnStatusToken) token).getValue());
+        break;
+
       default:
-        logger.warn("Unhandled token type: {}", token.getType());
+        logger.debug("Ignored token: {}", token.getType());
     }
   }
 
   @Override
-  public void subscribe(Subscriber<? super Row> subscriber) {
-    // Validate subscriber
-    if (subscriber == null) {
-      throw new NullPointerException("Subscriber cannot be null");
-    }
-
+  public void subscribe(Subscriber<? super Result.Segment> subscriber) {
+    if (subscriber == null) throw new NullPointerException("Subscriber cannot be null");
     this.subscriber = subscriber;
-    subscriber.onSubscribe(new Subscription() {
 
+    subscriber.onSubscribe(new Subscription() {
       @Override
       public void request(long n) {
         if (!messageSent.compareAndSet(true, true)) {
           try {
             transport.sendQueryMessageAsync(queryTdsMessage);
           } catch (IOException e) {
-            throw new RuntimeException(e);
+            subscriber.onError(new RuntimeException(e));
           }
         }
       }
@@ -250,11 +191,24 @@ public class QueryResponseTokenVisitor implements Publisher<Row>, TokenVisitor {
         transport.cancelCurrent();
       }
     });
-    // Store the current subscriber for use in the response handling
-
   }
 
-  public Subscriber<? super Row> getSubscriber() {
-    return subscriber;
+  private R2dbcException mapErrorToException(ErrorToken error) {
+    String message = error.getMessage();
+    String sqlState = String.valueOf(error.getState() & 0xFF);
+    int errorCode = (int) error.getNumber();
+
+    switch (errorCode) {
+      case 1205: case -2: case 11: case 10054: case 10060:
+        return new R2dbcTransientResourceException(message, sqlState, errorCode);
+      case 2627: case 2601: case 547: case 515:
+        return new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
+      case 208: case 207: case 102: case 156:
+        return new R2dbcBadGrammarException(message, sqlState, errorCode);
+      case 229: case 230: case 18456:
+        return new R2dbcPermissionDeniedException(message, sqlState, errorCode);
+      default:
+        return new R2dbcNonTransientResourceException(message, sqlState, errorCode);
+    }
   }
 }

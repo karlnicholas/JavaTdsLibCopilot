@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 // REMOVED: static import ...BindingType.inferBindingType;
 
-public class TdsStatementImpl implements Statement {
+public class TdsStatement implements Statement {
 
   private final String query;
   private final TdsTransport transport;
@@ -30,7 +30,7 @@ public class TdsStatementImpl implements Statement {
   private List<ParamEntry> currentParams = new ArrayList<>();
   private int fetchSize = 0; // 0 means default/unlimited
 
-  public TdsStatementImpl(TdsTransport transport, String query) {
+  public TdsStatement(TdsTransport transport, String query) {
     this.transport = transport;
     this.query = query;
   }
@@ -138,12 +138,12 @@ public class TdsStatementImpl implements Statement {
             try {
               if (isSimpleBatch) {
                 TdsMessage message = createSqlBatchMessage(query);
-                subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, message)));
+                subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, message)));
               } else {
                 // Execute ALL batched parameter sets immediately
                 for (List<ParamEntry> params : executions) {
                   TdsMessage message = createRpcMessage(query, params);
-                  subscriber.onNext(new TdsResultImpl(new QueryResponseTokenVisitor(transport, message)));
+                  subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, message)));
                 }
               }
               subscriber.onComplete();

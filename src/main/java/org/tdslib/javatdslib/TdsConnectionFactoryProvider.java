@@ -10,7 +10,7 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
 import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
-public class TdsConnectionFactoryProviderImpl implements ConnectionFactoryProvider {
+public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
 
   // Define your unique driver name
   public static final String TDS_DRIVER = "javatdslib";
@@ -39,7 +39,7 @@ public class TdsConnectionFactoryProviderImpl implements ConnectionFactoryProvid
     requireOption(DATABASE, options);
 
     // Return your main entry point
-    return new TdsConnectionFactoryImpl(options);
+    return new TdsConnectionFactory(options);
   }
 
   private void requireOption(Option<?> option, ConnectionFactoryOptions options) {

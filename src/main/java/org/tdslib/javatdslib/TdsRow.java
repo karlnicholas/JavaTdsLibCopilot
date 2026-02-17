@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib;
 
 import io.r2dbc.spi.ColumnMetadata;
-import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
@@ -15,15 +14,15 @@ import java.time.*;
 import java.util.List;
 import java.util.UUID;
 
-class TdsRowImpl implements Row {
+class TdsRow implements Row {
   private final List<byte[]> columnData;
   private final List<ColumnMetadata> columnMetadata;
-  private final TdsRowMetadataImpl rowMetadata;
+  private final TdsRowMetadata rowMetadata;
 
-  TdsRowImpl(List<byte[]> columnData, List<ColumnMetadata> columnMetadata) {
+  TdsRow(List<byte[]> columnData, List<ColumnMetadata> columnMetadata) {
     this.columnData = columnData;
     this.columnMetadata = columnMetadata;
-    this.rowMetadata = new TdsRowMetadataImpl(columnMetadata);
+    this.rowMetadata = new TdsRowMetadata(columnMetadata);
   }
 
   @Override

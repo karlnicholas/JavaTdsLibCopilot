@@ -10,7 +10,7 @@ public class DoneToken extends Token {
 
   private final DoneStatus status;
   private final int currentCommand;
-  private final long rowCount;
+  private final long count;
 
   /**
    * Construct an AbstractDoneToken.
@@ -18,14 +18,14 @@ public class DoneToken extends Token {
    * @param type           raw token byte value
    * @param status         DONE status flags (may be null)
    * @param currentCommand command id associated with the token
-   * @param rowCount       row count reported by the token
+   * @param count       row count reported by the token
    */
   protected DoneToken(final byte type, final DoneStatus status,
-                              final int currentCommand, final long rowCount) {
+                              final int currentCommand, final long count) {
     super(TokenType.fromValue(type));
     this.status = status;
     this.currentCommand = currentCommand;
-    this.rowCount = rowCount;
+    this.count = count;
   }
 
   /**
@@ -51,8 +51,8 @@ public class DoneToken extends Token {
    *
    * @return row count
    */
-  public long getRowCount() {
-    return rowCount;
+  public long getCount() {
+    return count;
   }
 
   @Override
@@ -60,7 +60,7 @@ public class DoneToken extends Token {
     return getClass().getSimpleName() + "{"
         + "status=" + status
         + ", cmd=" + currentCommand
-        + ", rows=" + rowCount
+        + ", rows=" + count
         + '}';
   }
 

@@ -15,18 +15,18 @@ import java.time.Duration;
  * High-level TDS client facade.
  * Provides a simple connect + execute interface, hiding protocol details.
  */
-public class TdsConnectionImpl implements Connection {
-  private static final Logger logger = LoggerFactory.getLogger(TdsConnectionImpl.class);
+public class TdsConnection implements Connection {
+  private static final Logger logger = LoggerFactory.getLogger(TdsConnection.class);
 
   private final TdsTransport transport;
 //  private boolean connected;
 
   /**
-   * Create a new TdsConnectionImpl backed by a TCP transport to the given host/port.
+   * Create a new TdsConnection backed by a TCP transport to the given host/port.
    *
    * @param transport TdsTransport
    */
-  public TdsConnectionImpl(TdsTransport transport) {
+  public TdsConnection(TdsTransport transport) {
     this.transport = transport;
 //    this.connected = true;
   }
@@ -47,7 +47,7 @@ public class TdsConnectionImpl implements Connection {
     return subscriber->new Subscription() {
       @Override
       public void request(long n) {
-        logger.debug("Closing TdsConnectionImpl");
+        logger.debug("Closing TdsConnection");
         try {
           transport.close();
         } catch (IOException e) {
@@ -86,7 +86,7 @@ public class TdsConnectionImpl implements Connection {
    */
   @Override
   public Statement createStatement(String sql) {
-    return new TdsStatementImpl(this.transport, sql);
+    return new TdsStatement(this.transport, sql);
   }
 
   @Override

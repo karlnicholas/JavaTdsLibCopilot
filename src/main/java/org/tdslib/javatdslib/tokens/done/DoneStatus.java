@@ -58,4 +58,8 @@ public class DoneStatus {
   public String toString() {
     return "DoneStatus(raw=" + Integer.toHexString(value) + ")";
   }
+
+  public boolean hasCount() {
+    return (value & BIT_COUNT) > 0;
+  }
 }

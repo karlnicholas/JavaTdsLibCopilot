@@ -57,7 +57,7 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   private short inboundMessageSpid = 0;
   private byte inboundMessagePacketId = 0;
 
-  private Consumer<TdsMessage> currentMessageHandler;   // callback from TdsConnectionImpl
+  private Consumer<TdsMessage> currentMessageHandler;   // callback from TdsConnection
   private Consumer<Throwable> currentErrorHandler;  // passed by library user
   private final TlsHandshake tlsHandshake;
 
