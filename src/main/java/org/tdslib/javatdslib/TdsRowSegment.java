@@ -1,76 +1,81 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.OutParameters;
-import io.r2dbc.spi.OutParametersMetadata;
-import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
+import io.r2dbc.spi.*;
+import java.util.*;
 
-// 1. Row Segment
+// 1. Row Segment (Unchanged)
 class TdsRowSegment implements Result.RowSegment {
   private final Row row;
-
-  TdsRowSegment(Row row) {
-    this.row = row;
-  }
-
-  @Override
-  public Row row() {
-    return row;
-  }
+  TdsRowSegment(Row row) { this.row = row; }
+  @Override public Row row() { return row; }
 }
 
-// 2. Update Count Segment
+// 2. Update Count Segment (Unchanged)
 class TdsUpdateCount implements Result.UpdateCount {
   private final long value;
-
-  TdsUpdateCount(long value) {
-    this.value = value;
-  }
-
-  @Override
-  public long value() {
-    return value;
-  }
+  TdsUpdateCount(long value) { this.value = value; }
+  @Override public long value() { return value; }
 }
 
-// 3. Out Parameters Segment
+// 3. Out Parameters Segment (Unchanged)
 class TdsOutSegment implements Result.OutSegment {
   private final OutParameters outParameters;
-
-  TdsOutSegment(OutParameters outParameters) {
-    this.outParameters = outParameters;
-  }
-
-  @Override
-  public OutParameters outParameters() {
-    return outParameters;
-  }
+  TdsOutSegment(OutParameters outParameters) { this.outParameters = outParameters; }
+  @Override public OutParameters outParameters() { return outParameters; }
 }
 
-// 4. Out Parameters Implementation (Delegates to TdsRowImpl for type conversion)
+// 4. Standalone OutParameters Implementation
 class TdsOutParameters implements OutParameters {
-  private final TdsRow delegate;
+  private final List<Object> values;
+  private final TdsOutParametersMetadata metadata;
+  private final Map<String, Integer> nameToIndex;
 
-  TdsOutParameters(TdsRow delegate) {
-    this.delegate = delegate;
-  }
+  // UPDATED: Constructor now takes List<TdsOutParameterMetadata>
+  TdsOutParameters(List<Object> values, List<TdsOutParameterMetadata> metadataList) {
+    this.values = values;
+    this.metadata = new TdsOutParametersMetadata(metadataList);
+    this.nameToIndex = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-  @Override
-  public <T> T get(int index, Class<T> type) {
-    return delegate.get(index, type);
-  }
-
-  @Override
-  public <T> T get(String name, Class<T> type) {
-    return delegate.get(name, type);
+    for (int i = 0; i < metadataList.size(); i++) {
+      String name = metadataList.get(i).getName();
+      if (name != null) {
+        nameToIndex.put(name, i);
+        if (name.startsWith("@")) {
+          nameToIndex.put(name.substring(1), i);
+        }
+      }
+    }
   }
 
   @Override
   public OutParametersMetadata getMetadata() {
-    // TdsRowMetadataImpl implements RowMetadata, which is compatible
-    // with OutParametersMetadata structure in most drivers,
-    // or you can implement a wrapper if strictly required.
-    // For now, assuming TdsRowMetadataImpl suffices or simple casting.
-    return (OutParametersMetadata) delegate.getMetadata();
+    return metadata;
+  }
+
+  @Override
+  public <T> T get(int index, Class<T> type) {
+    if (index < 0 || index >= values.size()) {
+      throw new IllegalArgumentException("Invalid OutParameter Index: " + index);
+    }
+    return convert(values.get(index), type);
+  }
+
+  @Override
+  public <T> T get(String name, Class<T> type) {
+    Integer index = nameToIndex.get(name);
+    if (index == null) {
+      throw new IllegalArgumentException("OutParameter not found: " + name);
+    }
+    return get(index, type);
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T> T convert(Object value, Class<T> targetType) {
+    if (value == null) return null;
+    if (targetType.isInstance(value)) return (T) value;
+    if (targetType == Long.class && value instanceof Integer) return (T) Long.valueOf(((Integer) value).longValue());
+    if (targetType == Double.class && value instanceof Float) return (T) Double.valueOf(((Float) value).doubleValue());
+    if (targetType == String.class) return (T) value.toString();
+    throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to " + targetType.getSimpleName());
   }
 }

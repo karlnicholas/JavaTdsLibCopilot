@@ -1,24 +1,24 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Nullability;
+import io.r2dbc.spi.OutParameterMetadata;
 import io.r2dbc.spi.Type;
-import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
+import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
 
-public class TdsColumnMetadata implements ColumnMetadata {
+public class TdsOutParameterMetadata implements OutParameterMetadata {
   private final String name;
   private final int precision;
   private final int scale;
   private final TdsType tdsType;
   private final Object nativeMeta;
 
-  // Constructor for Row Data (Standard Result Set)
-  TdsColumnMetadata(ColumnMeta meta) {
-    this.name = meta.getName();
-    this.precision = meta.getMaxLength();
-    this.scale = (int) meta.getScale();
-    this.tdsType = TdsType.valueOf((byte) meta.getDataType());
-    this.nativeMeta = meta;
+  // Constructor for ReturnValueToken (Output Parameters)
+  public TdsOutParameterMetadata(ReturnValueToken token) {
+    this.name = token.getParamName();
+    this.precision = 0;
+    this.scale = 0;
+    this.tdsType = token.getTypeInfo().getTdsType();
+    this.nativeMeta = token;
   }
 
   @Override public String getName() { return name; }
