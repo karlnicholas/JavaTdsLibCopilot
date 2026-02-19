@@ -16,8 +16,8 @@ public class TdsColumnMetadata implements ColumnMetadata {
   TdsColumnMetadata(ColumnMeta meta) {
     this.name = meta.getName();
     this.precision = meta.getMaxLength();
-    this.scale = (int) meta.getScale();
-    this.tdsType = TdsType.valueOf((byte) meta.getDataType());
+    this.scale = meta.getScale();
+    this.tdsType = TdsType.valueOf(meta.getDataType());
     this.nativeMeta = meta;
   }
 
