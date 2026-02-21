@@ -137,7 +137,28 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   }
 
   private void drain() {
-    if (subscriber == null) return;
+    // FIX: Fail loudly if data arrives without a subscriber
+    if (subscriber == null) {
+      if (!buffer.isEmpty()) {
+        // 1. Mark as cancelled to stop further processing
+        isCancelled.set(true);
+
+        // 2. Attempt to shut down the transport
+        try {
+          transport.cancelCurrent();
+        } catch (Exception e) {
+          // Log but don't suppress the main error
+          logger.error("Failed to cancel transport during illegal state shutdown", e);
+        }
+
+        // 3. Throw exception to the caller (Transport Thread)
+        throw new IllegalStateException("Protocol Violation: Received " + buffer.size() + " segments without a Subscriber. " +
+            "This implies data arrived before 'subscribe()' or after 'cancel()'.");
+      }
+      return; // Safe to ignore spurious calls if buffer is empty
+    }
+
+    // Normal drain loop...
     while (!buffer.isEmpty() && demand.get() > 0) {
       Result.Segment s = buffer.poll();
       if (s != null) {
@@ -145,6 +166,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         demand.decrementAndGet();
       }
     }
+
     if (upstreamDone.get() && buffer.isEmpty()) {
       if (isCancelled.compareAndSet(false, true)) {
         subscriber.onComplete();
