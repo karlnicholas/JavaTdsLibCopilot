@@ -98,16 +98,12 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
       case DONE_IN_PROC:
       case DONE_PROC:
         DoneToken done = (DoneToken) token;
-        // 1. Flush OutParameters
         if (!queryContext.getReturnValues().isEmpty()) {
           segment = createOutSegment(queryContext);
           queryContext.getReturnValues().clear();
-        }
-        // 2. Or emit Update Count
-        else if (done.getStatus().hasCount()) {
+        } else if (done.getStatus().hasCount()) {
           segment = new TdsUpdateCount(done.getCount());
         }
-        // 3. Check for Completion
         if (!done.getStatus().hasMoreResults() && !queryContext.isHasError()) {
           upstreamDone.set(true);
         }
@@ -124,7 +120,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         ErrorToken error = (ErrorToken) token;
         logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
         if (error.isError()) {
-          R2dbcException exception = new R2dbcNonTransientResourceException(error.getMessage(), String.valueOf(error.getState()), (int)error.getNumber());
+          R2dbcException exception = new R2dbcNonTransientResourceException(error.getMessage(), String.valueOf(error.getState()), (int) error.getNumber());
           subscriber.onError(exception);
           queryContext.setHasError(true);
         }
@@ -169,7 +165,6 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
     List<ColumnMetadata> metaList = new ArrayList<>();
     if (ctx.getColMetaDataToken() != null) {
       for (ColumnMeta cm : ctx.getColMetaDataToken().getColumns()) {
-        // CORRECT: Using TdsColumnMetadata for Rows
         metaList.add(new TdsColumnMetadata(cm));
       }
     }
@@ -178,12 +173,12 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
 
   private Result.OutSegment createOutSegment(QueryContext ctx) {
     List<ReturnValueToken> tokens = ctx.getReturnValues();
-    List<Object> values = new ArrayList<>(tokens.size());
-    // CORRECT: Using TdsOutParameterMetadata for OutParams
+    List<byte[]> values = new ArrayList<>(tokens.size());
     List<TdsOutParameterMetadata> metaList = new ArrayList<>(tokens.size());
 
     for (ReturnValueToken token : tokens) {
-      values.add(token.getValue());
+      // Cast the Object return to byte[] since TDS delivers raw buffers here
+      values.add((byte[]) token.getValue());
       metaList.add(new TdsOutParameterMetadata(token));
     }
 

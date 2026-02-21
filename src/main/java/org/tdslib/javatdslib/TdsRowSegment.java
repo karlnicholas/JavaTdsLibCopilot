@@ -26,13 +26,14 @@ class TdsOutSegment implements Result.OutSegment {
 
 // 4. Standalone OutParameters Implementation
 class TdsOutParameters implements OutParameters {
-  private final List<Object> values;
+  private final List<byte[]> rawValues;
   private final TdsOutParametersMetadata metadata;
+  private final List<TdsOutParameterMetadata> metadataList;
   private final Map<String, Integer> nameToIndex;
 
-  // UPDATED: Constructor now takes List<TdsOutParameterMetadata>
-  TdsOutParameters(List<Object> values, List<TdsOutParameterMetadata> metadataList) {
-    this.values = values;
+  TdsOutParameters(List<byte[]> rawValues, List<TdsOutParameterMetadata> metadataList) {
+    this.rawValues = rawValues;
+    this.metadataList = metadataList;
     this.metadata = new TdsOutParametersMetadata(metadataList);
     this.nameToIndex = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
@@ -54,10 +55,20 @@ class TdsOutParameters implements OutParameters {
 
   @Override
   public <T> T get(int index, Class<T> type) {
-    if (index < 0 || index >= values.size()) {
+    if (index < 0 || index >= rawValues.size()) {
       throw new IllegalArgumentException("Invalid OutParameter Index: " + index);
     }
-    return convert(values.get(index), type);
+
+    byte[] data = rawValues.get(index);
+    if (data == null) return null;
+
+    TdsOutParameterMetadata meta = metadataList.get(index);
+
+    // Utilize the getter methods defined in TdsOutParameterMetadata
+    TdsType tdsType = meta.getTdsType();
+    int scale = meta.getScale() != null ? meta.getScale() : 0;
+
+    return TdsDataConverter.convert(data, tdsType, type, scale);
   }
 
   @Override
@@ -67,15 +78,5 @@ class TdsOutParameters implements OutParameters {
       throw new IllegalArgumentException("OutParameter not found: " + name);
     }
     return get(index, type);
-  }
-
-  @SuppressWarnings("unchecked")
-  private <T> T convert(Object value, Class<T> targetType) {
-    if (value == null) return null;
-    if (targetType.isInstance(value)) return (T) value;
-    if (targetType == Long.class && value instanceof Integer) return (T) Long.valueOf(((Integer) value).longValue());
-    if (targetType == Double.class && value instanceof Float) return (T) Double.valueOf(((Float) value).doubleValue());
-    if (targetType == String.class) return (T) value.toString();
-    throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to " + targetType.getSimpleName());
   }
 }
