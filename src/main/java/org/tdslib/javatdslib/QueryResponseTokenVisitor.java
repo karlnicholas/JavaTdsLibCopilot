@@ -1,6 +1,9 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.*;
+import io.r2dbc.spi.ColumnMetadata;
+import io.r2dbc.spi.R2dbcException;
+import io.r2dbc.spi.R2dbcNonTransientResourceException;
+import io.r2dbc.spi.Result;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;

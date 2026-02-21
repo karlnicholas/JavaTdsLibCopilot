@@ -6,9 +6,6 @@ import io.r2dbc.spi.ConnectionFactoryProvider;
 import io.r2dbc.spi.Option;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
-import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
-import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
-import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
 public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
 
