@@ -3,6 +3,8 @@ package org.tdslib.javatdslib;
 import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
@@ -22,7 +24,12 @@ import java.util.List;
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
 public class TdsConnectionFactory implements ConnectionFactory {
+  private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
+  public static final Option<Integer> CONNECT_RETRIES = Option.valueOf("connectRetries");
+  public static final Option<Long> CONNECT_RETRY_WAIT = Option.valueOf("connectRetryWaitMs");
   private final ConnectionFactoryOptions options;
+  // 1. Define the custom keys used in R2DBC URLs or Configuration
+
   public TdsConnectionFactory(ConnectionFactoryOptions options) {
     this.options = options;
   }
@@ -40,50 +47,79 @@ public class TdsConnectionFactory implements ConnectionFactory {
           return;
         }
 
-        TdsTransport transport = null;
-        try {
-          // 1. Safety: Validate required options exist before attempting connection
-          // 2. Extraction: Get values safely
-          String hostname = (String) options.getValue(HOST);
-          int port = (Integer) options.getValue(PORT);
-          String username = (String) options.getValue(USER);
-          String password = (String) options.getValue(PASSWORD);
-          String database = (String) options.getValue(DATABASE);
+        // UPDATED: Now utilizes Options -> Env -> Default logic
+        int maxRetries = getRetryCount();
+        long retryWaitMs = getRetryWaitMs();
+        int attempt = 0;
+        Throwable lastError = null;
 
-          // 3. Connection: Initialize transport
-          transport = new TdsTransport(hostname, port);
+        while (attempt <= maxRetries && !cancelled) {
+          TdsTransport transport = null;
+          try {
+            // 1. Safety: Validate required options exist before attempting connection
+            // 2. Extraction: Get values safely
+            String hostname = (String) options.getValue(HOST);
+            int port = (Integer) options.getValue(PORT);
+            String username = (String) options.getValue(USER);
+            String password = (String) options.getValue(PASSWORD);
+            String database = (String) options.getValue(DATABASE);
 
-          // 4. Handshake: PreLogin and TLS
-          preLoginInternal(transport);
-          transport.tlsHandshake(); //
+            // 3. Connection: Initialize transport
+            transport = new TdsTransport(hostname, port);
 
-          // 5. Login: Perform authentication
-          LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database); //
+            // 4. Handshake: PreLogin and TLS
+            preLoginInternal(transport);
+            transport.tlsHandshake();
 
-          if (!loginResponse.isSuccess()) {
-            throw new IOException("Login failed: " + loginResponse.getErrorMessage());
-          }
+            // 5. Login: Perform authentication
+            LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database);
 
-          transport.tlsComplete(); //
+            if (!loginResponse.isSuccess()) {
+              throw new IOException("Login failed: " + loginResponse.getErrorMessage());
+            }
 
-          // 6. Async Switch: Switch socket to non-blocking + register to selector
-          transport.enterAsyncMode(); //
+            transport.tlsComplete();
 
-          // 7. Emission: Emit the active connection
-          subscriber.onNext(new TdsConnection(transport));
-          subscriber.onComplete();
+            // 6. Async Switch: Switch socket to non-blocking + register to selector
+            transport.enterAsyncMode();
 
-        } catch (Throwable t) {
-          // 8. Cleanup: If ANY step fails, ensure the transport (socket) is closed
-          if (transport != null) {
-            try {
-              transport.close();
-            } catch (IOException closeEx) {
-              t.addSuppressed(closeEx); // Attach close error to the original error
+            // 7. Emission: Emit the active connection
+            subscriber.onNext(new TdsConnection(transport));
+            subscriber.onComplete();
+
+            // Success! Exit the retry loop.
+            return;
+
+          } catch (Throwable t) {
+            lastError = t;
+            // 8. Cleanup: If ANY step fails, ensure the transport (socket) is closed
+            if (transport != null) {
+              try {
+                transport.close();
+              } catch (IOException closeEx) {
+                lastError.addSuppressed(closeEx); // Attach close error to the original error
+              }
+            }
+
+            attempt++;
+            if (attempt <= maxRetries && !cancelled) {
+              logger.warn("Connection attempt {}/{} failed. Retrying in {}ms... ({})",
+                  attempt, maxRetries, retryWaitMs, t.getMessage());
+              try {
+                Thread.sleep(retryWaitMs);
+              } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                lastError.addSuppressed(ie);
+                break; // Stop retrying if the thread is interrupted
+              }
             }
           }
-          // Signal the error downstream to the client
-          subscriber.onError(t);
+        }
+
+        // If we exhausted all retries or were cancelled, signal the error downstream
+        if (!cancelled && lastError != null) {
+          logger.error("All {} connection attempts failed.", maxRetries + 1);
+          subscriber.onError(lastError);
         }
       }
 
@@ -98,6 +134,74 @@ public class TdsConnectionFactory implements ConnectionFactory {
   @Override
   public ConnectionFactoryMetadata getMetadata() {
     return TdsConnectionFactoryMetadataImpl.INSTANCE;
+  }
+
+  // --- Environment Variable Helpers ---
+
+// --- Configuration Helpers ---
+
+  private int getRetryCount() {
+    // Priority 1: Check ConnectionFactoryOptions (URL or Code config)
+    if (options.hasOption(CONNECT_RETRIES)) {
+      try {
+        Object val = options.getValue(CONNECT_RETRIES);
+        if (val instanceof Number) return ((Number) val).intValue();
+        if (val instanceof String) return Integer.parseInt((String) val);
+      } catch (Exception e) {
+        logger.warn("Invalid 'connectRetries' option value, checking Env/Default");
+      }
+    }
+
+    // Priority 2: Check Environment Variable
+    String envVal = System.getenv("TDS_CONNECT_RETRIES");
+    if (envVal != null && !envVal.trim().isEmpty()) {
+      try {
+        return Integer.parseInt(envVal.trim());
+      } catch (NumberFormatException e) {
+        logger.warn("Invalid TDS_CONNECT_RETRIES Env Var, using default");
+      }
+    }
+
+    // Priority 3: Default
+    return 3;
+  }
+
+  private long getRetryWaitMs() {
+    // Priority 1: Check ConnectionFactoryOptions
+    if (options.hasOption(CONNECT_RETRY_WAIT)) {
+      try {
+        Object val = options.getValue(CONNECT_RETRY_WAIT);
+        if (val instanceof Number) return ((Number) val).longValue();
+        if (val instanceof String) return Long.parseLong((String) val);
+      } catch (Exception e) {
+        logger.warn("Invalid 'connectRetryWaitMs' option value, checking Env/Default");
+      }
+    }
+
+    // Priority 2: Check Environment Variable
+    String envVal = System.getenv("TDS_CONNECT_RETRY_WAIT_MS");
+    if (envVal != null && !envVal.trim().isEmpty()) {
+      try {
+        return Long.parseLong(envVal.trim());
+      } catch (NumberFormatException e) {
+        logger.warn("Invalid TDS_CONNECT_RETRY_WAIT_MS Env Var, using default");
+      }
+    }
+
+    // Priority 3: Default
+    return 1000L;
+  }
+
+  private static long getRetryWaitMsEnv() {
+    String val = System.getenv("TDS_CONNECT_RETRY_WAIT_MS");
+    if (val != null && !val.trim().isEmpty()) {
+      try {
+        return Long.parseLong(val.trim());
+      } catch (NumberFormatException e) {
+        logger.warn("Invalid TDS_CONNECT_RETRY_WAIT_MS format: '{}', defaulting to 1000", val);
+      }
+    }
+    return 1000L; // Default to 1 second
   }
 
   /**
@@ -124,10 +228,10 @@ public class TdsConnectionFactory implements ConnectionFactory {
    * @throws IOException on IO error
    */
   private void preLoginInternal(TdsTransport transport)
-          throws IOException, NoSuchAlgorithmException, KeyManagementException {
+      throws IOException, NoSuchAlgorithmException, KeyManagementException {
     TdsMessage msg = TdsMessage.createRequest(
-            PacketType.PRE_LOGIN.getValue(),
-            buildPreLoginPayload()
+        PacketType.PRE_LOGIN.getValue(),
+        buildPreLoginPayload()
     );
 
     transport.sendMessageDirect(msg);
@@ -237,8 +341,7 @@ public class TdsConnectionFactory implements ConnectionFactory {
             try {
               response.setNegotiatedPacketSize(Integer.parseInt(psStr));
             } catch (NumberFormatException e) {
-              // Log parsing failure so catch is not empty
-              System.err.println("Failed to parse negotiated packet size: " + psStr);
+              logger.error("Failed to parse negotiated packet size: {}", psStr);
             }
             break;
 
@@ -289,8 +392,8 @@ public class TdsConnectionFactory implements ConnectionFactory {
    */
   private ByteBuffer combinePayloads(List<TdsMessage> packets) {
     int total = packets.stream()
-            .mapToInt(m -> m.getPayload().remaining())
-            .sum();
+        .mapToInt(m -> m.getPayload().remaining())
+        .sum();
 
     ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
     for (TdsMessage m : packets) {
