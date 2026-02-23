@@ -24,7 +24,7 @@ public class TdsResult implements Result {
 
   @Override
   public Publisher<Long> getRowsUpdated() {
-    return subscriber -> source.subscribe(new Subscriber<Result.Segment>() {
+    return subscriber -> source.subscribe(new Subscriber<>() {
       Subscription subscription;
 
       @Override

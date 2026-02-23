@@ -109,9 +109,7 @@ public class LoginResponse implements TokenVisitor {
    * @param change the envchange token to record
    */
   public void addEnvChange(EnvChangeToken change) {
-    if (change != null) {
-      envChanges.add(change);
-    }
+    envChanges.add(change);
   }
 
   // --- Accessors ---

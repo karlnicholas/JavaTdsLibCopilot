@@ -3,6 +3,7 @@ package org.tdslib.javatdslib;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.RowMetadata;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -38,7 +39,6 @@ class TdsRowMetadata implements RowMetadata {
    */
   @Override
   public List<? extends ColumnMetadata> getColumnMetadatas() {
-    return metadata.stream()
-        .collect(Collectors.toList());
+    return Collections.unmodifiableList(metadata);
   }
 }
