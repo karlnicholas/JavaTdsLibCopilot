@@ -24,13 +24,19 @@ public class TdsResult implements Result {
 
   @Override
   public Publisher<Long> getRowsUpdated() {
-    return subscriber -> source.subscribe(new Subscriber<>() {
-      Subscription subscription;
+    return subscriber -> source.subscribe(new Subscriber<Result.Segment>() {
+      private Subscription subscription;
 
       @Override
       public void onSubscribe(Subscription s) {
         this.subscription = s;
-        subscriber.onSubscribe(s);
+        subscriber.onSubscribe(new Subscription() {
+          @Override
+          public void request(long n) { s.request(n); }
+
+          @Override
+          public void cancel() { s.cancel(); }
+        });
       }
 
       @Override
@@ -38,36 +44,36 @@ public class TdsResult implements Result {
         if (segment instanceof Result.UpdateCount) {
           subscriber.onNext(((Result.UpdateCount) segment).value());
         } else {
-          // Skip non-update counts and ask for the next one
+          // Skip non-update counts and ask for the next segment
           subscription.request(1);
         }
       }
 
       @Override
-      public void onError(Throwable t) {
-        subscriber.onError(t);
-      }
+      public void onError(Throwable t) { subscriber.onError(t); }
 
       @Override
-      public void onComplete() {
-        subscriber.onComplete();
-      }
+      public void onComplete() { subscriber.onComplete(); }
     });
   }
 
   @Override
   public <T> Publisher<T> map(BiFunction<Row, RowMetadata, ? extends T> mappingFunction) {
-    if (mappingFunction == null) {
-      throw new IllegalArgumentException("mappingFunction must not be null");
-    }
+    if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
 
     return subscriber -> source.subscribe(new Subscriber<Result.Segment>() {
-      Subscription subscription;
+      private Subscription subscription;
 
       @Override
       public void onSubscribe(Subscription s) {
         this.subscription = s;
-        subscriber.onSubscribe(s);
+        subscriber.onSubscribe(new Subscription() {
+          @Override
+          public void request(long n) { s.request(n); }
+
+          @Override
+          public void cancel() { s.cancel(); }
+        });
       }
 
       @Override
@@ -78,6 +84,7 @@ public class TdsResult implements Result {
             T mapped = mappingFunction.apply(row, row.getMetadata());
             if (mapped == null) {
               subscriber.onError(new IllegalStateException("Mapping function returned null"));
+              subscription.cancel();
               return;
             }
             subscriber.onNext(mapped);
@@ -86,36 +93,36 @@ public class TdsResult implements Result {
             subscription.cancel();
           }
         } else {
-          // Not a row, skip and request next
+          // Not a row, skip and request the next segment
           subscription.request(1);
         }
       }
 
       @Override
-      public void onError(Throwable t) {
-        subscriber.onError(t);
-      }
+      public void onError(Throwable t) { subscriber.onError(t); }
 
       @Override
-      public void onComplete() {
-        subscriber.onComplete();
-      }
+      public void onComplete() { subscriber.onComplete(); }
     });
   }
 
   @Override
   public Result filter(Predicate<Result.Segment> predicate) {
-    if (predicate == null) {
-      throw new IllegalArgumentException("predicate must not be null");
-    }
+    if (predicate == null) throw new IllegalArgumentException("predicate must not be null");
 
     return new TdsResult(subscriber -> source.subscribe(new Subscriber<Result.Segment>() {
-      Subscription subscription;
+      private Subscription subscription;
 
       @Override
       public void onSubscribe(Subscription s) {
         this.subscription = s;
-        subscriber.onSubscribe(s);
+        subscriber.onSubscribe(new Subscription() {
+          @Override
+          public void request(long n) { s.request(n); }
+
+          @Override
+          public void cancel() { s.cancel(); }
+        });
       }
 
       @Override
@@ -128,33 +135,21 @@ public class TdsResult implements Result {
       }
 
       @Override
-      public void onError(Throwable t) {
-        subscriber.onError(t);
-      }
+      public void onError(Throwable t) { subscriber.onError(t); }
 
       @Override
-      public void onComplete() {
-        subscriber.onComplete();
-      }
+      public void onComplete() { subscriber.onComplete(); }
     }));
   }
 
   @Override
   public <T> Publisher<T> flatMap(Function<Result.Segment, ? extends Publisher<? extends T>> mappingFunction) {
-    if (mappingFunction == null) {
-      throw new IllegalArgumentException("mappingFunction must not be null");
-    }
-    // Return our custom ConcatMap implementation
+    if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
     return new SegmentFlatMapPublisher<>(source, mappingFunction);
   }
 
-  /**
-   * Internal Publisher that coordinates the "ConcatMap" logic:
-   * 1. Receive Segment from Source.
-   * 2. Map Segment -> Inner Publisher.
-   * 3. Drain Inner Publisher to Downstream.
-   * 4. When Inner completes, Request next Segment from Source.
-   */
+  // --- Internal ConcatMap Publisher ---
+
   private static class SegmentFlatMapPublisher<T> implements Publisher<T> {
     private final Publisher<Result.Segment> source;
     private final Function<Result.Segment, ? extends Publisher<? extends T>> mapper;
@@ -174,13 +169,10 @@ public class TdsResult implements Result {
     private final Subscriber<? super T> downstream;
     private final Function<Result.Segment, ? extends Publisher<? extends T>> mapper;
 
-    // Concurrency control
     private final AtomicReference<Subscription> upstream = new AtomicReference<>();
     private final AtomicReference<Subscription> activeInner = new AtomicReference<>();
     private final AtomicLong demand = new AtomicLong();
     private final AtomicBoolean isCancelled = new AtomicBoolean(false);
-
-    // State tracking
     private volatile boolean upstreamDone = false;
 
     FlatMapSubscriber(Subscriber<? super T> downstream, Function<Result.Segment, ? extends Publisher<? extends T>> mapper) {
@@ -188,24 +180,19 @@ public class TdsResult implements Result {
       this.mapper = mapper;
     }
 
-    // --- Subscription (Downstream interaction) ---
-
     @Override
     public void request(long n) {
       if (n <= 0) {
-        downstream.onError(new IllegalArgumentException("n must be > 0"));
+        downstream.onError(new IllegalArgumentException("Request must be > 0"));
         return;
       }
 
-      long currentDemand = addCap(demand, n);
+      addCap(demand, n);
 
-      // If we have an active inner subscription, pass demand there
       Subscription inner = activeInner.get();
       if (inner != null) {
         inner.request(n);
       } else {
-        // Otherwise, request 1 segment from upstream to start/continue the cycle
-        // Only request if we aren't already processing (simple check)
         Subscription up = upstream.get();
         if (up != null) {
           up.request(1);
@@ -223,8 +210,6 @@ public class TdsResult implements Result {
         if (up != null) up.cancel();
       }
     }
-
-    // --- Subscriber (Upstream interaction) ---
 
     @Override
     public void onSubscribe(Subscription s) {
@@ -245,10 +230,7 @@ public class TdsResult implements Result {
           onError(new IllegalStateException("Mapper returned null Publisher"));
           return;
         }
-
-        // Subscribe to the inner publisher
         innerPub.subscribe(new InnerSubscriber());
-
       } catch (Throwable t) {
         onError(t);
       }
@@ -264,23 +246,17 @@ public class TdsResult implements Result {
     @Override
     public void onComplete() {
       upstreamDone = true;
-      // If no inner is running, we are fully done
       if (activeInner.get() == null) {
         downstream.onComplete();
       }
     }
 
-    // --- Inner Subscriber (Handles the mapped data) ---
-
     private class InnerSubscriber implements Subscriber<T> {
       @Override
       public void onSubscribe(Subscription s) {
         if (activeInner.compareAndSet(null, s)) {
-          // Forward existing demand to the new inner subscription
           long d = demand.get();
-          if (d > 0) {
-            s.request(d);
-          }
+          if (d > 0) s.request(d);
         } else {
           s.cancel();
         }
@@ -289,48 +265,40 @@ public class TdsResult implements Result {
       @Override
       public void onNext(T t) {
         if (isCancelled.get()) return;
-        demand.decrementAndGet();
+
+        // Only decrement if demand isn't unbounded
+        long currentDemand = demand.get();
+        if (currentDemand != Long.MAX_VALUE) {
+          demand.decrementAndGet();
+        }
         downstream.onNext(t);
       }
 
       @Override
       public void onError(Throwable t) {
-        // Inner failure fails the whole stream
         FlatMapSubscriber.this.onError(t);
       }
 
       @Override
       public void onComplete() {
-        // Inner finished.
         activeInner.set(null);
-
         if (upstreamDone) {
           downstream.onComplete();
         } else {
-          // Replenish: Request the next segment from upstream
-          // We don't check demand > 0 here because we MUST consume the segments
-          // to find the next OutParameters or Row, even if the user hasn't asked for more data rows yet.
-          // However, strictly speaking, we only drive upstream if we want data.
-          // But in TdsResult, "upstream" are segments, not data rows.
-          // We assume we always need to traverse segments to find the data.
           Subscription up = upstream.get();
-          if (up != null) {
-            up.request(1);
-          }
+          if (up != null) up.request(1);
         }
       }
     }
 
-    // Helper for safe addition
-    private long addCap(AtomicLong requested, long n) {
+    private void addCap(AtomicLong requested, long n) {
       long current, next;
       do {
         current = requested.get();
-        if (current == Long.MAX_VALUE) return Long.MAX_VALUE;
+        if (current == Long.MAX_VALUE) return;
         next = current + n;
         if (next < 0) next = Long.MAX_VALUE;
       } while (!requested.compareAndSet(current, next));
-      return next;
     }
   }
 }

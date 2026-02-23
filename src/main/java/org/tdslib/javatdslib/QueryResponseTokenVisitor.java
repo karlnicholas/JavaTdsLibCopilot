@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, TokenVisitor, Subscription {
@@ -43,6 +44,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   private final AtomicLong demand = new AtomicLong(0);
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
   private final AtomicBoolean upstreamDone = new AtomicBoolean(false);
+  private final AtomicInteger wip = new AtomicInteger();
 
   private final Queue<Result.Segment> buffer = new ConcurrentLinkedQueue<>();
 
@@ -140,41 +142,72 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   }
 
   private void drain() {
-    // FIX: Fail loudly if data arrives without a subscriber
     if (subscriber == null) {
       if (!buffer.isEmpty()) {
-        // 1. Mark as cancelled to stop further processing
         isCancelled.set(true);
+        transport.cancelCurrent();
+        throw new IllegalStateException("Protocol Violation: Received " + buffer.size() + " segments without a Subscriber.");
+      }
+      return;
+    }
 
-        // 2. Attempt to shut down the transport
-        try {
-          transport.cancelCurrent();
-        } catch (Exception e) {
-          // Log but don't suppress the main error
-          logger.error("Failed to cancel transport during illegal state shutdown", e);
+    // Prevent concurrent drains (Trampoline pattern)
+    if (wip.getAndIncrement() != 0) {
+      return;
+    }
+
+    int missed = 1;
+    do {
+      long requested = demand.get();
+      long emitted = 0;
+
+      while (emitted != requested) {
+        if (isCancelled.get()) {
+          buffer.clear();
+          return;
         }
 
-        // 3. Throw exception to the caller (Transport Thread)
-        throw new IllegalStateException("Protocol Violation: Received " + buffer.size() + " segments without a Subscriber. " +
-            "This implies data arrived before 'subscribe()' or after 'cancel()'.");
-      }
-      return; // Safe to ignore spurious calls if buffer is empty
-    }
+        boolean done = upstreamDone.get();
+        Result.Segment s = buffer.poll();
+        boolean empty = (s == null);
 
-    // Normal drain loop...
-    while (!buffer.isEmpty() && demand.get() > 0) {
-      Result.Segment s = buffer.poll();
-      if (s != null) {
+        if (done && empty) {
+          if (isCancelled.compareAndSet(false, true)) {
+            subscriber.onComplete();
+          }
+          return;
+        }
+
+        if (empty) {
+          break;
+        }
+
         subscriber.onNext(s);
-        demand.decrementAndGet();
+        emitted++;
       }
-    }
 
-    if (upstreamDone.get() && buffer.isEmpty()) {
-      if (isCancelled.compareAndSet(false, true)) {
-        subscriber.onComplete();
+      // Check completion if demand is exactly fulfilled
+      if (emitted == requested) {
+        if (isCancelled.get()) {
+          buffer.clear();
+          return;
+        }
+        boolean done = upstreamDone.get();
+        if (done && buffer.isEmpty()) {
+          if (isCancelled.compareAndSet(false, true)) {
+            subscriber.onComplete();
+          }
+          return;
+        }
       }
-    }
+
+      // Subtract emitted items from total demand
+      if (emitted != 0 && requested != Long.MAX_VALUE) {
+        demand.addAndGet(-emitted);
+      }
+
+      missed = wip.addAndGet(-missed);
+    } while (missed != 0);
   }
 
   private void addDemand(long n) {

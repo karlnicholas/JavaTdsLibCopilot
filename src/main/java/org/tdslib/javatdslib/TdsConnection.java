@@ -69,7 +69,7 @@ public class TdsConnection implements Connection {
 
   @Override
   public Batch createBatch() {
-    return null;
+    return new TdsBatch(this.transport);
   }
 
   @Override
