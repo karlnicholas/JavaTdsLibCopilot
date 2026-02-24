@@ -4,6 +4,7 @@ import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
+import org.tdslib.javatdslib.transport.CollationUtils;
 
 import java.nio.charset.Charset;
 import java.util.List;
@@ -37,10 +38,22 @@ class TdsRow implements Row {
 
     if (data == null) return null;
 
-    TdsType tdsType = ((ColumnMeta) meta.getNativeTypeMetadata()).getTypeInfo().getTdsType();
+    // Extract TypeInfo to get TDS type and collation bytes
+    var typeInfo = ((ColumnMeta) meta.getNativeTypeMetadata()).getTypeInfo();
+    TdsType tdsType = typeInfo.getTdsType();
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
-    return TdsDataConverter.convert(data, tdsType, type, scale, varcharCharset);
+    // Dynamically resolve Charset using CollationUtils, fallback to varcharCharset
+    Charset resolvedCharset = varcharCharset;
+    byte[] collationBytes = typeInfo.getCollation();
+
+    if (collationBytes != null) {
+      resolvedCharset = CollationUtils.getCharsetFromCollation(collationBytes)
+          .orElse(varcharCharset);
+    }
+
+    // Pass the resolved charset into the converter
+    return TdsDataConverter.convert(data, tdsType, type, scale, resolvedCharset);
   }
 
   @Override

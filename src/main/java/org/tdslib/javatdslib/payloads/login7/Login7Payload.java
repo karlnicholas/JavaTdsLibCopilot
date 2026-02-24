@@ -122,24 +122,13 @@ public final class Login7Payload extends Payload {
     final FieldRef refApp = new FieldRef(appBytes, true, currentOffset);
     currentOffset += appBytes.length;
 
-//    final FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);
-//    currentOffset += serverBytes.length;
-//
-//    final FieldRef refExt = new FieldRef(extBytes, false, currentOffset); // Binary
-//    currentOffset += extBytes.length;
-//
-//    final FieldRef refLib = new FieldRef(libBytes, true, currentOffset);
-//    currentOffset += libBytes.length;
-
     final FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);
     currentOffset += serverBytes.length;
 
-    // --- PATCH 1 START ---
     // Instead of storing the raw extension bytes, we allocate a 4-byte pointer.
     final byte[] extPointerBytes = extBytes.length > 0 ? new byte[4] : new byte[0];
     final FieldRef refExt = new FieldRef(extPointerBytes, false, currentOffset); // Binary
     currentOffset += extPointerBytes.length;
-    // --- PATCH 1 END ---
 
     final FieldRef refLib = new FieldRef(libBytes, true, currentOffset);
     currentOffset += libBytes.length;
@@ -157,13 +146,6 @@ public final class Login7Payload extends Payload {
 
     final FieldRef refAttach = new FieldRef(attachBytes, true, currentOffset);
     currentOffset += attachBytes.length;
-
-//    final FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset);
-//    currentOffset += changePassBytes.length;
-//
-//    // 3. Allocate Buffer
-//    // Total Size = currentOffset (Head + Data)
-//    this.buffer = ByteBuffer.allocate(currentOffset).order(ByteOrder.LITTLE_ENDIAN);
 
     final FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset);
     currentOffset += changePassBytes.length;
@@ -233,22 +215,7 @@ public final class Login7Payload extends Payload {
     // [90-93] SSPI Long Length (4 bytes)
     buffer.putInt(0);
 
-//    // 5. Write Variable Data (Order matches offset calculations)
-//    buffer.put(hostBytes);
-//    buffer.put(userBytes);
-//    buffer.put(passBytes);
-//    buffer.put(appBytes);
-//    buffer.put(serverBytes);
-//    buffer.put(extBytes);
-//    buffer.put(libBytes);
-//    buffer.put(langBytes);
-//    buffer.put(dbBytes);
-//    buffer.put(sspiBytes);
-//    buffer.put(attachBytes);
-//    buffer.put(changePassBytes);
-//
-//    buffer.flip();
-// 5. Write Variable Data (Order matches offset calculations)
+    // 5. Write Variable Data (Order matches offset calculations)
     buffer.put(hostBytes);
     buffer.put(userBytes);
     buffer.put(passBytes);

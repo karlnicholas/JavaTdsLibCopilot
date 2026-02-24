@@ -69,7 +69,7 @@ public class CollationUtils {
    */
   private static Optional<Charset> codePageToCharset(int codePage) {
     return switch (codePage) {
-      case 1252 -> Optional.of(StandardCharsets.ISO_8859_1);  // Closest common match (often used)
+      case 1252 -> Optional.of(Charset.forName("windows-1252")); // Use actual Windows-1252
       case 1251 -> Optional.of(Charset.forName("windows-1251"));
       case 1250 -> Optional.of(Charset.forName("windows-1250"));
       case 932  -> Optional.of(Charset.forName("windows-31j")); // Shift_JIS variant

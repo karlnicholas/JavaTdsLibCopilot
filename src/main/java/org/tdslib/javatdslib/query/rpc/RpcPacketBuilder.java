@@ -1,6 +1,8 @@
 package org.tdslib.javatdslib.query.rpc;
 
 import io.r2dbc.spi.Parameter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 
@@ -15,10 +17,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
 public class RpcPacketBuilder {
+  private static final Logger logger = LoggerFactory.getLogger(RpcPacketBuilder.class);
 
   private static final short RPC_PROCID_SPEXECUTESQL = 10;
   private static final byte RPC_PARAM_DEFAULT = 0x00;
@@ -29,12 +33,30 @@ public class RpcPacketBuilder {
   private final List<List<ParamEntry>> batchParams; // NOW TAKES A LIST OF BATCHES
   private final boolean update;
   private final Charset varcharCharset;
+  private final byte[] collationBytes; // NEW: Dynamic Collation
 
-  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update, Charset varcharCharset) {
+  /**
+   * Constructs a new RpcPacketBuilder.
+   * * @param sql The SQL statement
+   * @param batchParams The batch parameters
+   * @param update True if this is an update query
+   * @param varcharCharset The charset negotiated for the connection
+   * @param collationBytes The 5-byte collation array reported by the server
+   */
+  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update, Charset varcharCharset, byte[] collationBytes) {
     this.sql = sql;
     this.batchParams = batchParams;
     this.update = update;
     this.varcharCharset = varcharCharset;
+
+    // Ensure we always have exactly 5 bytes for the collation.
+    // Fallback to CP1252 (Sort ID 52) if missing.
+    if (collationBytes != null && collationBytes.length >= 5) {
+      this.collationBytes = new byte[5];
+      System.arraycopy(collationBytes, 0, this.collationBytes, 0, 5);
+    } else {
+      this.collationBytes = new byte[]{0x09, 0x04, (byte) 0xD0, 0x00, 0x34};
+    }
   }
 
   public ByteBuffer buildRpcPacket() {
@@ -417,8 +439,38 @@ public class RpcPacketBuilder {
     buf.put(name.getBytes(StandardCharsets.UTF_16LE));
   }
 
+  // ─────────────────────────────────────────────────────────
+  // 1. Update writeCollation to use the dynamic bytes
+  // ─────────────────────────────────────────────────────────
   private void writeCollation(ByteBuffer buf) {
-    buf.put(new byte[]{0x09, 0x04, (byte) 0xD0, 0x00, 0x34});
+    if (collationBytes != null) {
+      String hexString = HexFormat.of()
+          .withDelimiter(" ")
+          .withUpperCase()
+          .formatHex(collationBytes);
+
+      logger.debug("RpcPacketBuiler Collation bytes: {}", hexString);
+    } else {
+      logger.debug("RpcPacketBuiler Collation bytes: null");
+    }
+    buf.put(collationBytes);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 2. Fix getEncodedLength to use the dynamic charset
+  // ─────────────────────────────────────────────────────────
+  private int getEncodedLength(TdsType type, Object value) {
+    if (value == null) return 0;
+    if (value instanceof byte[]) return ((byte[]) value).length;
+    if (value instanceof ByteBuffer) return ((ByteBuffer) value).remaining();
+    if (value instanceof String s) {
+      if (type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT) {
+        return s.length() * 2;
+      }
+      // CRITICAL FIX: Use the negotiated charset, not the hardcoded WINDOWS_1252
+      return s.getBytes(varcharCharset).length;
+    }
+    return 0;
   }
 
   private byte[] convertToBytes(Object value) {
@@ -460,19 +512,6 @@ public class RpcPacketBuilder {
 
   private int getDecimalScale(BigDecimal bd) {
     return Math.max(0, Math.min(38, bd.scale()));
-  }
-
-  private int getEncodedLength(TdsType type, Object value) {
-    if (value == null) return 0;
-    if (value instanceof byte[]) return ((byte[]) value).length;
-    if (value instanceof ByteBuffer) return ((ByteBuffer) value).remaining();
-    if (value instanceof String s) {
-      if (type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT) {
-        return s.length() * 2;
-      }
-      return s.getBytes(WINDOWS_1252).length;
-    }
-    return 0;
   }
 
   private void writePlp(ByteBuffer buf, byte[] data) {

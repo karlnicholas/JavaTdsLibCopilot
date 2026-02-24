@@ -13,6 +13,7 @@ import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -146,7 +147,13 @@ public class TdsStatement implements Statement {
   }
 
   private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
-    RpcPacketBuilder builder = new RpcPacketBuilder(sql, executions, true, transport.getVarcharCharset());
+    RpcPacketBuilder builder = new RpcPacketBuilder(
+        sql,
+        batchParams,
+        true,
+        transport.getVarcharCharset(),
+        transport.getCurrentCollationBytes()
+    );
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
   }

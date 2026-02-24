@@ -671,7 +671,16 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
                   : "none";
 
           final int baseLcid = fullLcid & 0x000FFFFF; // lower 20 bits = locale ID
+          if (newCollationData != null) {
+            String hexString = HexFormat.of()
+                .withDelimiter(" ")
+                .withUpperCase()
+                .formatHex(newCollationData);
 
+            logger.debug("Collation bytes: {}", hexString);
+          } else {
+            logger.debug("Collation bytes: null");
+          }
           // Shortened log message to satisfy LineLength check
           logger.info(
                   "SQL Collation updated: {} (LCID={}, flags={}, ver={}, sort={}, id={})",
