@@ -62,6 +62,7 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   private final TlsHandshake tlsHandshake;
 
   private TdsVersion tdsVersion = TdsVersion.V7_4;
+  private boolean utf8Negotiated = false;
   private String currentDatabase;
   private String currentLanguage;
   private String currentCharset;
@@ -525,6 +526,9 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
   @Override public TdsVersion getTdsVersion() { return tdsVersion; }
   @Override public void setTdsVersion(TdsVersion version) { this.tdsVersion = version; }
   @Override public boolean isUnicodeEnabled() { return tdsVersion.ordinal() >= TdsVersion.V7_1.ordinal(); }
+
+  @Override public boolean isUtf8Negotiated() { return utf8Negotiated; }
+  @Override public void setUtf8Negotiated(boolean negotiated) { this.utf8Negotiated = negotiated; }
   @Override public String getCurrentDatabase() { return currentDatabase; }
   @Override public void setDatabase(String database) { this.currentDatabase = database; }
   @Override public String getCurrentLanguage() { return currentLanguage; }
@@ -547,6 +551,7 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
 
   @Override
   public void resetToDefaults() {
+    utf8Negotiated = false; // Add this
     currentDatabase = null;
     currentLanguage = "us_english";
     currentCharset = null;

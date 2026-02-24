@@ -58,8 +58,6 @@ public final class Login7Payload extends Payload {
       Random r = new Random();
       r.nextBytes(this.clientId);
     }
-
-    buildBufferInternal();
   }
 
   /**
@@ -124,11 +122,24 @@ public final class Login7Payload extends Payload {
     final FieldRef refApp = new FieldRef(appBytes, true, currentOffset);
     currentOffset += appBytes.length;
 
+//    final FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);
+//    currentOffset += serverBytes.length;
+//
+//    final FieldRef refExt = new FieldRef(extBytes, false, currentOffset); // Binary
+//    currentOffset += extBytes.length;
+//
+//    final FieldRef refLib = new FieldRef(libBytes, true, currentOffset);
+//    currentOffset += libBytes.length;
+
     final FieldRef refServer = new FieldRef(serverBytes, true, currentOffset);
     currentOffset += serverBytes.length;
 
-    final FieldRef refExt = new FieldRef(extBytes, false, currentOffset); // Binary
-    currentOffset += extBytes.length;
+    // --- PATCH 1 START ---
+    // Instead of storing the raw extension bytes, we allocate a 4-byte pointer.
+    final byte[] extPointerBytes = extBytes.length > 0 ? new byte[4] : new byte[0];
+    final FieldRef refExt = new FieldRef(extPointerBytes, false, currentOffset); // Binary
+    currentOffset += extPointerBytes.length;
+    // --- PATCH 1 END ---
 
     final FieldRef refLib = new FieldRef(libBytes, true, currentOffset);
     currentOffset += libBytes.length;
@@ -147,8 +158,30 @@ public final class Login7Payload extends Payload {
     final FieldRef refAttach = new FieldRef(attachBytes, true, currentOffset);
     currentOffset += attachBytes.length;
 
+//    final FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset);
+//    currentOffset += changePassBytes.length;
+//
+//    // 3. Allocate Buffer
+//    // Total Size = currentOffset (Head + Data)
+//    this.buffer = ByteBuffer.allocate(currentOffset).order(ByteOrder.LITTLE_ENDIAN);
+
     final FieldRef refChange = new FieldRef(changePassBytes, true, currentOffset);
     currentOffset += changePassBytes.length;
+
+    // --- PATCH 2 START ---
+    // Now we know where the actual extension block will go (the very end).
+    // Let's populate the 4-byte pointer with this offset before allocating the buffer.
+    if (extBytes.length > 0) {
+      int featureExtOffset = currentOffset;
+      // Write the featureExtOffset (Little Endian DWORD) into the pointer array
+      extPointerBytes[0] = (byte) (featureExtOffset & 0xFF);
+      extPointerBytes[1] = (byte) ((featureExtOffset >> 8) & 0xFF);
+      extPointerBytes[2] = (byte) ((featureExtOffset >> 16) & 0xFF);
+      extPointerBytes[3] = (byte) ((featureExtOffset >> 24) & 0xFF);
+
+      currentOffset += extBytes.length; // Add the actual extension bytes to total length
+    }
+    // --- PATCH 2 END ---
 
     // 3. Allocate Buffer
     // Total Size = currentOffset (Head + Data)
@@ -200,19 +233,46 @@ public final class Login7Payload extends Payload {
     // [90-93] SSPI Long Length (4 bytes)
     buffer.putInt(0);
 
-    // 5. Write Variable Data (Order matches offset calculations)
+//    // 5. Write Variable Data (Order matches offset calculations)
+//    buffer.put(hostBytes);
+//    buffer.put(userBytes);
+//    buffer.put(passBytes);
+//    buffer.put(appBytes);
+//    buffer.put(serverBytes);
+//    buffer.put(extBytes);
+//    buffer.put(libBytes);
+//    buffer.put(langBytes);
+//    buffer.put(dbBytes);
+//    buffer.put(sspiBytes);
+//    buffer.put(attachBytes);
+//    buffer.put(changePassBytes);
+//
+//    buffer.flip();
+// 5. Write Variable Data (Order matches offset calculations)
     buffer.put(hostBytes);
     buffer.put(userBytes);
     buffer.put(passBytes);
     buffer.put(appBytes);
     buffer.put(serverBytes);
-    buffer.put(extBytes);
+
+    // --- PATCH 3 START ---
+    // Write the 4-byte pointer into the regular string stream
+    buffer.put(extPointerBytes);
+    // --- PATCH 3 END ---
+
     buffer.put(libBytes);
     buffer.put(langBytes);
     buffer.put(dbBytes);
     buffer.put(sspiBytes);
     buffer.put(attachBytes);
     buffer.put(changePassBytes);
+
+    // --- PATCH 3 CONTINUED ---
+    // Append the actual FeatureExt block to the absolute end of the packet
+    if (extBytes.length > 0) {
+      buffer.put(extBytes);
+    }
+    // --- PATCH 3 END ---
 
     buffer.flip();
   }
@@ -248,6 +308,24 @@ public final class Login7Payload extends Payload {
         buffers.add(fb);
         hasExtensions = true;
       }
+    }
+
+// ─────────────────────────────────────────────────────────
+    // NEW: Request UTF-8 Support (Feature ID: 0x0A)
+    // ─────────────────────────────────────────────────────────
+    // TODO: You might want to wrap this in an `if (options.requestUtf8())`
+    // depending on how you want to expose this to the library user.
+    boolean requestUtf8 = true;
+
+    if (requestUtf8) {
+      ByteBuffer utf8Feature = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN);
+      utf8Feature.put((byte) 0x0A); // Feature ID: 10 (UTF-8 Support)
+      utf8Feature.putInt(1);        // Feature Data Length: 1 byte
+      utf8Feature.put((byte) 0x01); // Feature Data: 1 (Enabled)
+      utf8Feature.flip();
+
+      buffers.add(utf8Feature);
+      hasExtensions = true;
     }
 
     // Only write extensions block if we actually have extensions

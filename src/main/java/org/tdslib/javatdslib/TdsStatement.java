@@ -146,8 +146,7 @@ public class TdsStatement implements Statement {
   }
 
   private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
-    // RpcPacketBuilder now accepts the List of Lists and handles the 0x80 BatchFlag
-    RpcPacketBuilder builder = new RpcPacketBuilder(sql, executions, true);
+    RpcPacketBuilder builder = new RpcPacketBuilder(sql, executions, true, transport.getVarcharCharset());
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
   }

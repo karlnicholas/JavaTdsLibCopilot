@@ -7,12 +7,10 @@ import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.HashMap;
+import java.util.Map;
 
-/**
- * Parser for FEATURE_EXT_ACK token (0xAE).
- *
- * <p>Eagerly decodes the feature ID and its associated data.</p>
- */
 public class FeatureExtAckTokenParser implements TokenParser {
 
   @Override
@@ -21,22 +19,30 @@ public class FeatureExtAckTokenParser implements TokenParser {
                      final ConnectionContext context,
                      final QueryContext queryContext) {
     if (tokenType != TokenType.FEATURE_EXT_ACK.getValue()) {
-      final String hex = Integer.toHexString(tokenType & 0xFF);
-      throw new IllegalArgumentException(
-          "Expected FEATURE_EXT_ACK token (0xAE), got 0x" + hex
-      );
+      throw new IllegalArgumentException("Expected FEATURE_EXT_ACK token (0xAE)");
     }
 
-    // Feature extension ID (1 byte)
-    byte featureId = payload.get();
+    // TDS uses Little Endian for all multi-byte integers
+    payload.order(ByteOrder.LITTLE_ENDIAN);
+    Map<Byte, byte[]> features = new HashMap<>();
 
-    // Remaining bytes are the feature-specific data (variable length)
-    int remaining = payload.remaining();
-    byte[] data = new byte[remaining];
-    if (remaining > 0) {
-      payload.get(data);
+    while (payload.hasRemaining()) {
+      byte featureId = payload.get();
+      if (featureId == (byte) 0xFF) { // 255 = Terminator
+        break;
+      }
+
+      // Feature Data Length is a 4-byte integer
+      int featureLen = payload.getInt();
+      byte[] data = new byte[featureLen];
+      if (featureLen > 0) {
+        payload.get(data);
+      }
+
+      features.put(featureId, data);
     }
 
-    return new FeatureExtAckToken(tokenType, featureId, data);
+    // Return the immutable token with no side-effects
+    return new FeatureExtAckToken(tokenType, features);
   }
 }

@@ -226,7 +226,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         metaList.add(new TdsColumnMetadata(cm));
       }
     }
-    return new TdsRowSegment(new TdsRow(token.getColumnData(), metaList));
+    return new TdsRowSegment(new TdsRow(token.getColumnData(), metaList, transport.getVarcharCharset()));
   }
 
   private Result.OutSegment createOutSegment(QueryContext ctx) {
@@ -235,12 +235,11 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
     List<TdsOutParameterMetadata> metaList = new ArrayList<>(tokens.size());
 
     for (ReturnValueToken token : tokens) {
-      // Cast the Object return to byte[] since TDS delivers raw buffers here
       values.add((byte[]) token.getValue());
       metaList.add(new TdsOutParameterMetadata(token));
     }
 
-    return new TdsOutSegment(new TdsOutParameters(values, metaList));
+    return new TdsOutSegment(new TdsOutParameters(values, metaList, transport.getVarcharCharset()));
   }
 
   private void errorHandler(Throwable t) {

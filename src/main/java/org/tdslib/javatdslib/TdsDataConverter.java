@@ -4,13 +4,14 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.UUID;
 
 public class TdsDataConverter {
 
-  public static <T> T convert(byte[] data, TdsType tdsType, Class<T> type, int scale) {
+  public static <T> T convert(byte[] data, TdsType tdsType, Class<T> type, int scale, Charset varcharCharset) {
     if (data == null) return null;
 
     switch (tdsType) {
@@ -71,7 +72,7 @@ public class TdsDataConverter {
       case VARCHAR:
       case CHAR:
       case TEXT:
-        return type.cast(new String(data, java.nio.charset.Charset.forName("windows-1252")));
+        return type.cast(new String(data, varcharCharset));
 
       case NVARCHAR:
       case NCHAR:

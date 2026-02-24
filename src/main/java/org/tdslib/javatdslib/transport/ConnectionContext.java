@@ -40,6 +40,9 @@ public interface ConnectionContext {
    */
   boolean isUnicodeEnabled();
 
+  boolean isUtf8Negotiated();
+  void setUtf8Negotiated(boolean negotiated);
+
   // === Database ===
 
   /**
@@ -205,5 +208,14 @@ public interface ConnectionContext {
       return StandardCharsets.UTF_16LE;  // TDS uses UTF-16LE for nvarchar/nchar
     }
     return getNonUnicodeCharset().orElse(StandardCharsets.ISO_8859_1); // fallback
+  }
+  /**
+   * Returns UTF-8 if negotiated, otherwise falls back to the Server Collation Code Page.
+   */
+  default Charset getVarcharCharset() {
+    if (isUtf8Negotiated()) {
+      return StandardCharsets.UTF_8;
+    }
+    return getNonUnicodeCharset().orElse(Charset.forName("windows-1252"));
   }
 }

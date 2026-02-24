@@ -36,12 +36,14 @@ class TdsOutParameters implements OutParameters {
   private final TdsOutParametersMetadata metadata;
   private final List<TdsOutParameterMetadata> metadataList;
   private final Map<String, Integer> nameToIndex;
+  private final java.nio.charset.Charset varcharCharset; // <-- Add this
 
-  TdsOutParameters(List<byte[]> rawValues, List<TdsOutParameterMetadata> metadataList) {
+  TdsOutParameters(List<byte[]> rawValues, List<TdsOutParameterMetadata> metadataList, java.nio.charset.Charset varcharCharset) {
     this.rawValues = rawValues;
     this.metadataList = metadataList;
     this.metadata = new TdsOutParametersMetadata(metadataList);
     this.nameToIndex = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    this.varcharCharset = varcharCharset; // <-- Assign it here
 
     for (int i = 0; i < metadataList.size(); i++) {
       String name = metadataList.get(i).getName();
@@ -69,12 +71,10 @@ class TdsOutParameters implements OutParameters {
     if (data == null) return null;
 
     TdsOutParameterMetadata meta = metadataList.get(index);
-
-    // Utilize the getter methods defined in TdsOutParameterMetadata
     TdsType tdsType = meta.getTdsType();
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
-    return TdsDataConverter.convert(data, tdsType, type, scale);
+    return TdsDataConverter.convert(data, tdsType, type, scale, this.varcharCharset);
   }
 
   @Override

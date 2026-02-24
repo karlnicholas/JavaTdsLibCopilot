@@ -28,11 +28,13 @@ public class RpcPacketBuilder {
   private final String sql;
   private final List<List<ParamEntry>> batchParams; // NOW TAKES A LIST OF BATCHES
   private final boolean update;
+  private final Charset varcharCharset;
 
-  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update) {
+  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update, Charset varcharCharset) {
     this.sql = sql;
     this.batchParams = batchParams;
     this.update = update;
+    this.varcharCharset = varcharCharset;
   }
 
   public ByteBuffer buildRpcPacket() {
@@ -323,7 +325,7 @@ public class RpcPacketBuilder {
       case VARCHAR:
       case CHAR:
         String sVal = (value instanceof String) ? (String) value : value.toString();
-        byte[] ascii = sVal.getBytes(WINDOWS_1252);
+        byte[] ascii = sVal.getBytes(varcharCharset); // Use the dynamic charset!
 
         if (ascii.length > 8000) {
           writePlp(buf, ascii);

@@ -5,17 +5,20 @@ import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 
+import java.nio.charset.Charset;
 import java.util.List;
 
 class TdsRow implements Row {
   private final List<byte[]> columnData;
   private final List<ColumnMetadata> columnMetadata;
   private final TdsRowMetadata rowMetadata;
+  private final Charset varcharCharset;
 
-  TdsRow(List<byte[]> columnData, List<ColumnMetadata> columnMetadata) {
+  TdsRow(List<byte[]> columnData, List<ColumnMetadata> columnMetadata, Charset varcharCharset) {
     this.columnData = columnData;
     this.columnMetadata = columnMetadata;
     this.rowMetadata = new TdsRowMetadata(columnMetadata);
+    this.varcharCharset = varcharCharset;
   }
 
   @Override
@@ -37,7 +40,7 @@ class TdsRow implements Row {
     TdsType tdsType = ((ColumnMeta) meta.getNativeTypeMetadata()).getTypeInfo().getTdsType();
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
-    return TdsDataConverter.convert(data, tdsType, type, scale);
+    return TdsDataConverter.convert(data, tdsType, type, scale, varcharCharset);
   }
 
   @Override

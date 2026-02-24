@@ -3,49 +3,45 @@ package org.tdslib.javatdslib.tokens.featureextack;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 
+import java.util.Collections;
+import java.util.Map;
+
 /**
- * FEATURE_EXT_ACK token (0xAE) - acknowledges feature extensions (e.g., FedAuth).
+ * FEATURE_EXT_ACK token (0xAE) - acknowledges feature extensions.
  */
 public final class FeatureExtAckToken extends Token {
 
-  private final byte featureId;
-  private final byte[] data; // Raw data bytes following the ID
+  private final Map<Byte, byte[]> features;
 
   /**
    * Constructs a new FeatureExtAckToken.
    *
-   * <p>Creates an immutable token instance with the provided token type,
-   * feature identifier and associated raw data.</p>
-   *
    * @param tokenType the raw token type byte as received from the stream
-   * @param featureId the feature extension identifier
-   * @param data      the raw feature data bytes; may be {@code null}
+   * @param features  map of acknowledged feature IDs to their data payloads
    */
-  public FeatureExtAckToken(final byte tokenType, final byte featureId, final byte[] data) {
+  public FeatureExtAckToken(final byte tokenType, final Map<Byte, byte[]> features) {
     super(TokenType.fromValue(tokenType));
-    this.featureId = featureId;
-    this.data = data != null ? data.clone() : new byte[0];
+    this.features = features != null ? features : Collections.emptyMap();
   }
 
   /**
-   * Gets the feature extension ID (e.g., FED_AUTH = 0x02).
+   * Gets the raw data bytes associated with a specific feature ID.
    */
-  public byte getFeatureId() {
-    return featureId;
+  public byte[] getFeatureData(byte featureId) {
+    return features.get(featureId);
   }
 
   /**
-   * Gets the raw data bytes associated with this feature (may be empty).
+   * Helper method to easily check if UTF-8 was successfully negotiated.
    */
-  public byte[] getData() {
-    return data.clone();
+  public boolean isUtf8Negotiated() {
+    byte[] data = features.get(FeatureId.UTF8_SUPPORT);
+    // According to MS-TDS, data of 0x01 means enabled
+    return data != null && data.length > 0 && data[0] == 0x01;
   }
 
   @Override
   public String toString() {
-    return String.format(
-        "FeatureExtAckToken{featureId=0x%02X, dataLength=%d}",
-        featureId & 0xFF, data.length
-    );
+    return "FeatureExtAckToken{featuresCount=" + features.size() + "}";
   }
 }

@@ -7,6 +7,7 @@ import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
+import org.tdslib.javatdslib.tokens.featureextack.FeatureExtAckToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
 import org.tdslib.javatdslib.transport.TdsTransport;
@@ -70,6 +71,10 @@ public class LoginResponse implements TokenVisitor {
       );
     } else if (token instanceof DoneToken done) {
       logger.debug("Batch completed (status: {})", done.getStatus());
+    } else if (token instanceof FeatureExtAckToken featureAck) {
+      // NEW: Capture the extension acknowledgment token
+      transport.setUtf8Negotiated(featureAck.isUtf8Negotiated());
+      logger.debug("Captured FEATURE_EXT_ACK: UTF-8 Negotiated = {}", featureAck.isUtf8Negotiated());
     } else {
       logger.debug("Unhandled token type: {}", token.getType());
     }
