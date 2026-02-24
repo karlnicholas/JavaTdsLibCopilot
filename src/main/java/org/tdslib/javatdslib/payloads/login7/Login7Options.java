@@ -23,7 +23,7 @@ public class Login7Options {
    */
   public Login7Options() {
     this.tdsVersion = TdsVersion.V7_4;
-    this.packetSize = TdsConstants.DEFAULT_PACKET_SIZE;
+    this.packetSize = 8000; // TdsConstants.DEFAULT_PACKET_SIZE;
     this.clientProgVer = 0;
     this.clientPid = ProcessHandle.current().pid();
     this.connectionId = 0;
