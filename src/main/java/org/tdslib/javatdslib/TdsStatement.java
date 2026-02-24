@@ -17,10 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-// REMOVED: static import ...BindingType.inferBindingType;
 
 public class TdsStatement implements Statement {
 
@@ -28,7 +24,7 @@ public class TdsStatement implements Statement {
   private final TdsTransport transport;
   private final List<List<ParamEntry>> batchParams = new ArrayList<>();
   private List<ParamEntry> currentParams = new ArrayList<>();
-  private int fetchSize = 0; // 0 means default/unlimited
+  private int fetchSize = 0;
 
   public TdsStatement(TdsTransport transport, String query) {
     this.transport = transport;
@@ -55,22 +51,13 @@ public class TdsStatement implements Statement {
       throw new IllegalArgumentException("value cannot be null. Use bindNull.");
     }
 
-    // 1. Canonicalize to R2DBC Parameter
-    // (If user passed raw Int, wrap it. If they passed Parameters.in(), use it)
-    Parameter p = (value instanceof Parameter)
-            ? (Parameter) value
-            : Parameters.in(value);
-
-    // 2. Resolve TdsType
-//    ((R2dbcType)p.getType()).
+    Parameter p = (value instanceof Parameter) ? (Parameter) value : Parameters.in(value);
     TdsType tdsType = resolveTdsType(p);
 
     if (tdsType == null) {
       throw new IllegalArgumentException("Unsupported parameter type: " + p.getType());
     }
 
-    // 3. Add to parameters
-    // Note: Ensure your BindingKey class is updated to accept TdsType!
     currentParams.add(new ParamEntry(new BindingKey(tdsType, name), p));
     return this;
   }
@@ -83,12 +70,8 @@ public class TdsStatement implements Statement {
   @Override
   public Statement bindNull(String name, Class<?> type) {
     if (type == null) throw new IllegalArgumentException("Type cannot be null");
-
-    // Resolve directly from Class
     TdsType tdsType = TdsType.inferFromJavaType(type);
-    if (tdsType == null) {
-      throw new IllegalArgumentException("Unsupported type for NULL: " + type.getName());
-    }
+    if (tdsType == null) throw new IllegalArgumentException("Unsupported type for NULL: " + type.getName());
 
     currentParams.add(new ParamEntry(new BindingKey(tdsType, name), null));
     return this;
@@ -117,46 +100,37 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
+    // Return the Publisher<Result> routed through our BatchResultSplitter!
     return new Publisher<Result>() {
       @Override
       public void subscribe(Subscriber<? super Result> subscriber) {
-        subscriber.onSubscribe(new Subscription() {
-          private final AtomicInteger index = new AtomicInteger(0);
-          private final AtomicBoolean completed = new AtomicBoolean(false);
-
-          @Override
-          public void request(long n) {
-            if (n <= 0) {
-              subscriber.onError(new IllegalArgumentException("n must be > 0"));
-              return;
-            }
-
-            if (!completed.compareAndSet(false, true)) {
-              return;
-            }
-
-            try {
-              if (isSimpleBatch) {
-                TdsMessage message = createSqlBatchMessage(query);
-                subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, message)));
-              } else {
-                // Execute ALL batched parameter sets immediately
-                for (List<ParamEntry> params : executions) {
-                  TdsMessage message = createRpcMessage(query, params);
-                  subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, message)));
-                }
-              }
-              subscriber.onComplete();
-            } catch (Exception e) {
-              subscriber.onError(e);
-            }
+        try {
+          TdsMessage message;
+          if (isSimpleBatch) {
+            message = createSqlBatchMessage(query);
+          } else {
+            // Send the ENTIRE batch payload as one message!
+            message = createRpcMessage(query, executions);
           }
 
-          @Override
-          public void cancel() {
-            completed.set(true);
-          }
-        });
+          // 1. Send the single request to the wire, get a flat stream of segments back
+          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, message);
+
+          // 2. Wrap it in the Batch Splitter to chunk it into distinct R2DBC Results
+          // (based on DONE/DONEPROC tokens).
+          BatchResultSplitter resultPublisher = new BatchResultSplitter(flatSegmentStream);
+
+          // 3. Subscribe the user's listener
+          resultPublisher.subscribe(subscriber);
+
+        } catch (Exception e) {
+          // Immediately fail the stream if message creation or subscription fails
+          subscriber.onSubscribe(new Subscription() {
+            @Override public void request(long n) {}
+            @Override public void cancel() {}
+          });
+          subscriber.onError(e);
+        }
       }
     };
   }
@@ -171,8 +145,9 @@ public class TdsStatement implements Statement {
     return TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
   }
 
-  private TdsMessage createRpcMessage(String sql, List<ParamEntry> params) {
-    RpcPacketBuilder builder = new RpcPacketBuilder(sql, params, true);
+  private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
+    // RpcPacketBuilder now accepts the List of Lists and handles the 0x80 BatchFlag
+    RpcPacketBuilder builder = new RpcPacketBuilder(sql, executions, true);
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
   }
@@ -183,24 +158,11 @@ public class TdsStatement implements Statement {
     return this;
   }
 
-//  // --- Helper to resolve TdsType from R2DBC Parameter ---
   private TdsType resolveTdsType(Parameter p) {
     Type t = p.getType();
-
-    // A. Explicit R2DBC Type
-    if (t instanceof R2dbcType rType) {
-      return TdsType.forR2dbcType(rType);
-    }
-
-    // B. Inferred Type (Class)
-    if (t instanceof Type.InferredType iType) {
-      return TdsType.inferFromJavaType(iType.getJavaType());
-    }
-
-    // C. Value Fallback
-    if (p.getValue() != null) {
-      return TdsType.inferFromJavaType(p.getValue().getClass());
-    }
+    if (t instanceof R2dbcType rType) return TdsType.forR2dbcType(rType);
+    if (t instanceof Type.InferredType iType) return TdsType.inferFromJavaType(iType.getJavaType());
+    if (p.getValue() != null) return TdsType.inferFromJavaType(p.getValue().getClass());
     return null;
   }
 }

@@ -26,48 +26,57 @@ public class RpcPacketBuilder {
   private static final long DAYS_TO_1970 = 719162;
 
   private final String sql;
-  private final List<ParamEntry> params;
+  private final List<List<ParamEntry>> batchParams; // NOW TAKES A LIST OF BATCHES
   private final boolean update;
 
-  public RpcPacketBuilder(String sql, List<ParamEntry> params, boolean update) {
+  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update) {
     this.sql = sql;
-    this.params = params;
+    this.batchParams = batchParams;
     this.update = update;
   }
 
   public ByteBuffer buildRpcPacket() {
-    ByteBuffer buf = ByteBuffer.allocate(1024 * 1024);
+    ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
     buf.order(ByteOrder.LITTLE_ENDIAN);
 
-    writeRpcHeader(buf);
+    for (int i = 0; i < batchParams.size(); i++) {
+      List<ParamEntry> params = batchParams.get(i);
 
-    // 1. @stmt
-    writeParamName(buf, "@stmt");
-    buf.put(RPC_PARAM_DEFAULT);
-    buf.put((byte) TdsType.NVARCHAR.byteVal);
-    buf.putShort((short) 8000);
-    writeCollation(buf);
+      // TDS Spec: 0x80 (BatchFlag) separates multiple RPCReqBatch requests
+      if (i > 0) {
+        buf.put((byte) 0xFF);
+      }
 
-    byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
-    buf.putShort((short) sqlBytes.length);
-    buf.put(sqlBytes);
+      writeRpcHeader(buf);
 
-    // 2. @params
-    if (!params.isEmpty()) {
-      writeParamName(buf, "@params");
+      // 1. @stmt
+      writeParamName(buf, "@stmt");
       buf.put(RPC_PARAM_DEFAULT);
       buf.put((byte) TdsType.NVARCHAR.byteVal);
       buf.putShort((short) 8000);
       writeCollation(buf);
 
-      String paramDecl = buildParamDecl();
-      byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
-      buf.putShort((short) declBytes.length);
-      buf.put(declBytes);
+      byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
+      buf.putShort((short) sqlBytes.length);
+      buf.put(sqlBytes);
 
-      // 3. Values
-      for (ParamEntry param : params) {
-        writeParam(buf, param);
+      // 2. @params
+      if (!params.isEmpty()) {
+        writeParamName(buf, "@params");
+        buf.put(RPC_PARAM_DEFAULT);
+        buf.put((byte) TdsType.NVARCHAR.byteVal);
+        buf.putShort((short) 8000);
+        writeCollation(buf);
+
+        String paramDecl = buildParamDecl(params);
+        byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
+        buf.putShort((short) declBytes.length);
+        buf.put(declBytes);
+
+        // 3. Values
+        for (ParamEntry param : params) {
+          writeParam(buf, param);
+        }
       }
     }
 
@@ -92,7 +101,7 @@ public class RpcPacketBuilder {
 
   // --- Parameter Declaration ---
 
-  private String buildParamDecl() {
+  private String buildParamDecl(List<ParamEntry> params) {
     if (params.isEmpty()) return "";
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < params.size(); i++) {
@@ -101,12 +110,14 @@ public class RpcPacketBuilder {
 
       String decl = getSqlTypeDeclaration(entry);
       sb.append(entry.key().name()).append(" ").append(decl);
-      if ( entry.value() instanceof Parameter.Out) {
+      if (entry.value() instanceof Parameter.Out) {
         sb.append(" output");
       }
     }
     return sb.toString();
   }
+
+  // ... (The rest of the class remains exactly the same: getSqlTypeDeclaration, writeParam, writeValue, etc.)
 
   private String getSqlTypeDeclaration(ParamEntry entry) {
     TdsType type = entry.key().type();
@@ -138,12 +149,10 @@ public class RpcPacketBuilder {
     if (type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT) {
       return isLargeString(entry) ? "nvarchar(max)" : "nvarchar(4000)";
     }
-    // Updated: Include BIGVARCHR and BIGCHAR
     if (type == TdsType.BIGVARCHR || type == TdsType.BIGCHAR ||
         type == TdsType.VARCHAR || type == TdsType.CHAR || type == TdsType.TEXT) {
       return isLargeString(entry) ? "varchar(max)" : "varchar(8000)";
     }
-    // Updated: Include BIGVARBIN and BIGBINARY
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY ||
         type == TdsType.VARBINARY || type == TdsType.IMAGE || type == TdsType.BINARY) {
       return isLargeBinary(entry) ? "varbinary(max)" : "varbinary(8000)";
@@ -174,8 +183,6 @@ public class RpcPacketBuilder {
     return len > 8000;
   }
 
-  // --- Binary Writing Logic ---
-
   private void writeParam(ByteBuffer buf, ParamEntry param) {
     writeParamName(buf, param.key().name());
     if ( param.value() instanceof Parameter.Out) {
@@ -186,11 +193,7 @@ public class RpcPacketBuilder {
 
     TdsType type = param.key().type();
 
-    // ... (INTN and FLTN blocks remain the same) ...
-    // --- INTERCEPTION: Enforce INTN ...
     if (type == TdsType.INT1 || type == TdsType.INT2 || type == TdsType.INT4 || type == TdsType.INT8) {
-      // ... existing INT logic ...
-      // (Copy your existing INT logic here)
       buf.put((byte) TdsType.INTN.byteVal);
       byte maxLen = 4;
       Object val = param.value().getValue();
@@ -202,9 +205,7 @@ public class RpcPacketBuilder {
       return;
     }
 
-    // --- INTERCEPTION: Enforce FLTN ...
     if (type == TdsType.FLT4 || type == TdsType.REAL) {
-      // ... existing FLT logic ...
       buf.put((byte) TdsType.FLTN.byteVal);
       buf.put((byte) 4);
       writeValue(buf, type, param.value().getValue());
@@ -224,10 +225,8 @@ public class RpcPacketBuilder {
         break;
 
       case BYTELEN:
-        // ... (Existing BYTELEN logic) ...
         byte len = (byte) type.fixedSize;
         if (type == TdsType.INTN) {
-          // ... existing logic ...
           Object val = param.value().getValue();
           if (val instanceof Long) len = 8;
           else if (val instanceof Integer) len = 4;
@@ -249,18 +248,14 @@ public class RpcPacketBuilder {
         break;
 
       case USHORTLEN:
-        // --- FIX: Dynamic Max Length Calculation ---
         int encodedLen = getEncodedLength(type, param.value().getValue());
 
         if (encodedLen > 8000) {
-          // Signal NVARCHAR(MAX) / VARCHAR(MAX)
-          buf.putShort((short) -1); // 0xFFFF
+          buf.putShort((short) -1);
         } else {
-          // Standard limit
           buf.putShort((short) 8000);
         }
 
-        // Updated: Must write collation for BIGCHAR and BIGVARCHR
         if (type == TdsType.NVARCHAR || type == TdsType.BIGVARCHR ||
             type == TdsType.NCHAR || type == TdsType.CHAR || type == TdsType.BIGCHAR ||
             type == TdsType.VARCHAR || type == TdsType.TEXT) {
@@ -289,16 +284,13 @@ public class RpcPacketBuilder {
       return;
     }
 
-    // ... (Existing INTN, GUID, etc. logic) ...
     if (type == TdsType.INTN) {
-      // ... keep existing INTN logic ...
       if (value instanceof Long) { buf.put((byte) 8); buf.putLong((Long) value); return; }
       if (value instanceof Integer) { buf.put((byte) 4); buf.putInt((Integer) value); return; }
       if (value instanceof Short) { buf.put((byte) 2); buf.putShort((Short) value); return; }
       if (value instanceof Byte) { buf.put((byte) 1); buf.put((Byte) value); return; }
     }
     if (type == TdsType.GUID) {
-      // ... keep existing GUID logic ...
       buf.put((byte) 16);
       UUID u = (UUID) value;
       buf.putLong(u.getMostSignificantBits());
@@ -307,7 +299,6 @@ public class RpcPacketBuilder {
     }
 
     switch (type.r2dbcType) {
-      // ... (Numeric types remain unchanged) ...
       case TINYINT: buf.put((byte) 1); buf.put(((Number) value).byteValue()); break;
       case SMALLINT: buf.put((byte) 2); buf.putShort(((Number) value).shortValue()); break;
       case INTEGER: buf.put((byte) 4); buf.putInt(((Number) value).intValue()); break;
@@ -329,7 +320,6 @@ public class RpcPacketBuilder {
         buf.put(decBytes);
         break;
 
-      // --- FIX: VARCHAR / CHAR with PLP Support ---
       case VARCHAR:
       case CHAR:
         String sVal = (value instanceof String) ? (String) value : value.toString();
@@ -343,7 +333,6 @@ public class RpcPacketBuilder {
         }
         break;
 
-      // --- FIX: NVARCHAR / NCHAR with PLP Support ---
       case NVARCHAR:
       case NCHAR:
         String nsVal = (value instanceof String) ? (String) value : value.toString();
@@ -357,7 +346,6 @@ public class RpcPacketBuilder {
         }
         break;
 
-      // --- FIX: BINARY / VARBINARY with PLP Support ---
       case BINARY:
       case VARBINARY:
         byte[] bin = convertToBytes(value);
@@ -369,7 +357,6 @@ public class RpcPacketBuilder {
         }
         break;
 
-      // ... (Date/Time types remain unchanged) ...
       case DATE:
         LocalDate d = (LocalDate) value;
         long days = d.toEpochDay() + DAYS_TO_1970;
@@ -392,14 +379,11 @@ public class RpcPacketBuilder {
         break;
       case TIMESTAMP_WITH_TIME_ZONE:
         OffsetDateTime odt = (OffsetDateTime) value;
-
-        // FIX: Convert to UTC to get the correct wire-format Ticks and Days
         OffsetDateTime utcOdt = odt.withOffsetSameInstant(java.time.ZoneOffset.UTC);
 
         long odtTicks = utcOdt.toLocalTime().toNanoOfDay() / 100;
         long odtDays = utcOdt.toLocalDate().toEpochDay() + DAYS_TO_1970;
 
-        // Write the ORIGINAL offset (not the UTC offset)
         int offsetMins = odt.getOffset().getTotalSeconds() / 60;
 
         buf.put((byte) 10);
@@ -475,34 +459,24 @@ public class RpcPacketBuilder {
   private int getDecimalScale(BigDecimal bd) {
     return Math.max(0, Math.min(38, bd.scale()));
   }
-  // Helper to determine the encoded byte length of a value
+
   private int getEncodedLength(TdsType type, Object value) {
     if (value == null) return 0;
     if (value instanceof byte[]) return ((byte[]) value).length;
     if (value instanceof ByteBuffer) return ((ByteBuffer) value).remaining();
     if (value instanceof String s) {
-      // N-types are UTF-16LE (2 bytes per char)
       if (type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT) {
         return s.length() * 2;
       }
-      // Standard types are Single Byte (Windows-1252)
       return s.getBytes(WINDOWS_1252).length;
     }
     return 0;
   }
 
-  // Helper to write data in PLP (Partial Length Prefix) format
   private void writePlp(ByteBuffer buf, byte[] data) {
-    // 1. Total Length (8 bytes)
     buf.putLong(data.length);
-
-    // 2. Chunk Length (4 bytes)
     buf.putInt(data.length);
-
-    // 3. Data
     buf.put(data);
-
-    // 4. PLP Terminator (0 length chunk)
     buf.putInt(0);
   }
 }
