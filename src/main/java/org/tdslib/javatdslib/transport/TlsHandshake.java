@@ -151,20 +151,30 @@ public class TlsHandshake {
           // Reserve 8 bytes for TDS header
           myNetData.position(TDS_HEADER_LENGTH);
 
-          result = sslEngine.wrap(dummy, myNetData);
-          handshakeStatus = result.getHandshakeStatus();
+          // LOOP to accumulate all consecutive TLS records (CKE, CCS, Finished)
+          // into a single contiguous byte buffer before sending.
+          while (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+            result = sslEngine.wrap(dummy, myNetData);
+            handshakeStatus = result.getHandshakeStatus();
+
+            // Safety break in the extremely rare event the 32KB buffer fills up
+            if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+              break;
+            }
+          }
 
           myNetData.flip();
           final int totalLength = myNetData.limit();
 
           // Add TDS header (0x12 Pre-Login)
           myNetData.put(0, PacketType.PRE_LOGIN.getValue());
-          myNetData.put(1, (byte) 0x01);
+          myNetData.put(1, (byte) 0x01); // EOM = 1
           myNetData.putShort(2, (short) totalLength);
           myNetData.putShort(4, (short) 0x0000);
           myNetData.put(6, (byte) 0x01);
           myNetData.put(7, (byte) 0x00);
 
+          // Flush the single, unified TDS packet containing all pending TLS records
           while (myNetData.hasRemaining()) {
             socketChannel.write(myNetData);
           }
@@ -240,16 +250,28 @@ public class TlsHandshake {
     }
   }
 
+  public boolean isTlsActive() {
+    return sslEngine != null;
+  }
+
   /**
-   * Initiates a TLS close by closing the SSLEngine outbound side.
-   *
-   * <p>This sends a TLS close_notify when the engine is driven; it does not close
-   * the underlying SocketChannel. Callers are responsible for closing the socket.
+   * Initiates a TLS close for MS-TDS.
+   * MS-TDS explicitly forbids sending a close_notify alert. We simply drop the engine
+   * and switch abruptly back to plain text.
    */
   public void close() {
     if (sslEngine != null) {
-      sslEngine.closeOutbound();
+      try {
+        // Mark outbound as closed to free resources internally, but DO NOT wrap and send it!
+        sslEngine.closeOutbound();
+      } catch (Exception e) {
+        // Ignore
+      } finally {
+        sslEngine = null; // Mark TLS as inactive
+        if (myNetData != null) {
+          myNetData.clear();
+        }
+      }
     }
   }
-
 }

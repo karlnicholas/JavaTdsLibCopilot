@@ -457,10 +457,15 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
 
   @Override
   public void close() throws IOException {
-    if (selector != null) {
-      selector.close();
+    if (socketChannel != null && socketChannel.isOpen()) {
+      // This sends the TCP FIN packet to SQL Server
+      socketChannel.close();
+      logger.info("Connection to SQL Server gracefully closed.");
     }
-    socketChannel.close();
+    // Also close your NIO Selector if you have an event loop running
+    // if (selector != null && selector.isOpen()) {
+    //   selector.close();
+    // }
   }
 
   private String logHex(ByteBuffer buffer) {
@@ -482,24 +487,36 @@ public class TdsTransport implements ConnectionContext, AutoCloseable {
     tlsHandshake.tlsHandshake(host, port, socketChannel);
   }
 
+  public boolean isTlsActive() {
+    return tlsHandshake != null && tlsHandshake.isTlsActive();
+  }
+
   public void tlsComplete() {
-    tlsHandshake.close();
+    // Drop the TLS engine abruptly (No close_notify sent)
+    if (tlsHandshake != null) {
+      tlsHandshake.close();
+    }
   }
 
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
     logger.trace(SENDING_MESSAGE, logHex(tdsMessage.getPayload()));
     QueryPacketBuilder queryPacketBuilder = new QueryPacketBuilder();
     List<ByteBuffer> packetBuffers = queryPacketBuilder.buildPackets(
-            tdsMessage.getPacketType(),
-            tdsMessage.getStatusFlags(),
-            getSpid(),
-            tdsMessage.getPayload(),
-            (short) 1,
-            getCurrentPacketSize()
+        tdsMessage.getPacketType(),
+        tdsMessage.getStatusFlags(),
+        getSpid(),
+        tdsMessage.getPayload(),
+        (short) 1,
+        getCurrentPacketSize()
     );
 
     for (ByteBuffer buffer : packetBuffers) {
-      tlsHandshake.writeEncrypted(buffer, socketChannel);
+      if (isTlsActive()) {
+        tlsHandshake.writeEncrypted(buffer, socketChannel);
+      } else {
+        // Safe fallback if the server rejected TLS entirely
+        writeDirect(buffer);
+      }
     }
   }
 

@@ -44,21 +44,23 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> close() {
-    return subscriber->new Subscription() {
-      @Override
-      public void request(long n) {
-        logger.debug("Closing TdsConnection");
-        try {
-          transport.close();
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+    return subscriber -> {
+      subscriber.onSubscribe(new Subscription() {
+        @Override
+        public void request(long n) {
+          try {
+            transport.close();
+            subscriber.onComplete();
+          } catch (IOException e) {
+            subscriber.onError(e);
+          }
         }
-//        connected = false;
-      }
 
-      @Override
-      public void cancel() {
-      }
+        @Override
+        public void cancel() {
+          // No-op
+        }
+      });
     };
   }
 

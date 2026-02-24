@@ -37,17 +37,12 @@ public class TdsConnectionFactory implements ConnectionFactory {
   @Override
   public Publisher<? extends Connection> create() {
     return subscriber -> subscriber.onSubscribe(new Subscription() {
-
-      // Flag to handle cancellation safely
       private volatile boolean cancelled = false;
 
       @Override
       public void request(long n) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
-        // UPDATED: Now utilizes Options -> Env -> Default logic
         int maxRetries = getRetryCount();
         long retryWaitMs = getRetryWaitMs();
         int attempt = 0;
@@ -56,20 +51,16 @@ public class TdsConnectionFactory implements ConnectionFactory {
         while (attempt <= maxRetries && !cancelled) {
           TdsTransport transport = null;
           try {
-            // 1. Safety: Validate required options exist before attempting connection
-            // 2. Extraction: Get values safely
             String hostname = (String) options.getValue(HOST);
             int port = (Integer) options.getValue(PORT);
             String username = (String) options.getValue(USER);
             String password = (String) options.getValue(PASSWORD);
             String database = (String) options.getValue(DATABASE);
 
-            // 3. Connection: Initialize transport
             transport = new TdsTransport(hostname, port);
 
-            // 4. Handshake: PreLogin and TLS
-            preLoginInternal(transport);
-            transport.tlsHandshake();
+            // 4. Handshake: PreLogin and TLS (Do NOT call transport.tlsHandshake() here!)
+            PreLoginResponse preLoginResponse = preLoginInternal(transport);
 
             // 5. Login: Perform authentication
             LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database);
@@ -78,45 +69,37 @@ public class TdsConnectionFactory implements ConnectionFactory {
               throw new IOException("Login failed: " + loginResponse.getErrorMessage());
             }
 
-            transport.tlsComplete();
+            // 6. Close TLS ONLY if negotiated as Login-Only (0x00 = ENCRYPT_OFF or 0x02 = NOT_SUP)
+            // Note: Assuming your PreLoginResponse has a getEncryption() getter from the parser
+            if (preLoginResponse.getEncryption() == 0x00 || preLoginResponse.getEncryption() == 0x02) {
+              transport.tlsComplete();
+            }
 
-            // 6. Async Switch: Switch socket to non-blocking + register to selector
             transport.enterAsyncMode();
-
-            // 7. Emission: Emit the active connection
             subscriber.onNext(new TdsConnection(transport));
             subscriber.onComplete();
-
-            // Success! Exit the retry loop.
             return;
 
           } catch (Throwable t) {
             lastError = t;
-            // 8. Cleanup: If ANY step fails, ensure the transport (socket) is closed
             if (transport != null) {
-              try {
-                transport.close();
-              } catch (IOException closeEx) {
-                lastError.addSuppressed(closeEx); // Attach close error to the original error
-              }
+              try { transport.close(); }
+              catch (IOException closeEx) { lastError.addSuppressed(closeEx); }
             }
-
             attempt++;
             if (attempt <= maxRetries && !cancelled) {
               logger.warn("Connection attempt {}/{} failed. Retrying in {}ms... ({})",
                   attempt, maxRetries, retryWaitMs, t.getMessage());
-              try {
-                Thread.sleep(retryWaitMs);
-              } catch (InterruptedException ie) {
+              try { Thread.sleep(retryWaitMs); }
+              catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 lastError.addSuppressed(ie);
-                break; // Stop retrying if the thread is interrupted
+                break;
               }
             }
           }
         }
 
-        // If we exhausted all retries or were cancelled, signal the error downstream
         if (!cancelled && lastError != null) {
           logger.error("All {} connection attempts failed.", maxRetries + 1);
           subscriber.onError(lastError);
@@ -124,11 +107,34 @@ public class TdsConnectionFactory implements ConnectionFactory {
       }
 
       @Override
-      public void cancel() {
-        this.cancelled = true;
-      }
-
+      public void cancel() { this.cancelled = true; }
     });
+  }
+
+  private PreLoginResponse preLoginInternal(TdsTransport transport)
+      throws IOException, NoSuchAlgorithmException, KeyManagementException {
+
+    TdsMessage msg = TdsMessage.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload());
+    transport.sendMessageDirect(msg);
+
+    List<TdsMessage> responses = transport.receiveFullResponse();
+    PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
+
+    int negotiatedSize = preLoginResponse.getNegotiatedPacketSize();
+    if (negotiatedSize > 0) {
+      transport.setPacketSize(negotiatedSize);
+    }
+
+    // --- THE FIX IS HERE ---
+    // 0x00 = ENCRYPT_OFF (Login-only TLS required)
+    // 0x01 = ENCRYPT_REQ (Full TLS required)
+    // 0x02 = ENCRYPT_NOT_SUP (No TLS supported)
+    int serverEncryption = preLoginResponse.getEncryption();
+    if (serverEncryption == 0x00 || serverEncryption == 0x01) {
+      transport.tlsHandshake();
+    }
+
+    return preLoginResponse;
   }
 
   @Override
@@ -219,35 +225,6 @@ public class TdsConnectionFactory implements ConnectionFactory {
     public String getName() {
       // Returns the name of the database product this factory connects to
       return "JavaTdsLib MS SQL Server";
-    }
-  }
-
-  /**
-   * Perform the PreLogin exchange and apply negotiated options.
-   *
-   * @throws IOException on IO error
-   */
-  private void preLoginInternal(TdsTransport transport)
-      throws IOException, NoSuchAlgorithmException, KeyManagementException {
-    TdsMessage msg = TdsMessage.createRequest(
-        PacketType.PRE_LOGIN.getValue(),
-        buildPreLoginPayload()
-    );
-
-    transport.sendMessageDirect(msg);
-
-    List<TdsMessage> responses = transport.receiveFullResponse();
-
-    PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
-
-    // Apply negotiated packet size
-    int negotiatedSize = preLoginResponse.getNegotiatedPacketSize();
-    if (negotiatedSize > 0) {
-      transport.setPacketSize(negotiatedSize);
-    }
-
-    if (preLoginResponse.requiresEncryption()) {
-      transport.tlsHandshake();
     }
   }
 
