@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.payloads.login7;
 
-import org.tdslib.javatdslib.TdsConstants;
 import org.tdslib.javatdslib.TdsVersion;
 
 import java.time.Instant;

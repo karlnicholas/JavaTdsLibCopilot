@@ -3,7 +3,6 @@ package org.tdslib.javatdslib.transport;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 /**

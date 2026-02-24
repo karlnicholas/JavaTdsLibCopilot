@@ -13,7 +13,6 @@ import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
