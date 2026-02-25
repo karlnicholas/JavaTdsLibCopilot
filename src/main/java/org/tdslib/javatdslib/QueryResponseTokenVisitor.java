@@ -1,9 +1,6 @@
 package org.tdslib.javatdslib;
 
-import io.r2dbc.spi.ColumnMetadata;
-import io.r2dbc.spi.R2dbcException;
-import io.r2dbc.spi.R2dbcNonTransientResourceException;
-import io.r2dbc.spi.Result;
+import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -124,8 +121,11 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
       case ERROR:
         ErrorToken error = (ErrorToken) token;
         logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
+
         if (error.isError()) {
-          R2dbcException exception = new R2dbcNonTransientResourceException(error.getMessage(), String.valueOf(error.getState()), (int) error.getNumber());
+          // Use a factory to create the concrete subclass
+          R2dbcException exception = createException(error);
+
           subscriber.onError(exception);
           queryContext.setHasError(true);
         }
@@ -245,4 +245,49 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   private void errorHandler(Throwable t) {
     if (subscriber != null && !isCancelled.get()) subscriber.onError(t);
   }
+
+  public static R2dbcException createException(ErrorToken error) {
+    String message = error.getMessage();
+    String sqlState = String.valueOf(error.getState());
+    int errorCode = (int) error.getNumber();
+
+    return switch (errorCode) {
+      // Bad Grammar
+      case 102, 156, 170, 208 ->
+          new R2dbcBadGrammarException(message, sqlState, errorCode);
+
+      // Permission Denied
+      case 229, 262 ->
+          new R2dbcPermissionDeniedException(message, sqlState, errorCode);
+
+      // Integrity Violations
+      case 547, 2601, 2627 ->
+          new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
+
+      // Transient Errors (Deadlocks)
+      case 1205 ->
+          new R2dbcTransientResourceException(message, sqlState, errorCode);
+
+      default -> {
+        // Logic for general Non-Transient errors
+        if (error.getSeverity() >= 19) {
+          // Severe system/resource issues
+          yield new R2dbcNonTransientResourceException(message, sqlState, errorCode);
+        }
+        // Catch-all for other user errors (Severity 11-18)
+        yield new R2dbcNonTransientExceptionSubclass(message, sqlState, errorCode);
+      }
+    };
+  }
+
+  /**
+   * Since R2dbcNonTransientException is abstract, we need a generic concrete
+   * implementation for errors that don't fit the specific categories above.
+   */
+  private static class R2dbcNonTransientExceptionSubclass extends io.r2dbc.spi.R2dbcNonTransientException {
+    public R2dbcNonTransientExceptionSubclass(String reason, String sqlState, int errorCode) {
+      super(reason, sqlState, errorCode);
+    }
+  }
+
 }
