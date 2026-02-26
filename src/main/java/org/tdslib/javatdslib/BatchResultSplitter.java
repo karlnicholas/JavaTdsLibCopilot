@@ -6,24 +6,19 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.transport.AbstractQueueDrainPublisher;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Consumes a flat stream of Result.Segment and splits it into a stream of Result objects.
  * A new Result is emitted for each new statement execution, typically bounded by a TdsUpdateCount.
  */
-public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result.Segment> {
+public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> implements Subscriber<Result.Segment> {
   private static final Logger logger = LoggerFactory.getLogger(BatchResultSplitter.class);
 
   private final Publisher<Result.Segment> source;
-  private Subscriber<? super Result> downstream;
   private Subscription upstreamSubscription;
-
-  private final AtomicBoolean isCancelled = new AtomicBoolean(false);
-  private final AtomicLong demand = new AtomicLong(0);
 
   // Holds the currently active Result that is accepting segments
   private final AtomicReference<SegmentProcessor> currentResultProcessor = new AtomicReference<>();
@@ -33,45 +28,34 @@ public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result
   }
 
   @Override
-  public void subscribe(Subscriber<? super Result> subscriber) {
-    this.downstream = subscriber;
-    subscriber.onSubscribe(new Subscription() {
-      @Override
-      public void request(long n) {
-        if (n <= 0) {
-          subscriber.onError(new IllegalArgumentException("Request must be > 0"));
-          return;
-        }
-        addDemand(n);
-        if (upstreamSubscription == null) {
-          source.subscribe(BatchResultSplitter.this);
-        } else {
-          upstreamSubscription.request(n);
-        }
+  protected void onRequest(long n) {
+    // Triggered when the downstream subscriber requests the next Result object.
+    if (upstreamSubscription == null) {
+      source.subscribe(this);
+    } else {
+      // If we are between results, request 1 segment from upstream to trigger the creation of the next Result.
+      if (currentResultProcessor.get() == null) {
+        upstreamSubscription.request(1);
       }
+    }
+  }
 
-      @Override
-      public void cancel() {
-        isCancelled.set(true);
-        if (upstreamSubscription != null) {
-          upstreamSubscription.cancel();
-        }
-        SegmentProcessor current = currentResultProcessor.getAndSet(null);
-        if (current != null) {
-          current.cancel();
-        }
-      }
-    });
+  @Override
+  protected void onCancel() {
+    if (upstreamSubscription != null) {
+      upstreamSubscription.cancel();
+    }
+    SegmentProcessor current = currentResultProcessor.getAndSet(null);
+    if (current != null) {
+      current.cancel(); // Cancel the inner publisher
+    }
   }
 
   @Override
   public void onSubscribe(Subscription s) {
     this.upstreamSubscription = s;
-    // Request initially based on downstream demand
-    long initialDemand = demand.get();
-    if (initialDemand > 0) {
-      s.request(initialDemand);
-    }
+    // Kickstart the flow by requesting the very first segment, which will create the first Result
+    s.request(1);
   }
 
   @Override
@@ -85,17 +69,16 @@ public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result
       processor = new SegmentProcessor();
       currentResultProcessor.set(processor);
 
-      // Emit the new Result to the subscriber
-      // Note: TdsResult would be your class implementing io.r2dbc.spi.Result
-      downstream.onNext(new TdsResult(processor));
+      // Emit the new Result to the outer Result subscriber using the base class method
+      emit(new TdsResult(processor));
     }
 
-    // Push the segment to the current Result's subscriber
-    processor.onNext(segment);
+    // Push the segment to the inner Result's subscriber
+    processor.pushNext(segment);
 
     // Determine if this segment marks the end of the current Result
     if (isBoundarySegment(segment)) {
-      processor.onComplete();
+      processor.pushComplete();
       currentResultProcessor.set(null); // Next segment will trigger a new Result
     }
   }
@@ -105,9 +88,9 @@ public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result
     if (isCancelled.get()) return;
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
-      current.onError(t);
+      current.pushError(t);
     }
-    downstream.onError(t);
+    error(t); // Fail outer publisher
   }
 
   @Override
@@ -115,9 +98,9 @@ public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result
     if (isCancelled.get()) return;
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
-      current.onComplete();
+      current.pushComplete();
     }
-    downstream.onComplete();
+    complete(); // Complete outer publisher
   }
 
   /**
@@ -127,71 +110,38 @@ public class BatchResultSplitter implements Publisher<Result>, Subscriber<Result
     return segment instanceof TdsUpdateCount || segment instanceof Result.OutSegment;
   }
 
-  private void addDemand(long n) {
-    long current, next;
-    do {
-      current = demand.get();
-      next = current + n;
-      if (next < 0) next = Long.MAX_VALUE;
-    } while (!demand.compareAndSet(current, next));
-  }
-
   /**
-   * A simple hot publisher that routes segments to the specific Result's subscriber.
-   * In a production driver, you might replace this with a UnicastProcessor if you bring in Reactor,
-   * or implement a custom Trampoline queue here similar to QueryResponseTokenVisitor.
+   * Inner publisher that routes segments to the specific Result's subscriber.
+   * Extends the base class to handle downstream segment demand securely.
    */
-  public class SegmentProcessor implements Publisher<Result.Segment> {
-    private Subscriber<? super Result.Segment> resultSubscriber;
-    private boolean isCompleted = false;
-    private Throwable error;
+  public class SegmentProcessor extends AbstractQueueDrainPublisher<Result.Segment> {
 
     @Override
-    public void subscribe(Subscriber<? super Result.Segment> subscriber) {
-      this.resultSubscriber = subscriber;
-      subscriber.onSubscribe(new Subscription() {
-        @Override
-        public void request(long n) {
-          if (upstreamSubscription != null) {
-            upstreamSubscription.request(n);
-          }
-        }
-
-        @Override
-        public void cancel() {
-          BatchResultSplitter.this.currentResultProcessor.compareAndSet(SegmentProcessor.this, null);
-        }
-      });
-
-      if (isCompleted) {
-        if (error != null) resultSubscriber.onError(error);
-        else resultSubscriber.onComplete();
+    protected void onRequest(long n) {
+      // When the downstream subscriber for *this specific Result* requests segments,
+      // we pass that demand upstream to the original network stream.
+      if (upstreamSubscription != null) {
+        upstreamSubscription.request(n);
       }
     }
 
-    void onNext(Result.Segment segment) {
-      if (resultSubscriber != null) {
-        resultSubscriber.onNext(segment);
-      }
+    @Override
+    protected void onCancel() {
+      // If the downstream subscriber cancels this specific Result,
+      // we detach it, but we do not cancel the whole network stream.
+      BatchResultSplitter.this.currentResultProcessor.compareAndSet(this, null);
     }
 
-    void onError(Throwable t) {
-      this.error = t;
-      this.isCompleted = true;
-      if (resultSubscriber != null) {
-        resultSubscriber.onError(t);
-      }
+    void pushNext(Result.Segment segment) {
+      emit(segment);
     }
 
-    void onComplete() {
-      this.isCompleted = true;
-      if (resultSubscriber != null) {
-        resultSubscriber.onComplete();
-      }
+    void pushError(Throwable t) {
+      error(t);
     }
 
-    void cancel() {
-      this.isCompleted = true;
+    void pushComplete() {
+      complete();
     }
   }
 }

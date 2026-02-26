@@ -24,9 +24,6 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
 public class TdsConnectionFactory implements ConnectionFactory {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
-  public static final Option<Integer> CONNECT_RETRIES = Option.valueOf("connectRetries");
-  public static final Option<Long> CONNECT_RETRY_DELAY = Option.valueOf("connectRetryDelay");
-  // ... other options
 
   private final ConnectionFactoryOptions options;
 

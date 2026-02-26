@@ -8,6 +8,7 @@ import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -20,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class TdsBatch implements Batch {
 
   private final TdsTransport transport;
-  private final ConnectionContext context; // Add this field
+  private final ConnectionContext context;
   private final List<String> statements = new ArrayList<>();
 
   public TdsBatch(TdsTransport transport, ConnectionContext context) {
@@ -62,11 +63,12 @@ public class TdsBatch implements Batch {
                 return;
               }
 
-              // Concatenate all statements. TDS SQL_BATCH handles multiple statements separated by spaces/newlines.
               String batchSql = String.join(";\n", statements);
               TdsMessage message = createSqlBatchMessage(batchSql);
 
-              subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message)));
+              // Injecting dependencies into the visitor
+              TokenDispatcher dispatcher = new TokenDispatcher();
+              subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message, dispatcher)));
               subscriber.onComplete();
             } catch (Exception e) {
               subscriber.onError(e);
@@ -82,7 +84,6 @@ public class TdsBatch implements Batch {
     };
   }
 
-  // Reuse the exact same logic you wrote for TdsStatement
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     byte[] headers = AllHeaders.forAutoCommit(1).toBytes();

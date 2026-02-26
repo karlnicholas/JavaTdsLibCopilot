@@ -10,6 +10,7 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
+import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -23,7 +24,7 @@ public class TdsStatement implements Statement {
 
   private final String query;
   private final TdsTransport transport;
-  private final ConnectionContext context; // FIX: Add Context
+  private final ConnectionContext context;
   private final List<List<ParamEntry>> batchParams = new ArrayList<>();
   private List<ParamEntry> currentParams = new ArrayList<>();
   private int fetchSize = 0;
@@ -103,7 +104,6 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    // Return the Publisher<Result> routed through our BatchResultSplitter!
     return new Publisher<Result>() {
       @Override
       public void subscribe(Subscriber<? super Result> subscriber) {
@@ -112,22 +112,16 @@ public class TdsStatement implements Statement {
           if (isSimpleBatch) {
             message = createSqlBatchMessage(query);
           } else {
-            // Send the ENTIRE batch payload as one message!
             message = createRpcMessage(query, executions);
           }
 
-          // 1. Send the single request to the wire, get a flat stream of segments back
-          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, context, message);
-
-          // 2. Wrap it in the Batch Splitter to chunk it into distinct R2DBC Results
-          // (based on DONE/DONEPROC tokens).
+          TokenDispatcher dispatcher = new TokenDispatcher();
+          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, context, message, dispatcher);
           BatchResultSplitter resultPublisher = new BatchResultSplitter(flatSegmentStream);
 
-          // 3. Subscribe the user's listener
           resultPublisher.subscribe(subscriber);
 
         } catch (Exception e) {
-          // Immediately fail the stream if message creation or subscription fails
           subscriber.onSubscribe(new Subscription() {
             @Override public void request(long n) {}
             @Override public void cancel() {}
@@ -153,8 +147,8 @@ public class TdsStatement implements Statement {
         sql,
         batchParams,
         true,
-        context.getVarcharCharset(),         // FIX: Use context
-        context.getCurrentCollationBytes()   // FIX: Use context
+        context.getVarcharCharset(),
+        context.getCurrentCollationBytes()
     );
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);

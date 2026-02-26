@@ -9,9 +9,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.HexFormat;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Handles applying ENVCHANGE tokens to the ConnectionContext.
