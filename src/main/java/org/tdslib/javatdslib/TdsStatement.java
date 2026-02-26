@@ -10,6 +10,8 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
+import org.tdslib.javatdslib.query.rpc.CodecRegistry;
+import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
@@ -143,12 +145,22 @@ public class TdsStatement implements Statement {
   }
 
   private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
+    // 1. Use the shared stateless registry
+    CodecRegistry registry = CodecRegistry.DEFAULT;
+
+    // 2. Wrap the connection context properties
+    RpcEncodingContext encodingContext = new RpcEncodingContext(
+        context.getVarcharCharset(),
+        context.getCurrentCollationBytes()
+    );
+
+    // 3. Pass dependencies to the builder
     RpcPacketBuilder builder = new RpcPacketBuilder(
         sql,
         batchParams,
         true,
-        context.getVarcharCharset(),
-        context.getCurrentCollationBytes()
+        registry,
+        encodingContext
     );
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
