@@ -5,6 +5,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
@@ -19,18 +20,17 @@ public class TdsConnection implements Connection {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnection.class);
 
   private final TdsTransport transport;
-//  private boolean connected;
+  private final ConnectionContext context;
 
   /**
    * Create a new TdsConnection backed by a TCP transport to the given host/port.
    *
    * @param transport TdsTransport
    */
-  public TdsConnection(TdsTransport transport) {
+  public TdsConnection(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
-//    this.connected = true;
+    this.context = context;
   }
-
 
   @Override
   public Publisher<Void> beginTransaction() {
@@ -71,7 +71,7 @@ public class TdsConnection implements Connection {
 
   @Override
   public Batch createBatch() {
-    return new TdsBatch(this.transport);
+    return new TdsBatch(this.transport, this.context);
   }
 
   @Override
@@ -88,7 +88,7 @@ public class TdsConnection implements Connection {
    */
   @Override
   public Statement createStatement(String sql) {
-    return new TdsStatement(this.transport, sql);
+    return new TdsStatement(this.transport, context, sql);
   }
 
   @Override

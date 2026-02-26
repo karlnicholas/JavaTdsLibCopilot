@@ -11,14 +11,13 @@ import org.tdslib.javatdslib.payloads.login7.Login7Options;
 import org.tdslib.javatdslib.payloads.login7.Login7Payload;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.DefaultConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
@@ -26,9 +25,10 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 public class TdsConnectionFactory implements ConnectionFactory {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
   public static final Option<Integer> CONNECT_RETRIES = Option.valueOf("connectRetries");
-  public static final Option<Long> CONNECT_RETRY_WAIT = Option.valueOf("connectRetryWaitMs");
+  public static final Option<Long> CONNECT_RETRY_DELAY = Option.valueOf("connectRetryDelay");
+  // ... other options
+
   private final ConnectionFactoryOptions options;
-  // 1. Define the custom keys used in R2DBC URLs or Configuration
 
   public TdsConnectionFactory(ConnectionFactoryOptions options) {
     this.options = options;
@@ -36,94 +36,71 @@ public class TdsConnectionFactory implements ConnectionFactory {
 
   @Override
   public Publisher<? extends Connection> create() {
-    return subscriber -> subscriber.onSubscribe(new Subscription() {
-      private volatile boolean cancelled = false;
+    return subscriber -> {
+      subscriber.onSubscribe(new Subscription() {
+        @Override
+        public void request(long n) {
+          if (n > 0) {
+            try {
+              String hostname = options.getRequiredValue(HOST).toString();
+              int port = options.getValue(PORT) == null ? 1433 : (int) options.getValue(PORT);
+              String username = (String) options.getValue(USER);
+              String password = (String) options.getValue(PASSWORD);
+              String database = (String) options.getValue(DATABASE);
 
-      @Override
-      public void request(long n) {
-        if (cancelled) return;
+              // 1. Create the Context and pass it to Transport
+              ConnectionContext context = new DefaultConnectionContext();
+              TdsTransport transport = new TdsTransport(hostname, port, context);
 
-        int maxRetries = getRetryCount();
-        long retryWaitMs = getRetryWaitMs();
-        int attempt = 0;
-        Throwable lastError = null;
+              // Perform Handshake synchronously
+              try {
+                // 2. Pass context down to doHandshake
+                doHandshake(transport, context, hostname, username, password, database);
 
-        while (attempt <= maxRetries && !cancelled) {
-          TdsTransport transport = null;
-          try {
-            String hostname = (String) options.getValue(HOST);
-            int port = (Integer) options.getValue(PORT);
-            String username = (String) options.getValue(USER);
-            String password = (String) options.getValue(PASSWORD);
-            String database = (String) options.getValue(DATABASE);
+                // Switch to Async mode for queries
+                transport.enterAsyncMode();
 
-            transport = new TdsTransport(hostname, port);
+                // 3. Pass both transport and context to TdsConnection
+                subscriber.onNext(new TdsConnection(transport, context));
+                subscriber.onComplete();
 
-            // 4. Handshake: PreLogin and TLS (Do NOT call transport.tlsHandshake() here!)
-            PreLoginResponse preLoginResponse = preLoginInternal(transport);
-
-            // 5. Login: Perform authentication
-            LoginResponse loginResponse = loginInternal(transport, hostname, username, password, database);
-
-            if (!loginResponse.isSuccess()) {
-              throw new IOException("Login failed: " + loginResponse.getErrorMessage());
-            }
-
-            // 6. Close TLS ONLY if negotiated as Login-Only (0x00 = ENCRYPT_OFF or 0x02 = NOT_SUP)
-            // Note: Assuming your PreLoginResponse has a getEncryption() getter from the parser
-            if (preLoginResponse.getEncryption() == 0x00 || preLoginResponse.getEncryption() == 0x02) {
-              transport.tlsComplete();
-            }
-
-            transport.enterAsyncMode();
-            subscriber.onNext(new TdsConnection(transport));
-            subscriber.onComplete();
-            return;
-
-          } catch (Throwable t) {
-            lastError = t;
-            if (transport != null) {
-              try { transport.close(); }
-              catch (IOException closeEx) { lastError.addSuppressed(closeEx); }
-            }
-            attempt++;
-            if (attempt <= maxRetries && !cancelled) {
-              logger.warn("Connection attempt {}/{} failed. Retrying in {}ms... ({})",
-                  attempt, maxRetries, retryWaitMs, t.getMessage());
-              try { Thread.sleep(retryWaitMs); }
-              catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                lastError.addSuppressed(ie);
-                break;
+              } catch (Exception e) {
+                logger.error("Handshake failed", e);
+                transport.close();
+                subscriber.onError(e);
               }
+
+            } catch (Exception e) {
+              subscriber.onError(e);
             }
           }
         }
 
-        if (!cancelled && lastError != null) {
-          logger.error("All {} connection attempts failed.", maxRetries + 1);
-          subscriber.onError(lastError);
+        @Override
+        public void cancel() {
+          // implementation
         }
-      }
-
-      @Override
-      public void cancel() { this.cancelled = true; }
-    });
+      });
+    };
   }
 
-  private PreLoginResponse preLoginInternal(TdsTransport transport)
-      throws IOException, NoSuchAlgorithmException, KeyManagementException {
+  // 4. Update signature to accept context
+  private void doHandshake(TdsTransport transport, ConnectionContext context,
+                           String hostname, String username, String password, String database) throws Exception {
 
-    TdsMessage msg = TdsMessage.createRequest(PacketType.PRE_LOGIN.getValue(), buildPreLoginPayload());
-    transport.sendMessageDirect(msg);
+    // --- 1. Pre-Login Phase ---
+    logger.debug("Starting Pre-Login phase");
+    PreLoginPayload preLoginPayload = new PreLoginPayload(false);
 
-    List<TdsMessage> responses = transport.receiveFullResponse();
-    PreLoginResponse preLoginResponse = processPreLoginResponse(responses);
+    // ... configuration logic for preLogin ...
+    TdsMessage preLoginMsg = TdsMessage.createRequest(PacketType.PRE_LOGIN.getValue(), preLoginPayload.buildBuffer());
+    transport.sendMessageDirect(preLoginMsg);
 
-    int negotiatedSize = preLoginResponse.getNegotiatedPacketSize();
-    if (negotiatedSize > 0) {
-      transport.setPacketSize(negotiatedSize);
-    }
+    List<TdsMessage> preLoginResponses = transport.receiveFullResponse();
+    PreLoginResponse preLoginResponse = processPreLoginResponse(preLoginResponses);
+
+    // 5. Use context instead of transport to set packet size
+    context.setPacketSize(preLoginResponse.getNegotiatedPacketSize());
 
     // --- THE FIX IS HERE ---
     // 0x00 = ENCRYPT_OFF (Login-only TLS required)
@@ -134,142 +111,41 @@ public class TdsConnectionFactory implements ConnectionFactory {
       transport.tlsHandshake();
     }
 
-    return preLoginResponse;
-  }
 
-  @Override
-  public ConnectionFactoryMetadata getMetadata() {
-    return TdsConnectionFactoryMetadataImpl.INSTANCE;
-  }
+    // --- 3. Login7 Phase ---
+    logger.debug("Starting Login7 phase");
+    Login7Options l7Opts = new Login7Options();
+    // ... configuration logic for Login7 ...
 
-  // --- Environment Variable Helpers ---
-
-// --- Configuration Helpers ---
-
-  private int getRetryCount() {
-    // Priority 1: Check ConnectionFactoryOptions (URL or Code config)
-    if (options.hasOption(CONNECT_RETRIES)) {
-      try {
-        Object val = options.getValue(CONNECT_RETRIES);
-        if (val instanceof Number) return ((Number) val).intValue();
-        if (val instanceof String) return Integer.parseInt((String) val);
-      } catch (Exception e) {
-        logger.warn("Invalid 'connectRetries' option value, checking Env/Default");
-      }
-    }
-
-    // Priority 2: Check Environment Variable
-    String envVal = System.getenv("TDS_CONNECT_RETRIES");
-    if (envVal != null && !envVal.trim().isEmpty()) {
-      try {
-        return Integer.parseInt(envVal.trim());
-      } catch (NumberFormatException e) {
-        logger.warn("Invalid TDS_CONNECT_RETRIES Env Var, using default");
-      }
-    }
-
-    // Priority 3: Default
-    return 3;
-  }
-
-  private long getRetryWaitMs() {
-    // Priority 1: Check ConnectionFactoryOptions
-    if (options.hasOption(CONNECT_RETRY_WAIT)) {
-      try {
-        Object val = options.getValue(CONNECT_RETRY_WAIT);
-        if (val instanceof Number) return ((Number) val).longValue();
-        if (val instanceof String) return Long.parseLong((String) val);
-      } catch (Exception e) {
-        logger.warn("Invalid 'connectRetryWaitMs' option value, checking Env/Default");
-      }
-    }
-
-    // Priority 2: Check Environment Variable
-    String envVal = System.getenv("TDS_CONNECT_RETRY_WAIT_MS");
-    if (envVal != null && !envVal.trim().isEmpty()) {
-      try {
-        return Long.parseLong(envVal.trim());
-      } catch (NumberFormatException e) {
-        logger.warn("Invalid TDS_CONNECT_RETRY_WAIT_MS Env Var, using default");
-      }
-    }
-
-    // Priority 3: Default
-    return 1000L;
-  }
-
-  private static long getRetryWaitMsEnv() {
-    String val = System.getenv("TDS_CONNECT_RETRY_WAIT_MS");
-    if (val != null && !val.trim().isEmpty()) {
-      try {
-        return Long.parseLong(val.trim());
-      } catch (NumberFormatException e) {
-        logger.warn("Invalid TDS_CONNECT_RETRY_WAIT_MS format: '{}', defaulting to 1000", val);
-      }
-    }
-    return 1000L; // Default to 1 second
-  }
-
-  /**
-   * Metadata implementation for the TDS Connection Factory.
-   * Identifies the database product name.
-   */
-  static class TdsConnectionFactoryMetadataImpl implements ConnectionFactoryMetadata {
-
-    static final TdsConnectionFactoryMetadataImpl INSTANCE = new TdsConnectionFactoryMetadataImpl();
-
-    private TdsConnectionFactoryMetadataImpl() {
-    }
-
-    @Override
-    public String getName() {
-      // Returns the name of the database product this factory connects to
-      return "JavaTdsLib MS SQL Server";
-    }
-  }
-
-  /**
-   * Perform LOGIN7 exchange and return parsed result.
-   *
-   * @throws IOException on IO error
-   */
-  private LoginResponse loginInternal(TdsTransport transport, String hostname, String username, String password,
-                                      String database) throws IOException {
-    ByteBuffer loginPayload = buildLogin7Payload(hostname, username, password, database);
-
-    TdsMessage loginMsg = TdsMessage.createRequest(PacketType.LOGIN7.getValue(), loginPayload);
-
-    transport.sendMessageEncrypted(loginMsg);
-
-    List<TdsMessage> responses = transport.receiveFullResponse();
-
-    return processLoginResponse(transport, responses);
-  }
-
-  /**
-   * Build PreLogin payload. Placeholder builder using PreLoginPayload helper.
-   *
-   * @return payload buffer
-   */
-  private ByteBuffer buildPreLoginPayload() {
-    PreLoginPayload preLoginPayload = new PreLoginPayload(false);
-    return preLoginPayload.buildBuffer();
-  }
-
-  /**
-   * Build LOGIN7 payload from provided fields.
-   *
-   * @return built login payload buffer
-   */
-  private ByteBuffer buildLogin7Payload(String hostname, String username, String password,
-                                        String database) {
-    Login7Payload login7Payload = new Login7Payload(new Login7Options());
+    Login7Payload login7Payload = new Login7Payload(l7Opts);
     login7Payload.hostname = hostname;
     login7Payload.database = database;
     login7Payload.username = username;
     login7Payload.password = password;
 
-    return login7Payload.buildBuffer();
+    TdsMessage login7Msg = TdsMessage.createRequest(PacketType.LOGIN7.getValue(), login7Payload.buildBuffer());
+
+
+
+    if (transport.isTlsActive()) {
+      transport.sendMessageEncrypted(login7Msg);
+    } else {
+      transport.sendMessageDirect(login7Msg);
+    }
+
+    List<TdsMessage> loginResponseMsgs = transport.receiveFullResponse();
+
+    // 6. Pass context to processLoginResponse
+    LoginResponse loginResult = processLoginResponse(transport, context, loginResponseMsgs);
+
+    if (!loginResult.isSuccess()) {
+      throw new R2dbcNonTransientResourceException(
+          loginResult.getErrorMessage() != null ? loginResult.getErrorMessage() : "Login Failed"
+      );
+    }
+
+    logger.debug("Login successful. Database: {}", loginResult.getDatabase());
+    transport.tlsComplete();
   }
 
   /**
@@ -334,39 +210,30 @@ public class TdsConnectionFactory implements ConnectionFactory {
     return response;
   }
 
-  /**
-   * Process the server's Login response messages and produce a LoginResponse.
-   *
-   * @param packets received messages that contain login-related tokens
-   * @return populated LoginResponse reflecting login tokens and errors
-   */
-  private LoginResponse processLoginResponse(TdsTransport transport, List<TdsMessage> packets) {
-    LoginResponse loginResponse = new LoginResponse(transport);
+  // 7. Update signature to accept context
+  private LoginResponse processLoginResponse(TdsTransport transport, ConnectionContext context, List<TdsMessage> packets) {
+    // 8. Pass context to LoginResponse
+    LoginResponse loginResponse = new LoginResponse(transport, context);
     QueryContext queryContext = new QueryContext();
     TokenDispatcher tokenDispatcher = new TokenDispatcher();
 
     for (TdsMessage msg : packets) {
-      transport.setSpid(msg.getSpid());
-      // Dispatch tokens to the visitor (which handles ENVCHANGE, LOGINACK, errors, etc.)
-      tokenDispatcher.processMessage(msg, transport, queryContext, loginResponse);
+      // 9. Use context instead of transport
+      context.setSpid(msg.getSpid());
+
+      // 10. Pass context to processMessage
+      tokenDispatcher.processMessage(msg, context, queryContext, loginResponse);
 
       // Still handle reset flag separately (visitor doesn't cover message-level flags)
       if (msg.isResetConnection()) {
-        transport.resetToDefaults();
+        // 11. Use context instead of transport
+        context.resetToDefaults();
       }
     }
 
-    // Optional: After full login response, check if we have a successful LoginAck
     return loginResponse;
   }
 
-  /**
-   * Combine payload buffers from a list of messages into a single
-   * big\-endian ByteBuffer containing the concatenated payload bytes.
-   *
-   * @param packets messages whose payloads should be merged
-   * @return combined ByteBuffer ready for reading
-   */
   private ByteBuffer combinePayloads(List<TdsMessage> packets) {
     int total = packets.stream()
         .mapToInt(m -> m.getPayload().remaining())
@@ -380,4 +247,8 @@ public class TdsConnectionFactory implements ConnectionFactory {
     return combined;
   }
 
+  @Override
+  public ConnectionFactoryMetadata getMetadata() {
+    return null;
+  }
 }

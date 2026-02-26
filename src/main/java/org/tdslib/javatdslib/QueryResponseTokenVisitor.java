@@ -17,9 +17,10 @@ import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.row.RowToken;
+import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.EnvChangeApplier;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
@@ -33,8 +34,10 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   private static final String SERVER_MESSAGE = "Server message [{}] (state {}): {}";
 
   private final TdsTransport transport;
+  private final ConnectionContext context;
   private final TdsMessage queryTdsMessage;
-  private final TokenDispatcher tokenDispatcher;
+  private final TokenDispatcher tokenDispatcher = new TokenDispatcher();
+  private final QueryContext queryContext = new QueryContext();
 
   private Subscriber<? super Result.Segment> subscriber;
   private final AtomicBoolean isQuerySent = new AtomicBoolean(false);
@@ -45,11 +48,10 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
 
   private final Queue<Result.Segment> buffer = new ConcurrentLinkedQueue<>();
 
-  public QueryResponseTokenVisitor(TdsTransport transport, TdsMessage queryTdsMessage) {
+  public QueryResponseTokenVisitor(TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage) {
     this.transport = transport;
+    this.context = context;
     this.queryTdsMessage = queryTdsMessage;
-    this.tokenDispatcher = new TokenDispatcher();
-    this.transport.setClientHandlers(this::messageHandler, this::errorHandler);
   }
 
   @Override
@@ -61,15 +63,16 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   @Override
   public void request(long n) {
     if (n <= 0) {
-      subscriber.onError(new IllegalArgumentException("Request must be > 0"));
+      if (subscriber != null) subscriber.onError(new IllegalArgumentException("Request must be > 0"));
       return;
     }
     addDemand(n);
     if (isQuerySent.compareAndSet(false, true)) {
       try {
+        transport.setClientHandlers(this::messageHandler, this::errorHandler);
         transport.sendQueryMessageAsync(queryTdsMessage);
-      } catch (IOException e) {
-        subscriber.onError(e);
+      } catch (Exception e) {
+        if (subscriber != null) subscriber.onError(e);
       }
     } else {
       drain();
@@ -84,7 +87,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
 
   private void messageHandler(TdsMessage tdsMessage) {
     if (isCancelled.get()) return;
-    tokenDispatcher.processMessage(tdsMessage, transport, new QueryContext(), this);
+    tokenDispatcher.processMessage(tdsMessage, context, queryContext, this);
   }
 
   @Override
@@ -123,15 +126,13 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         logger.error(SERVER_MESSAGE, error.getNumber(), error.getState(), error.getMessage());
 
         if (error.isError()) {
-          // Use a factory to create the concrete subclass
           R2dbcException exception = createException(error);
-
-          subscriber.onError(exception);
+          if (subscriber != null) subscriber.onError(exception);
           queryContext.setHasError(true);
         }
         break;
       case ENV_CHANGE:
-        transport.applyEnvChange((EnvChangeToken) token);
+        EnvChangeApplier.apply((EnvChangeToken) token, context);
         break;
     }
 
@@ -142,19 +143,8 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
   }
 
   private void drain() {
-    if (subscriber == null) {
-      if (!buffer.isEmpty()) {
-        isCancelled.set(true);
-        transport.cancelCurrent();
-        throw new IllegalStateException("Protocol Violation: Received " + buffer.size() + " segments without a Subscriber.");
-      }
-      return;
-    }
-
-    // Prevent concurrent drains (Trampoline pattern)
-    if (wip.getAndIncrement() != 0) {
-      return;
-    }
+    if (subscriber == null) return;
+    if (wip.getAndIncrement() != 0) return;
 
     int missed = 1;
     do {
@@ -178,15 +168,12 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
           return;
         }
 
-        if (empty) {
-          break;
-        }
+        if (empty) break;
 
         subscriber.onNext(s);
         emitted++;
       }
 
-      // Check completion if demand is exactly fulfilled
       if (emitted == requested) {
         if (isCancelled.get()) {
           buffer.clear();
@@ -201,7 +188,6 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         }
       }
 
-      // Subtract emitted items from total demand
       if (emitted != 0 && requested != Long.MAX_VALUE) {
         demand.addAndGet(-emitted);
       }
@@ -226,7 +212,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
         metaList.add(new TdsColumnMetadata(cm));
       }
     }
-    return new TdsRowSegment(new TdsRow(token.getColumnData(), metaList, transport.getVarcharCharset()));
+    return new TdsRowSegment(new TdsRow(token.getColumnData(), metaList, context.getVarcharCharset()));
   }
 
   private Result.OutSegment createOutSegment(QueryContext ctx) {
@@ -239,7 +225,7 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
       metaList.add(new TdsOutParameterMetadata(token));
     }
 
-    return new TdsOutSegment(new TdsOutParameters(values, metaList, transport.getVarcharCharset()));
+    return new TdsOutSegment(new TdsOutParameters(values, metaList, context.getVarcharCharset()));
   }
 
   private void errorHandler(Throwable t) {
@@ -252,42 +238,22 @@ public class QueryResponseTokenVisitor implements Publisher<Result.Segment>, Tok
     int errorCode = (int) error.getNumber();
 
     return switch (errorCode) {
-      // Bad Grammar
-      case 102, 156, 170, 208 ->
-          new R2dbcBadGrammarException(message, sqlState, errorCode);
-
-      // Permission Denied
-      case 229, 262 ->
-          new R2dbcPermissionDeniedException(message, sqlState, errorCode);
-
-      // Integrity Violations
-      case 547, 2601, 2627 ->
-          new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
-
-      // Transient Errors (Deadlocks)
-      case 1205 ->
-          new R2dbcTransientResourceException(message, sqlState, errorCode);
-
+      case 102, 156, 170, 208 -> new R2dbcBadGrammarException(message, sqlState, errorCode);
+      case 229, 262 -> new R2dbcPermissionDeniedException(message, sqlState, errorCode);
+      case 547, 2601, 2627 -> new R2dbcDataIntegrityViolationException(message, sqlState, errorCode);
+      case 1205 -> new R2dbcTransientResourceException(message, sqlState, errorCode);
       default -> {
-        // Logic for general Non-Transient errors
         if (error.getSeverity() >= 19) {
-          // Severe system/resource issues
           yield new R2dbcNonTransientResourceException(message, sqlState, errorCode);
         }
-        // Catch-all for other user errors (Severity 11-18)
         yield new R2dbcNonTransientExceptionSubclass(message, sqlState, errorCode);
       }
     };
   }
 
-  /**
-   * Since R2dbcNonTransientException is abstract, we need a generic concrete
-   * implementation for errors that don't fit the specific categories above.
-   */
   private static class R2dbcNonTransientExceptionSubclass extends io.r2dbc.spi.R2dbcNonTransientException {
     public R2dbcNonTransientExceptionSubclass(String reason, String sqlState, int errorCode) {
       super(reason, sqlState, errorCode);
     }
   }
-
 }

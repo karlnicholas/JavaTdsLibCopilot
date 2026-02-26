@@ -8,6 +8,7 @@ import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
@@ -19,10 +20,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class TdsBatch implements Batch {
 
   private final TdsTransport transport;
+  private final ConnectionContext context; // Add this field
   private final List<String> statements = new ArrayList<>();
 
-  public TdsBatch(TdsTransport transport) {
+  public TdsBatch(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
+    this.context = context;
   }
 
   @Override
@@ -63,7 +66,7 @@ public class TdsBatch implements Batch {
               String batchSql = String.join(";\n", statements);
               TdsMessage message = createSqlBatchMessage(batchSql);
 
-              subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, message)));
+              subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message)));
               subscriber.onComplete();
             } catch (Exception e) {
               subscriber.onError(e);

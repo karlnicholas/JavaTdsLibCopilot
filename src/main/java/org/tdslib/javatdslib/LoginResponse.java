@@ -7,117 +7,71 @@ import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
 import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
-import org.tdslib.javatdslib.tokens.featureextack.FeatureExtAckToken;
-import org.tdslib.javatdslib.tokens.info.InfoToken;
-import org.tdslib.javatdslib.tokens.loginack.LoginAckToken;
+import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.EnvChangeApplier;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Represents the result of a Login7 request.
- * Collects success/failure status and any side-effects (environment changes, errors).
- */
 public class LoginResponse implements TokenVisitor {
   private static final Logger logger = LoggerFactory.getLogger(LoginResponse.class);
 
-  private boolean success = false;
+  private boolean success = true; // Assume true until an error token breaks it
   private String errorMessage = null;
   private String database = null;
 
   private final List<EnvChangeToken> envChanges = new ArrayList<>();
   private final TdsTransport transport;
+  private final ConnectionContext context;
 
-  // --- Mutators (used during token processing) ---
-
-  /**
-   * Create a LoginResponse that will apply tokens to the provided ConnectionContext.
-   *
-   */
-  public LoginResponse(TdsTransport transport) {
+  public LoginResponse(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
+    this.context = context;
   }
 
   @Override
   public void onToken(Token token, QueryContext queryContext) {
-    if (token instanceof EnvChangeToken envChange) {
-      transport.applyEnvChange(envChange);
-    } else if (token instanceof LoginAckToken ack) {
-      transport.setTdsVersion(ack.getTdsVersion());
-      transport.setServerName(ack.getServerName());
-      transport.setServerVersionString(ack.getServerVersionString());
-      setSuccess(true);
-      logger.info(
-          "Login successful - TDS version: {}, Server name: {}, Server version: {}",
-          ack.getTdsVersion(),
-          ack.getServerName(),
-          ack.getServerVersionString()
-      );
-    } else if (token instanceof ErrorToken err) {
-      logger.warn(
-          "Server error [{}]: {}",
-          err.getNumber(),
-          err.getMessage()
-      );
-    } else if (token instanceof InfoToken info) {
-      // Severity 0–10 = info, >10 = error (but INFO token is always <=10)
-      logger.info(
-          "Server info [{}] (state {}): {}",
-          info.getNumber(),
-          info.getState(),
-          info.getMessage()
-      );
-    } else if (token instanceof DoneToken done) {
-      logger.debug("Batch completed (status: {})", done.getStatus());
-    } else if (token instanceof FeatureExtAckToken featureAck) {
-      // NEW: Capture the extension acknowledgment token
-      transport.setUtf8Negotiated(featureAck.isUtf8Negotiated());
-      logger.debug("Captured FEATURE_EXT_ACK: UTF-8 Negotiated = {}", featureAck.isUtf8Negotiated());
-    } else {
-      logger.debug("Unhandled token type: {}", token.getType());
+    switch (token.getType()) {
+      case ENV_CHANGE:
+        EnvChangeToken envToken = (EnvChangeToken) token;
+        EnvChangeApplier.apply(envToken, context);
+        envChanges.add(envToken);
+        break;
+      case ERROR:
+        ErrorToken errToken = (ErrorToken) token;
+        setErrorMessage(errToken.getMessage());
+        break;
+      case DONE:
+      case DONE_PROC:
+      case DONE_IN_PROC:
+        DoneToken done = (DoneToken) token;
+        // Fix: Use hasError() instead of isError()
+        if (done.getStatus().hasError()) {
+          this.success = false;
+        }
+        break;
+      case LOGIN_ACK:
+        this.success = true;
+        break;
+      default:
+        break;
     }
   }
 
-  /**
-   * Mark the login result as successful or not.
-   *
-   * @param success true if login succeeded
-   */
-  public void setSuccess(boolean success) {
-    this.success = success;
-  }
-
-  /**
-   * Set an error message for the login result and mark as failed.
-   *
-   * @param errorMessage textual error description
-   */
   public void setErrorMessage(String errorMessage) {
     this.errorMessage = errorMessage;
     this.success = false; // error implies failure
   }
 
-  /**
-   * Record the negotiated/default database name.
-   *
-   * @param database database name
-   */
   public void setDatabase(String database) {
     this.database = database;
   }
 
-  /**
-   * Add an ENVCHANGE token to the recorded list (used for diagnostics).
-   *
-   * @param change the envchange token to record
-   */
   public void addEnvChange(EnvChangeToken change) {
     envChanges.add(change);
   }
-
-  // --- Accessors ---
 
   public boolean isSuccess() {
     return success;
@@ -131,27 +85,11 @@ public class LoginResponse implements TokenVisitor {
     return database;
   }
 
-  /**
-   * Returns an unmodifiable view of the collected environment changes.
-   */
   public List<EnvChangeToken> getEnvChanges() {
     return Collections.unmodifiableList(envChanges);
   }
 
-  /**
-   * Convenience: returns true if any ENVCHANGE tokens were received.
-   */
   public boolean hasEnvChanges() {
     return !envChanges.isEmpty();
-  }
-
-  @Override
-  public String toString() {
-    return "LoginResponse{"
-        + "success=" + success
-        + ", errorMessage='" + errorMessage + '\''
-        + ", database='" + database + '\''
-        + ", envChanges=" + envChanges.size() + " item(s)"
-        + '}';
   }
 }

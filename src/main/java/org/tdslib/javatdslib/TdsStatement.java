@@ -10,6 +10,7 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
@@ -22,12 +23,14 @@ public class TdsStatement implements Statement {
 
   private final String query;
   private final TdsTransport transport;
+  private final ConnectionContext context; // FIX: Add Context
   private final List<List<ParamEntry>> batchParams = new ArrayList<>();
   private List<ParamEntry> currentParams = new ArrayList<>();
   private int fetchSize = 0;
 
-  public TdsStatement(TdsTransport transport, String query) {
+  public TdsStatement(TdsTransport transport, ConnectionContext context, String query) {
     this.transport = transport;
+    this.context = context;
     this.query = query;
   }
 
@@ -114,7 +117,7 @@ public class TdsStatement implements Statement {
           }
 
           // 1. Send the single request to the wire, get a flat stream of segments back
-          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, message);
+          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, context, message);
 
           // 2. Wrap it in the Batch Splitter to chunk it into distinct R2DBC Results
           // (based on DONE/DONEPROC tokens).
@@ -150,8 +153,8 @@ public class TdsStatement implements Statement {
         sql,
         batchParams,
         true,
-        transport.getVarcharCharset(),
-        transport.getCurrentCollationBytes()
+        context.getVarcharCharset(),         // FIX: Use context
+        context.getCurrentCollationBytes()   // FIX: Use context
     );
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
