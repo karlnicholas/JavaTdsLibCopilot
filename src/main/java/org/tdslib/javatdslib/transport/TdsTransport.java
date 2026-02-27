@@ -67,8 +67,9 @@ public class TdsTransport implements AutoCloseable {
 
   // --- Synchronous Methods for Handshake (Added Back) ---
 
-  public void tlsHandshake() throws IOException, NoSuchAlgorithmException, KeyManagementException {
-    tlsHandshake.tlsHandshake(host, port, socketChannel);
+  // Note: Only the tlsHandshake method needs to be updated
+  public void tlsHandshake(javax.net.ssl.SSLContext sslContext) throws IOException {
+    tlsHandshake.tlsHandshake(host, port, socketChannel, sslContext);
   }
 
   public void tlsComplete() {
