@@ -12,6 +12,7 @@ import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import org.tdslib.javatdslib.tokens.visitors.ResultSegmentVisitor;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -70,7 +71,7 @@ public class TdsBatch implements Batch {
               // Injecting dependencies into the visitor
               TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
 
-              subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message, dispatcher)));
+              subscriber.onNext(new TdsResult(new ResultSegmentVisitor(transport, context, message, dispatcher)));
               subscriber.onComplete();
             } catch (Exception e) {
               subscriber.onError(e);
