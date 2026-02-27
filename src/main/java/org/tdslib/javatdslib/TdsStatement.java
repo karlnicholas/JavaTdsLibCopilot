@@ -117,12 +117,13 @@ public class TdsStatement implements Statement {
             message = createRpcMessage(query, executions);
           }
 
-          TokenDispatcher dispatcher = new TokenDispatcher();
+          // Inject the singleton registry
+          TokenDispatcher dispatcher = new TokenDispatcher(org.tdslib.javatdslib.tokens.TokenParserRegistry.DEFAULT);
+
           QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, context, message, dispatcher);
           BatchResultSplitter resultPublisher = new BatchResultSplitter(flatSegmentStream);
 
           resultPublisher.subscribe(subscriber);
-
         } catch (Exception e) {
           subscriber.onSubscribe(new Subscription() {
             @Override public void request(long n) {}

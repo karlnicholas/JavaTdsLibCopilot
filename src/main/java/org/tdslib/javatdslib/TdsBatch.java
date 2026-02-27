@@ -67,7 +67,8 @@ public class TdsBatch implements Batch {
               TdsMessage message = createSqlBatchMessage(batchSql);
 
               // Injecting dependencies into the visitor
-              TokenDispatcher dispatcher = new TokenDispatcher();
+              TokenDispatcher dispatcher = new TokenDispatcher(org.tdslib.javatdslib.tokens.TokenParserRegistry.DEFAULT);
+
               subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message, dispatcher)));
               subscriber.onComplete();
             } catch (Exception e) {

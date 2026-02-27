@@ -207,23 +207,19 @@ public class TdsConnectionFactory implements ConnectionFactory {
     return response;
   }
 
-  // 7. Update signature to accept context
+  // Note: Only the processLoginResponse method changes
   private LoginResponse processLoginResponse(TdsTransport transport, ConnectionContext context, List<TdsMessage> packets) {
-    // 8. Pass context to LoginResponse
     LoginResponse loginResponse = new LoginResponse(transport, context);
     QueryContext queryContext = new QueryContext();
-    TokenDispatcher tokenDispatcher = new TokenDispatcher();
+
+    // Inject the singleton registry
+    TokenDispatcher tokenDispatcher = new TokenDispatcher(org.tdslib.javatdslib.tokens.TokenParserRegistry.DEFAULT);
 
     for (TdsMessage msg : packets) {
-      // 9. Use context instead of transport
       context.setSpid(msg.getSpid());
-
-      // 10. Pass context to processMessage
       tokenDispatcher.processMessage(msg, context, queryContext, loginResponse);
 
-      // Still handle reset flag separately (visitor doesn't cover message-level flags)
       if (msg.isResetConnection()) {
-        // 11. Use context instead of transport
         context.resetToDefaults();
       }
     }
