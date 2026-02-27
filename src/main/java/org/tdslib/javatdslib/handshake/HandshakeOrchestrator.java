@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.LoginResponse;
 import org.tdslib.javatdslib.PreLoginResponse;
+import org.tdslib.javatdslib.tokens.visitors.LoginVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -30,15 +31,13 @@ public class HandshakeOrchestrator {
     }
 
     // 3. Login7 Auth
-    LoginResponse loginResult = login7Phase.execute(transport, context, hostname, username, password, database);
+    LoginVisitor loginVisitor = login7Phase.execute(transport, context, hostname, username, password, database);
 
-    if (!loginResult.isSuccess()) {
+    if (!loginVisitor.isSuccess()) {
       throw new R2dbcNonTransientResourceException(
-          loginResult.getErrorMessage() != null ? loginResult.getErrorMessage() : "Login Failed"
+          loginVisitor.getErrorMessage() != null ? loginVisitor.getErrorMessage() : "Login Failed"
       );
     }
-
-    logger.debug("Login successful. Database: {}", loginResult.getDatabase());
     transport.tlsComplete();
   }
 }

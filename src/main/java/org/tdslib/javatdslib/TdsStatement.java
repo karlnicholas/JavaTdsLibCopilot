@@ -13,6 +13,10 @@ import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
 import org.tdslib.javatdslib.query.rpc.CodecRegistry;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.tokens.TokenParserRegistry;
+import org.tdslib.javatdslib.tokens.visitors.CompositeTokenVisitor;
+import org.tdslib.javatdslib.tokens.visitors.EnvChangeVisitor;
+import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -117,13 +121,24 @@ public class TdsStatement implements Statement {
             message = createRpcMessage(query, executions);
           }
 
-          // Inject the singleton registry
-          TokenDispatcher dispatcher = new TokenDispatcher(org.tdslib.javatdslib.tokens.TokenParserRegistry.DEFAULT);
+          TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
 
-          QueryResponseTokenVisitor flatSegmentStream = new QueryResponseTokenVisitor(transport, context, message, dispatcher);
-          BatchResultSplitter resultPublisher = new BatchResultSplitter(flatSegmentStream);
+          // 1. Instantiate the Segment Producer
+          org.tdslib.javatdslib.ResultSegmentVisitor segmentVisitor = new org.tdslib.javatdslib.ResultSegmentVisitor(transport, context, message, dispatcher);
 
+          // 2. Compose the Pipeline
+          CompositeTokenVisitor pipeline = new CompositeTokenVisitor(
+              new EnvChangeVisitor(context),
+              new MessageVisitor(segmentVisitor::emitStreamError),
+              segmentVisitor
+          );
+
+          // 3. Attach pipeline to the producer
+          segmentVisitor.setVisitorChain(pipeline);
+
+          BatchResultSplitter resultPublisher = new BatchResultSplitter(segmentVisitor);
           resultPublisher.subscribe(subscriber);
+
         } catch (Exception e) {
           subscriber.onSubscribe(new Subscription() {
             @Override public void request(long n) {}
