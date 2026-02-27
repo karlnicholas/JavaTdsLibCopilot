@@ -3,6 +3,7 @@ package org.tdslib.javatdslib;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
+import org.tdslib.javatdslib.decode.DecoderRegistry;
 import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 import org.tdslib.javatdslib.transport.CollationUtils;
 
@@ -51,7 +52,7 @@ class TdsRow implements Row {
     }
 
     // Use the new Registry
-    return org.tdslib.javatdslib.decode.DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, resolvedCharset);
+    return DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, resolvedCharset);
   }
 
   @Override

@@ -4,6 +4,7 @@ import io.r2dbc.spi.OutParameters;
 import io.r2dbc.spi.OutParametersMetadata;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import org.tdslib.javatdslib.decode.DecoderRegistry;
 
 import java.util.List;
 import java.util.Map;
@@ -61,7 +62,7 @@ class TdsOutParameters implements OutParameters {
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
     // Use the new Registry
-    return org.tdslib.javatdslib.decode.DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, this.varcharCharset);
+    return DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, this.varcharCharset);
   }
 
   @Override
