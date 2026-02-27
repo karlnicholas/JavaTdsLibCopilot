@@ -38,12 +38,10 @@ class TdsRow implements Row {
 
     if (data == null) return null;
 
-    // Extract TypeInfo to get TDS type and collation bytes
     var typeInfo = ((ColumnMeta) meta.getNativeTypeMetadata()).getTypeInfo();
     TdsType tdsType = typeInfo.getTdsType();
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
-    // Dynamically resolve Charset using CollationUtils, fallback to varcharCharset
     Charset resolvedCharset = varcharCharset;
     byte[] collationBytes = typeInfo.getCollation();
 
@@ -52,8 +50,8 @@ class TdsRow implements Row {
           .orElse(varcharCharset);
     }
 
-    // Pass the resolved charset into the converter
-    return TdsDataConverter.convert(data, tdsType, type, scale, resolvedCharset);
+    // Use the new Registry
+    return org.tdslib.javatdslib.decode.DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, resolvedCharset);
   }
 
   @Override

@@ -60,7 +60,8 @@ class TdsOutParameters implements OutParameters {
     TdsType tdsType = meta.getTdsType();
     int scale = meta.getScale() != null ? meta.getScale() : 0;
 
-    return TdsDataConverter.convert(data, tdsType, type, scale, this.varcharCharset);
+    // Use the new Registry
+    return org.tdslib.javatdslib.decode.DecoderRegistry.DEFAULT.decode(data, tdsType, type, scale, this.varcharCharset);
   }
 
   @Override
