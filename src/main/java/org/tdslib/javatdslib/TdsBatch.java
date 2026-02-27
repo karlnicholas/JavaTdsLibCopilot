@@ -9,6 +9,7 @@ import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -67,7 +68,7 @@ public class TdsBatch implements Batch {
               TdsMessage message = createSqlBatchMessage(batchSql);
 
               // Injecting dependencies into the visitor
-              TokenDispatcher dispatcher = new TokenDispatcher(org.tdslib.javatdslib.tokens.TokenParserRegistry.DEFAULT);
+              TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
 
               subscriber.onNext(new TdsResult(new QueryResponseTokenVisitor(transport, context, message, dispatcher)));
               subscriber.onComplete();

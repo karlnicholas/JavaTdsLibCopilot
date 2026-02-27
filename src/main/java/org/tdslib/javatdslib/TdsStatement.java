@@ -19,6 +19,7 @@ import org.tdslib.javatdslib.tokens.visitors.EnvChangeVisitor;
 import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import org.tdslib.javatdslib.tokens.visitors.ResultSegmentVisitor;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -124,7 +125,7 @@ public class TdsStatement implements Statement {
           TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
 
           // 1. Instantiate the Segment Producer
-          org.tdslib.javatdslib.ResultSegmentVisitor segmentVisitor = new org.tdslib.javatdslib.ResultSegmentVisitor(transport, context, message, dispatcher);
+          ResultSegmentVisitor segmentVisitor = new ResultSegmentVisitor(transport, context, message, dispatcher);
 
           // 2. Compose the Pipeline
           CompositeTokenVisitor pipeline = new CompositeTokenVisitor(

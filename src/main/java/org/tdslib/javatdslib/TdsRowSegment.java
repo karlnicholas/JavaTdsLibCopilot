@@ -10,24 +10,10 @@ import java.util.Map;
 import java.util.TreeMap;
 
 // 1. Row Segment (Unchanged)
-class TdsRowSegment implements Result.RowSegment {
+public class TdsRowSegment implements Result.RowSegment {
   private final Row row;
   TdsRowSegment(Row row) { this.row = row; }
   @Override public Row row() { return row; }
-}
-
-// 2. Update Count Segment (Unchanged)
-class TdsUpdateCount implements Result.UpdateCount {
-  private final long value;
-  TdsUpdateCount(long value) { this.value = value; }
-  @Override public long value() { return value; }
-}
-
-// 3. Out Parameters Segment (Unchanged)
-class TdsOutSegment implements Result.OutSegment {
-  private final OutParameters outParameters;
-  TdsOutSegment(OutParameters outParameters) { this.outParameters = outParameters; }
-  @Override public OutParameters outParameters() { return outParameters; }
 }
 
 // 4. Standalone OutParameters Implementation
