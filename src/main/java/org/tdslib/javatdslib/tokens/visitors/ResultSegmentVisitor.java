@@ -1,20 +1,28 @@
 package org.tdslib.javatdslib.tokens.visitors;
 
 import io.r2dbc.spi.Result;
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.SegmentTranslator;
+import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.tokens.DataParser;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.colmetadata.ColumnMeta;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
+import org.tdslib.javatdslib.tokens.error.ErrorToken;
+import org.tdslib.javatdslib.tokens.info.InfoToken;
 import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
-import org.tdslib.javatdslib.tokens.row.RowToken;
+import org.tdslib.javatdslib.tokens.row.RawRowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 import org.tdslib.javatdslib.transport.AbstractQueueDrainPublisher;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ResultSegmentVisitor extends AbstractQueueDrainPublisher<Result.Segment> implements TokenVisitor {
@@ -23,10 +31,14 @@ public class ResultSegmentVisitor extends AbstractQueueDrainPublisher<Result.Seg
   private final ConnectionContext context;
   private final TdsMessage queryTdsMessage;
   private final TokenDispatcher tokenDispatcher;
-  private final QueryContext queryContext = new QueryContext();
 
-  private TokenVisitor visitorChain; // The dynamic pipeline
+  private TokenVisitor visitorChain;
   private final AtomicBoolean isQuerySent = new AtomicBoolean(false);
+
+  // --- Stateful Pipeline Variables ---
+  private ColMetaDataToken currentMetaData;
+  private final List<ReturnValueToken> returnValues = new ArrayList<>();
+  private boolean hasError = false;
 
   public ResultSegmentVisitor(TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage, TokenDispatcher tokenDispatcher) {
     this.transport = transport;
@@ -62,8 +74,7 @@ public class ResultSegmentVisitor extends AbstractQueueDrainPublisher<Result.Seg
 
   private void messageHandler(TdsMessage tdsMessage) {
     if (isCancelled.get()) return;
-    // Route tokens through the entire assembled chain
-    tokenDispatcher.processMessage(tdsMessage, context, queryContext, visitorChain != null ? visitorChain : this);
+    tokenDispatcher.processMessage(tdsMessage, context, visitorChain != null ? visitorChain : this);
   }
 
   private void errorHandler(Throwable t) {
@@ -71,33 +82,57 @@ public class ResultSegmentVisitor extends AbstractQueueDrainPublisher<Result.Seg
   }
 
   @Override
-  public void onToken(Token token, QueryContext queryContext) {
+  public void onToken(Token token) {
     if (isCancelled.get()) return;
 
-    switch (token.getType()) {
-      case ROW:
-        emit(SegmentTranslator.createRowSegment((RowToken) token, queryContext, context));
-        break;
+    // FIX: Swapped enum switch for instanceof checks to safely cast and avoid enum qualification errors
+    if (token instanceof ColMetaDataToken) {
+      this.currentMetaData = (ColMetaDataToken) token;
 
-      case DONE:
-      case DONE_IN_PROC:
-      case DONE_PROC:
-        DoneToken done = (DoneToken) token;
-        if (!queryContext.getReturnValues().isEmpty()) {
-          emit(SegmentTranslator.createOutSegment(queryContext, context));
-          queryContext.getReturnValues().clear();
-        } else if (done.getStatus().hasCount()) {
-          emit(new TdsUpdateCount(done.getCount()));
-        }
+    } else if (token instanceof RawRowToken) {
+      RawRowToken rawRow = (RawRowToken) token;
+      List<byte[]> columnData = parseRowBytes(rawRow.getPayload(), currentMetaData);
+      emit(SegmentTranslator.createRowSegment(columnData, currentMetaData, context));
 
-        if (!done.getStatus().hasMoreResults() && !queryContext.isHasError()) {
-          complete();
-        }
-        break;
+    } else if (token instanceof DoneToken) {
+      DoneToken done = (DoneToken) token;
+      if (!this.returnValues.isEmpty()) {
+        emit(SegmentTranslator.createOutSegment(this.returnValues, context));
+        this.returnValues.clear();
+      } else if (done.getStatus().hasCount()) {
+        emit(new TdsUpdateCount(done.getCount()));
+      }
 
-      case RETURN_VALUE:
-        queryContext.addReturnValue((ReturnValueToken) token);
-        break;
+      if (!done.getStatus().hasMoreResults() && !this.hasError) {
+        complete();
+      }
+
+    } else if (token instanceof ReturnValueToken) {
+      this.returnValues.add((ReturnValueToken) token);
+
+    } else if (token instanceof ErrorToken) {
+      ErrorToken err = (ErrorToken) token;
+      if (err.isError()) {
+        this.hasError = true;
+      }
+
+    } else if (token instanceof InfoToken) {
+      InfoToken info = (InfoToken) token;
+      if (info.isError()) {
+        this.hasError = true;
+      }
     }
+  }
+
+  private List<byte[]> parseRowBytes(ByteBuffer payload, ColMetaDataToken metaData) {
+    List<byte[]> rowData = new ArrayList<>();
+    if (metaData != null) {
+      for (ColumnMeta col : metaData.getColumns()) {
+        TdsType type = TdsType.valueOf(col.getDataType());
+        byte[] data = DataParser.getDataBytes(payload, type, col.getMaxLength());
+        rowData.add(data);
+      }
+    }
+    return rowData;
   }
 }

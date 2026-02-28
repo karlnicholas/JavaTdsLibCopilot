@@ -1,6 +1,5 @@
   package org.tdslib.javatdslib.tokens.visitors;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 
@@ -14,9 +13,9 @@ public class CompositeTokenVisitor implements TokenVisitor {
   }
 
   @Override
-  public void onToken(Token token, QueryContext queryContext) {
+  public void onToken(Token token) {
     for (TokenVisitor visitor : visitors) {
-      visitor.onToken(token, queryContext);
+      visitor.onToken(token);
     }
   }
 }

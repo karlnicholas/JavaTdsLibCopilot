@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens.colmetadata;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TypeInfo;
@@ -19,7 +18,7 @@ public class ColMetaDataTokenParser implements TokenParser {
 
   @Override
   public Token parse(final ByteBuffer payload, final byte tokenType,
-                     final ConnectionContext context, final QueryContext queryContext) {
+                     final ConnectionContext context) {
     if (tokenType != (byte) 0x81) {
       throw new IllegalArgumentException("Expected COL_METADATA token (0x81), but got 0x" + Integer.toHexString(tokenType & 0xFF));
     }
@@ -50,7 +49,7 @@ public class ColMetaDataTokenParser implements TokenParser {
     }
 
     final ColMetaDataToken token = new ColMetaDataToken(tokenType, columnCount, columns);
-    queryContext.setColMetaDataToken(token);
+    // FIX: Removed the queryContext.setColMetaDataToken(token) line
     return token;
   }
 }

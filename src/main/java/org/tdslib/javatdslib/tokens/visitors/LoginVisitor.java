@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.visitors;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.done.DoneToken;
@@ -11,7 +10,7 @@ public class LoginVisitor implements TokenVisitor {
   private String errorMessage = null;
 
   @Override
-  public void onToken(Token token, QueryContext queryContext) {
+  public void onToken(Token token) {
     switch (token.getType()) {
       case ERROR:
         this.success = false;

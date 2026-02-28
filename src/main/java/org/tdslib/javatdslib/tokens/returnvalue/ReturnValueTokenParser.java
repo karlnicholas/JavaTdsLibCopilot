@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.returnvalue;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.*;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
@@ -11,8 +10,7 @@ public class ReturnValueTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
     if (tokenType != TokenType.RETURN_VALUE.getValue()) {
       throw new IllegalArgumentException("Expected RETURNVALUE token (0xAC)");
     }

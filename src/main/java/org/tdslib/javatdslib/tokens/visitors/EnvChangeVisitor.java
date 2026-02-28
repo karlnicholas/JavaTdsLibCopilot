@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.visitors;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
@@ -16,7 +15,7 @@ public class EnvChangeVisitor implements TokenVisitor {
   }
 
   @Override
-  public void onToken(Token token, QueryContext queryContext) {
+  public void onToken(Token token) {
     if (token.getType() == TokenType.ENV_CHANGE) {
       EnvChangeApplier.apply((EnvChangeToken) token, context);
     }

@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.error.ErrorToken;
 import org.tdslib.javatdslib.tokens.info.InfoToken;
@@ -26,8 +25,7 @@ public class MessageTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
 
     // 1. Validate that this parser is handling the correct token types
     if (tokenType != TokenType.ERROR.getValue() && tokenType != TokenType.INFO.getValue()) {

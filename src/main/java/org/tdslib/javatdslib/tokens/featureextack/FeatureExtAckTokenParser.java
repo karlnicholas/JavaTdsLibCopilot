@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.featureextack;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -16,8 +15,7 @@ public class FeatureExtAckTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
     if (tokenType != TokenType.FEATURE_EXT_ACK.getValue()) {
       throw new IllegalArgumentException("Expected FEATURE_EXT_ACK token (0xAE)");
     }

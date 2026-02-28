@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.returnstatus;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -18,8 +17,7 @@ public class ReturnStatusTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
     if (tokenType != TokenType.RETURN_STATUS.getValue()) {
       final String hex = Integer.toHexString(tokenType & 0xFF);
       throw new IllegalArgumentException(

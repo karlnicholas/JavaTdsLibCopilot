@@ -3,7 +3,6 @@ package org.tdslib.javatdslib.handshake;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.login7.Login7Options;
@@ -71,12 +70,11 @@ public class Login7Phase {
         loginVisitor
     );
 
-    QueryContext queryContext = new QueryContext();
     TokenDispatcher tokenDispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
 
     for (TdsMessage msg : packets) {
       context.setSpid(msg.getSpid());
-      tokenDispatcher.processMessage(msg, context, queryContext, pipeline);
+      tokenDispatcher.processMessage(msg, context, pipeline);
 
       if (msg.isResetConnection()) {
         context.resetToDefaults();

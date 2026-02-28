@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.envchange;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
@@ -17,8 +16,7 @@ public class EnvChangeTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
     // Read the total EnvValueData length in bytes (USHORT after the token type 0xE3)
     int envDataLength = payload.getShort() & 0xFFFF;
 

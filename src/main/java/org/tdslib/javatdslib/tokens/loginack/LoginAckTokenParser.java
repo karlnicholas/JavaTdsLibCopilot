@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.loginack;
 
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
@@ -18,8 +17,7 @@ public class LoginAckTokenParser implements TokenParser {
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
-                     final ConnectionContext context,
-                     final QueryContext queryContext) {
+                     final ConnectionContext context) {
     if (tokenType != TokenType.LOGIN_ACK.getValue()) {
       final String hex = Integer.toHexString(tokenType & 0xFF);
       throw new IllegalArgumentException("Expected LOGINACK (0xAD), got 0x" + hex);

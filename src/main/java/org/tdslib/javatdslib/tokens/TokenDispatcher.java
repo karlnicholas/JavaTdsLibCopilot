@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.QueryContext;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
@@ -31,7 +30,7 @@ public class TokenDispatcher {
    * @param visitor Callback to handle each parsed token
    */
   public void processMessage(final TdsMessage tdsMessage, final ConnectionContext connectionContext,
-                             final QueryContext queryContext, final TokenVisitor visitor) {
+                             final TokenVisitor visitor) {
     final ByteBuffer payload = tdsMessage.getPayload();
     payload.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -47,8 +46,8 @@ public class TokenDispatcher {
 
       logger.trace("Parsing token type " + TokenType.fromValue(tokenTypeByte).name());
 
-      final Token token = parser.parse(payload, tokenTypeByte, connectionContext, queryContext);
-      visitor.onToken(token, queryContext);
+      final Token token = parser.parse(payload, tokenTypeByte, connectionContext);
+      visitor.onToken(token);
     }
 
     if (tdsMessage.isResetConnection()) {
