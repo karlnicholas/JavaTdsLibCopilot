@@ -79,13 +79,19 @@ public class NumericDecoder implements ResultDecoder {
         if (data.length == 4) {
           return targetType.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
         }
-        // Fall through
-      case FLT8:
-        double doubleVal = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
+        // Explicitly handle the 8-byte FLTN scenario instead of falling through
+        double fltnDouble = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
         if (targetType == Float.class) {
-          return targetType.cast((float) doubleVal);
+          return targetType.cast((float) fltnDouble);
         }
-        return targetType.cast(doubleVal);
+        return targetType.cast(fltnDouble);
+
+      case FLT8:
+        double flt8Double = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
+        if (targetType == Float.class) {
+          return targetType.cast((float) flt8Double);
+        }
+        return targetType.cast(flt8Double);
 
       case BIT:
       case BITN:
