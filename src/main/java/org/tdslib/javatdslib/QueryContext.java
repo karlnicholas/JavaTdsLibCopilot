@@ -1,10 +1,9 @@
 package org.tdslib.javatdslib;
 
-import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
-import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueToken;
 
 /**
  * Holds per-query parsing context such as the last seen column metadata token.
@@ -15,11 +14,19 @@ public class QueryContext {
   private final List<ReturnValueToken> returnValues;
   private boolean hasError;
 
+  /**
+   * Creates a new QueryContext.
+   */
   public QueryContext() {
     returnValues = new ArrayList<>();
     hasError = false;
   }
 
+  /**
+   * Returns the list of return values collected during query execution.
+   *
+   * @return the list of ReturnValueToken
+   */
   public List<ReturnValueToken> getReturnValues() {
     return returnValues;
   }

@@ -2,23 +2,33 @@ package org.tdslib.javatdslib.security;
 
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import io.r2dbc.spi.Option;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
+/**
+ * Builds an SSLContext based on connection options.
+ */
 public class SslContextBuilder {
 
-  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE = Option.valueOf("trustServerCertificate");
+  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE =
+      Option.valueOf("trustServerCertificate");
   public static final Option<String> TRUST_STORE = Option.valueOf("trustStore");
   public static final Option<String> TRUST_STORE_PASSWORD = Option.valueOf("trustStorePassword");
 
+  /**
+   * Builds an SSLContext.
+   *
+   * @param options the connection factory options
+   * @return the configured SSLContext
+   * @throws Exception if an error occurs during SSL context creation
+   */
   public static SSLContext build(ConnectionFactoryOptions options) throws Exception {
     Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
     boolean trustAll = false;
@@ -33,9 +43,18 @@ public class SslContextBuilder {
       // Development Mode: Trust all certificates
       TrustManager[] trustAllCerts = new TrustManager[]{
           new X509TrustManager() {
-            @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-            @Override public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-            @Override public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+              return new X509Certificate[0];
+            }
+
+            @Override
+            public void checkClientTrusted(X509Certificate[] certs, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] certs, String authType) {
+            }
           }
       };
       SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
@@ -56,7 +75,8 @@ public class SslContextBuilder {
         ks.load(is, password);
       }
 
-      TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+      TrustManagerFactory tmf =
+          TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
       tmf.init(ks);
 
       SSLContext sslContext = SSLContext.getInstance("TLSv1.2");

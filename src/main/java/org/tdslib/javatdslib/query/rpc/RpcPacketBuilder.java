@@ -1,16 +1,18 @@
 package org.tdslib.javatdslib.query.rpc;
 
 import io.r2dbc.spi.Parameter;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-
+/**
+ * Builds TDS RPC packets for executing parameterized queries.
+ */
 public class RpcPacketBuilder {
   private static final Logger logger = LoggerFactory.getLogger(RpcPacketBuilder.class);
 
@@ -23,7 +25,17 @@ public class RpcPacketBuilder {
   private final CodecRegistry codecRegistry;
   private final RpcEncodingContext encodingContext;
 
-  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update, CodecRegistry codecRegistry, RpcEncodingContext encodingContext) {
+  /**
+   * Creates a new RpcPacketBuilder.
+   *
+   * @param sql             the SQL statement
+   * @param batchParams     the list of parameter sets for batch execution
+   * @param update          whether this is an update operation
+   * @param codecRegistry   the registry for parameter codecs
+   * @param encodingContext the encoding context
+   */
+  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update,
+                          CodecRegistry codecRegistry, RpcEncodingContext encodingContext) {
     this.sql = sql;
     this.batchParams = batchParams;
     this.update = update;
@@ -31,13 +43,16 @@ public class RpcPacketBuilder {
     this.encodingContext = encodingContext;
   }
 
+  /**
+   * Builds the RPC packet buffer.
+   *
+   * @return the constructed ByteBuffer
+   */
   public ByteBuffer buildRpcPacket() {
     ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
     buf.order(ByteOrder.LITTLE_ENDIAN);
 
     for (int i = 0; i < batchParams.size(); i++) {
-      List<ParamEntry> params = batchParams.get(i);
-
       // TDS Spec: 0x80 (BatchFlag) separates multiple RPCReqBatch requests
       if (i > 0) {
         buf.put((byte) 0xFF);
@@ -55,6 +70,8 @@ public class RpcPacketBuilder {
       byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
       buf.putShort((short) sqlBytes.length);
       buf.put(sqlBytes);
+
+      List<ParamEntry> params = batchParams.get(i);
 
       // 2. Framework @params header
       if (!params.isEmpty()) {
@@ -96,11 +113,15 @@ public class RpcPacketBuilder {
   }
 
   private String buildParamDecl(List<ParamEntry> params) {
-    if (params.isEmpty()) return "";
+    if (params.isEmpty()) {
+      return "";
+    }
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < params.size(); i++) {
       ParamEntry entry = params.get(i);
-      if (i > 0) sb.append(",");
+      if (i > 0) {
+        sb.append(",");
+      }
 
       ParameterCodec codec = codecRegistry.getCodec(entry);
       String decl = codec.getSqlTypeDeclaration(entry);
