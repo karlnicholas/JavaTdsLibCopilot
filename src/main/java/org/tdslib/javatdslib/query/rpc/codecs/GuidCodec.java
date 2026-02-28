@@ -1,13 +1,15 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
+import java.util.UUID;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-import java.util.UUID;
-
+/**
+ * Codec for encoding UUID values into TDS uniqueidentifier format.
+ */
 public class GuidCodec implements ParameterCodec {
 
   @Override
@@ -40,7 +42,7 @@ public class GuidCodec implements ParameterCodec {
     long msb = uuid.getMostSignificantBits();
     long lsb = uuid.getLeastSignificantBits();
 
-    // MS-SQL requires the first 3 groups of the GUID to be little-endian, and the last 2 groups big-endian
+    // MS-SQL requires the first 3 groups of the GUID to be little-endian, and the last 2 big-endian
     buf.putInt(Integer.reverseBytes((int) (msb >>> 32)));
     buf.putShort(Short.reverseBytes((short) (msb >>> 16)));
     buf.putShort(Short.reverseBytes((short) msb));

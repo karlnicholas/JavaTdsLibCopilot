@@ -1,19 +1,21 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Codec for encoding floating-point values (Float, Double) into TDS REAL/FLOAT format.
+ */
 public class FloatCodec implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.FLT4 || type == TdsType.REAL ||
-        type == TdsType.FLT8 || type == TdsType.FLTN;
+    return type == TdsType.FLT4 || type == TdsType.REAL
+        || type == TdsType.FLT8 || type == TdsType.FLTN;
   }
 
   @Override

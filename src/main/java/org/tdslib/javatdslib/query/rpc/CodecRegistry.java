@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.query.rpc;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.tdslib.javatdslib.query.rpc.codecs.BigDecimalCodec;
 import org.tdslib.javatdslib.query.rpc.codecs.BinaryCodec;
 import org.tdslib.javatdslib.query.rpc.codecs.BooleanCodec;
@@ -9,9 +11,9 @@ import org.tdslib.javatdslib.query.rpc.codecs.GuidCodec;
 import org.tdslib.javatdslib.query.rpc.codecs.IntegerCodec;
 import org.tdslib.javatdslib.query.rpc.codecs.StringCodec;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Registry for managing and accessing ParameterCodecs.
+ */
 public class CodecRegistry {
 
   public static final CodecRegistry DEFAULT = new CodecRegistry();
@@ -29,10 +31,22 @@ public class CodecRegistry {
 
   private final List<ParameterCodec> codecs = new ArrayList<>();
 
+  /**
+   * Registers a new codec.
+   *
+   * @param codec the codec to register
+   */
   public void register(ParameterCodec codec) {
     codecs.add(codec);
   }
 
+  /**
+   * Retrieves a codec capable of encoding the given parameter entry.
+   *
+   * @param entry the parameter entry to encode
+   * @return a suitable ParameterCodec
+   * @throws IllegalArgumentException if no suitable codec is found
+   */
   public ParameterCodec getCodec(ParamEntry entry) {
     for (ParameterCodec codec : codecs) {
       if (codec.canEncode(entry)) {

@@ -1,12 +1,14 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Codec for encoding Boolean values into TDS BIT/BITN format.
+ */
 public class BooleanCodec implements ParameterCodec {
 
   @Override

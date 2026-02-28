@@ -1,14 +1,13 @@
 package org.tdslib.javatdslib.payloads.login7;
 
-import org.tdslib.javatdslib.payloads.Payload;
-import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.tdslib.javatdslib.payloads.Payload;
+import org.tdslib.javatdslib.payloads.login7.auth.FedAuth;
 
 /**
  * Builds a TDS LOGIN7 payload buffer.
@@ -277,7 +276,7 @@ public final class Login7Payload extends Payload {
       }
     }
 
-// ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
     // NEW: Request UTF-8 Support (Feature ID: 0x0A)
     // ─────────────────────────────────────────────────────────
     // TODO: You might want to wrap this in an `if (options.requestUtf8())`

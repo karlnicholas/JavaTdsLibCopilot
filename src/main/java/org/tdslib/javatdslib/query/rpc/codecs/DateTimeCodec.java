@@ -1,17 +1,19 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
-import org.tdslib.javatdslib.TdsType;
-import org.tdslib.javatdslib.query.rpc.ParamEntry;
-import org.tdslib.javatdslib.query.rpc.ParameterCodec;
-import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
-
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.query.rpc.ParamEntry;
+import org.tdslib.javatdslib.query.rpc.ParameterCodec;
+import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
+/**
+ * Codec for encoding Date/Time values into TDS formats (DATE, TIME, DATETIME2, DATETIMEOFFSET).
+ */
 public class DateTimeCodec implements ParameterCodec {
 
   private static final LocalDate TDS_BASE_DATE = LocalDate.of(1, 1, 1);
@@ -19,19 +21,29 @@ public class DateTimeCodec implements ParameterCodec {
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.DATE || type == TdsType.TIME ||
-        type == TdsType.DATETIME2 || type == TdsType.DATETIMEOFFSET ||
-        type == TdsType.DATETIME || type == TdsType.SMALLDATETIME || type == TdsType.DATETIMN;
+    return type == TdsType.DATE || type == TdsType.TIME
+        || type == TdsType.DATETIME2 || type == TdsType.DATETIMEOFFSET
+        || type == TdsType.DATETIME || type == TdsType.SMALLDATETIME || type == TdsType.DATETIMN;
   }
 
   @Override
   public String getSqlTypeDeclaration(ParamEntry entry) {
     TdsType type = entry.key().type();
-    if (type == TdsType.DATE) return "date";
-    if (type == TdsType.TIME) return "time(7)";
-    if (type == TdsType.DATETIMEOFFSET) return "datetimeoffset(7)";
-    if (type == TdsType.DATETIME) return "datetime";
-    if (type == TdsType.SMALLDATETIME) return "smalldatetime";
+    if (type == TdsType.DATE) {
+      return "date";
+    }
+    if (type == TdsType.TIME) {
+      return "time(7)";
+    }
+    if (type == TdsType.DATETIMEOFFSET) {
+      return "datetimeoffset(7)";
+    }
+    if (type == TdsType.DATETIME) {
+      return "datetime";
+    }
+    if (type == TdsType.SMALLDATETIME) {
+      return "smalldatetime";
+    }
     return "datetime2(7)";
   }
 

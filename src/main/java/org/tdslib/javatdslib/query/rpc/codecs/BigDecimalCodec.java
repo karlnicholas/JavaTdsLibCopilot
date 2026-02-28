@@ -1,22 +1,24 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.math.RoundingMode;
-import java.nio.ByteBuffer;
-
+/**
+ * Codec for encoding BigDecimal values into TDS DECIMAL/NUMERIC format.
+ */
 public class BigDecimalCodec implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.DECIMAL || type == TdsType.NUMERIC ||
-        type == TdsType.DECIMALN || type == TdsType.NUMERICN;
+    return type == TdsType.DECIMAL || type == TdsType.NUMERIC
+        || type == TdsType.DECIMALN || type == TdsType.NUMERICN;
   }
 
   @Override

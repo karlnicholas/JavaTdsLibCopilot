@@ -1,21 +1,23 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-
+/**
+ * Codec for encoding String values into TDS CHAR/VARCHAR/NCHAR/NVARCHAR format.
+ */
 public class StringCodec implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT ||
-        type == TdsType.VARCHAR || type == TdsType.CHAR || type == TdsType.TEXT ||
-        type == TdsType.BIGVARCHR || type == TdsType.BIGCHAR;
+    return type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT
+        || type == TdsType.VARCHAR || type == TdsType.CHAR || type == TdsType.TEXT
+        || type == TdsType.BIGVARCHR || type == TdsType.BIGCHAR;
   }
 
   @Override
@@ -41,7 +43,8 @@ public class StringCodec implements ParameterCodec {
     if (encodedLen > 8000) {
       buf.putShort((short) -1); // 0xFFFF signals a max-length/PLP type
     } else {
-      // In RPC TYPE_INFO, we send the maximum capacity of the declared type, not the string's actual length
+      // In RPC TYPE_INFO, we send the maximum capacity of the declared type,
+      // not the string's actual length
       buf.putShort((short) 8000);
     }
 
@@ -57,15 +60,15 @@ public class StringCodec implements ParameterCodec {
       return;
     }
 
-    String sVal = (value instanceof String) ? (String) value : value.toString();
+    String stringVal = (value instanceof String) ? (String) value : value.toString();
     TdsType type = entry.key().type();
     boolean isNational = isNationalType(type);
 
     byte[] bytes;
     if (isNational) {
-      bytes = sVal.getBytes(StandardCharsets.UTF_16LE);
+      bytes = stringVal.getBytes(StandardCharsets.UTF_16LE);
     } else {
-      bytes = sVal.getBytes(context.varcharCharset());
+      bytes = stringVal.getBytes(context.varcharCharset());
     }
 
     if (bytes.length > 8000) {
@@ -91,7 +94,9 @@ public class StringCodec implements ParameterCodec {
 
   private int getEncodedLength(ParamEntry entry, RpcEncodingContext context) {
     Object value = entry.value().getValue();
-    if (value == null) return 0;
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof String s) {
       if (isNationalType(entry.key().type())) {

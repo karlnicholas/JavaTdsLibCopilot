@@ -1,19 +1,21 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Codec for encoding binary data types (BINARY, VARBINARY, IMAGE) into TDS format.
+ */
 public class BinaryCodec implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY ||
-        type == TdsType.VARBINARY || type == TdsType.BINARY || type == TdsType.IMAGE;
+    return type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY
+        || type == TdsType.VARBINARY || type == TdsType.BINARY || type == TdsType.IMAGE;
   }
 
   @Override
@@ -58,7 +60,9 @@ public class BinaryCodec implements ParameterCodec {
   }
 
   private byte[] getBytes(Object value) {
-    if (value instanceof byte[]) return (byte[]) value;
+    if (value instanceof byte[]) {
+      return (byte[]) value;
+    }
     if (value instanceof ByteBuffer bb) {
       byte[] b = new byte[bb.remaining()];
       bb.duplicate().get(b);

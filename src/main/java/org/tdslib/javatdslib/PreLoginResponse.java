@@ -70,24 +70,24 @@ public class PreLoginResponse {
     return negotiatedPacketSize;
   }
 
-//  /**
-//   * Does the server require or request encryption.
-//   * Useful to decide whether to start TLS handshake.
-//   *
-//   * @return true if encryption is on or required.
-//   */
-//  public boolean requiresEncryption() {
-//    return encryption == 1 || encryption == 3; // on or required
-//  }
-//
-//  /**
-//   * Does the server support encryption.
-//   *
-//   * @return true if encryption is anything except off.
-//   */
-//  public boolean supportsEncryption() {
-//    return encryption != 0; // anything except off
-//  }
+  /**
+   * Does the server require or request encryption.
+   * Useful to decide whether to start TLS handshake.
+   *
+   * @return true if encryption is on or required.
+   */
+  public boolean requiresEncryption() {
+    return encryption == 1 || encryption == 3; // on or required
+  }
+
+  /**
+   * Does the server support encryption.
+   *
+   * @return true if encryption is anything except off.
+   */
+  public boolean supportsEncryption() {
+    return encryption != 0; // anything except off
+  }
 
   @Override
   public String toString() {

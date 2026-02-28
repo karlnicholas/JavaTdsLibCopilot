@@ -1,35 +1,51 @@
 package org.tdslib.javatdslib.query.rpc.codecs;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.TdsType;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Codec for encoding integer values (Byte, Short, Integer, Long) into TDS INT format.
+ */
 public class IntegerCodec implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
     TdsType type = entry.key().type();
-    return type == TdsType.INT1 || type == TdsType.INT2 ||
-        type == TdsType.INT4 || type == TdsType.INT8 || type == TdsType.INTN;
+    return type == TdsType.INT1 || type == TdsType.INT2
+        || type == TdsType.INT4 || type == TdsType.INT8 || type == TdsType.INTN;
   }
 
   @Override
   public String getSqlTypeDeclaration(ParamEntry entry) {
     TdsType type = entry.key().type();
-    Object value = entry.value().getValue();
 
-    if (type == TdsType.INT1) return "tinyint";
-    if (type == TdsType.INT2) return "smallint";
-    if (type == TdsType.INT4) return "int";
-    if (type == TdsType.INT8) return "bigint";
+    if (type == TdsType.INT1) {
+      return "tinyint";
+    }
+    if (type == TdsType.INT2) {
+      return "smallint";
+    }
+    if (type == TdsType.INT4) {
+      return "int";
+    }
+    if (type == TdsType.INT8) {
+      return "bigint";
+    }
 
     if (type == TdsType.INTN) {
-      if (value instanceof Long) return "bigint";
-      if (value instanceof Short) return "smallint";
-      if (value instanceof Byte) return "tinyint";
+      Object value = entry.value().getValue();
+      if (value instanceof Long) {
+        return "bigint";
+      }
+      if (value instanceof Short) {
+        return "smallint";
+      }
+      if (value instanceof Byte) {
+        return "tinyint";
+      }
       return "int";
     }
     return "int";
@@ -43,9 +59,13 @@ public class IntegerCodec implements ParameterCodec {
     Object val = entry.value().getValue();
     byte maxLen = 4;
 
-    if (type == TdsType.INT1 || val instanceof Byte) maxLen = 1;
-    else if (type == TdsType.INT2 || val instanceof Short) maxLen = 2;
-    else if (type == TdsType.INT8 || val instanceof Long) maxLen = 8;
+    if (type == TdsType.INT1 || val instanceof Byte) {
+      maxLen = 1;
+    } else if (type == TdsType.INT2 || val instanceof Short) {
+      maxLen = 2;
+    } else if (type == TdsType.INT8 || val instanceof Long) {
+      maxLen = 8;
+    }
 
     buf.put(maxLen);
   }
