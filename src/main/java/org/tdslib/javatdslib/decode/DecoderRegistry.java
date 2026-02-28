@@ -1,11 +1,13 @@
 package org.tdslib.javatdslib.decode;
 
-import org.tdslib.javatdslib.TdsType;
-
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import org.tdslib.javatdslib.TdsType;
 
+/**
+ * Registry for managing and accessing ResultDecoders.
+ */
 public class DecoderRegistry {
   public static final DecoderRegistry DEFAULT = new DecoderRegistry();
 
@@ -19,12 +21,23 @@ public class DecoderRegistry {
     DEFAULT.register(new GuidDecoder()); // Added GuidDecoder
   }
 
+  /**
+   * Registers a new decoder.
+   *
+   * @param decoder the decoder to register
+   */
   public void register(ResultDecoder decoder) {
     decoders.add(decoder);
   }
 
-  public <T> T decode(byte[] data, TdsType tdsType, Class<T> targetType, int scale, Charset varcharCharset) {
-    if (data == null) return null;
+  /**
+   * Decodes the given data using a registered decoder.
+   */
+  public <T> T decode(byte[] data, TdsType tdsType, Class<T> targetType, int scale,
+                      Charset varcharCharset) {
+    if (data == null) {
+      return null;
+    }
 
     for (ResultDecoder decoder : decoders) {
       if (decoder.canDecode(tdsType)) {

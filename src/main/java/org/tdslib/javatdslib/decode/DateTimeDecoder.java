@@ -1,12 +1,18 @@
 package org.tdslib.javatdslib.decode;
 
-import org.tdslib.javatdslib.TdsType;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
-import java.time.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import org.tdslib.javatdslib.TdsType;
 
+/**
+ * Decodes TDS date and time types into Java Time objects.
+ */
 public class DateTimeDecoder implements ResultDecoder {
 
   // Lookup array replacing Math.pow() for instant time scaling
@@ -16,14 +22,18 @@ public class DateTimeDecoder implements ResultDecoder {
 
   @Override
   public boolean canDecode(TdsType tdsType) {
-    return tdsType == TdsType.DATE || tdsType == TdsType.TIME ||
-        tdsType == TdsType.DATETIME2 || tdsType == TdsType.DATETIMEOFFSET ||
-        tdsType == TdsType.DATETIMN || tdsType == TdsType.DATETIME ||
-        tdsType == TdsType.SMALLDATETIME;
+    return tdsType == TdsType.DATE
+        || tdsType == TdsType.TIME
+        || tdsType == TdsType.DATETIME2
+        || tdsType == TdsType.DATETIMEOFFSET
+        || tdsType == TdsType.DATETIMN
+        || tdsType == TdsType.DATETIME
+        || tdsType == TdsType.SMALLDATETIME;
   }
 
   @Override
-  public <T> T decode(byte[] data, TdsType tdsType, Class<T> targetType, int scale, Charset varcharCharset) {
+  public <T> T decode(byte[] data, TdsType tdsType, Class<T> targetType, int scale,
+                      Charset varcharCharset) {
     Object result;
     switch (tdsType) {
       case DATE:
@@ -52,7 +62,9 @@ public class DateTimeDecoder implements ResultDecoder {
 
   private LocalTime readTime(byte[] data, int scale) {
     long raw = 0;
-    for (int i = 0; i < data.length; i++) raw |= ((long) (data[i] & 0xFF)) << (8 * i);
+    for (int i = 0; i < data.length; i++) {
+      raw |= ((long) (data[i] & 0xFF)) << (8 * i);
+    }
     // FIX: Replaced Math.pow with highly performant array lookup
     long factor = NANOS_FACTOR[scale];
     return LocalTime.ofNanoOfDay(raw * factor);
@@ -65,7 +77,8 @@ public class DateTimeDecoder implements ResultDecoder {
     LocalTime time = readTime(timeBytes, scale);
 
     int dayBytesStart = timeLen;
-    int days = (data[dayBytesStart] & 0xFF) | ((data[dayBytesStart + 1] & 0xFF) << 8) | ((data[dayBytesStart + 2] & 0xFF) << 16);
+    int days = (data[dayBytesStart] & 0xFF) | ((data[dayBytesStart + 1] & 0xFF) << 8)
+        | ((data[dayBytesStart + 2] & 0xFF) << 16);
     LocalDate date = LocalDate.of(1, 1, 1).plusDays(days);
     return LocalDateTime.of(date, time);
   }
@@ -77,7 +90,8 @@ public class DateTimeDecoder implements ResultDecoder {
     System.arraycopy(data, 0, dt2Bytes, 0, dt2Len);
 
     LocalDateTime utcDateTime = readDateTime2(dt2Bytes, scale);
-    short offsetMinutes = ByteBuffer.wrap(data, offsetBytesStart, 2).order(ByteOrder.LITTLE_ENDIAN).getShort();
+    short offsetMinutes = ByteBuffer.wrap(data, offsetBytesStart, 2)
+        .order(ByteOrder.LITTLE_ENDIAN).getShort();
     ZoneOffset offset = ZoneOffset.ofTotalSeconds(offsetMinutes * 60);
 
     return OffsetDateTime.ofInstant(utcDateTime.toInstant(ZoneOffset.UTC), offset);
@@ -88,7 +102,8 @@ public class DateTimeDecoder implements ResultDecoder {
 
     if (data.length == 8) {
       int days = ByteBuffer.wrap(data, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-      long ticks = Integer.toUnsignedLong(ByteBuffer.wrap(data, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
+      long ticks = Integer.toUnsignedLong(ByteBuffer.wrap(data, 4, 4)
+          .order(ByteOrder.LITTLE_ENDIAN).getInt());
       // FIX: Removed dangerous Double Math to prevent IEEE-754 precision loss
       long nanos = (ticks * 10000000L) / 3L;
       return LocalDateTime.of(baseDate.plusDays(days), LocalTime.ofNanoOfDay(nanos));

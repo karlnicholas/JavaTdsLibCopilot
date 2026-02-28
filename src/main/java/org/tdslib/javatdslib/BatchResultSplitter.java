@@ -1,6 +1,7 @@
 package org.tdslib.javatdslib;
 
 import io.r2dbc.spi.Result;
+import java.util.concurrent.atomic.AtomicReference;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -8,13 +9,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.transport.AbstractQueueDrainPublisher;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 /**
  * Consumes a flat stream of Result.Segment and splits it into a stream of Result objects.
  * A new Result is emitted for each new statement execution, typically bounded by a TdsUpdateCount.
  */
-public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> implements Subscriber<Result.Segment> {
+public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
+    implements Subscriber<Result.Segment> {
   private static final Logger logger = LoggerFactory.getLogger(BatchResultSplitter.class);
 
   private final Publisher<Result.Segment> source;
@@ -23,6 +23,11 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> imp
   // Holds the currently active Result that is accepting segments
   private final AtomicReference<SegmentProcessor> currentResultProcessor = new AtomicReference<>();
 
+  /**
+   * Creates a new BatchResultSplitter.
+   *
+   * @param source the upstream publisher of Result.Segment
+   */
   public BatchResultSplitter(Publisher<Result.Segment> source) {
     this.source = source;
   }
@@ -33,7 +38,8 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> imp
     if (upstreamSubscription == null) {
       source.subscribe(this);
     } else {
-      // If we are between results, request 1 segment from upstream to trigger the creation of the next Result.
+      // If we are between results, request 1 segment from upstream
+      // to trigger the creation of the next Result.
       if (currentResultProcessor.get() == null) {
         upstreamSubscription.request(1);
       }
@@ -60,7 +66,9 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> imp
 
   @Override
   public void onNext(Result.Segment segment) {
-    if (isCancelled.get()) return;
+    if (isCancelled.get()) {
+      return;
+    }
 
     SegmentProcessor processor = currentResultProcessor.get();
 
@@ -85,7 +93,9 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> imp
 
   @Override
   public void onError(Throwable t) {
-    if (isCancelled.get()) return;
+    if (isCancelled.get()) {
+      return;
+    }
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
       current.pushError(t);
@@ -95,7 +105,9 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result> imp
 
   @Override
   public void onComplete() {
-    if (isCancelled.get()) return;
+    if (isCancelled.get()) {
+      return;
+    }
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
       current.pushComplete();
