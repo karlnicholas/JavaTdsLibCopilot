@@ -23,6 +23,10 @@ public class RpcPacketBuilder {
   private static final short RPC_PROCID_SPEXECUTESQL = 10;
   private static final byte RPC_PARAM_DEFAULT = 0x00;
 
+  // Extracted Magic Numbers
+  private static final short RPC_HEADER_MARKER = (short) 0xFFFF;
+  private static final short MAX_NVARCHAR_SIZE = 8000;
+
   private final String sql;
   private final List<List<ParamEntry>> batchParams;
   private final boolean update;
@@ -56,6 +60,9 @@ public class RpcPacketBuilder {
     ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
     buf.order(ByteOrder.LITTLE_ENDIAN);
 
+    // Hoisted Loop Invariant: Encode the SQL string exactly once
+    byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
+
     for (int i = 0; i < batchParams.size(); i++) {
       // TDS Spec: 0x80 (BatchFlag) separates multiple RPCReqBatch requests
       if (i > 0) {
@@ -65,13 +72,8 @@ public class RpcPacketBuilder {
       writeRpcHeader(buf);
 
       // 1. Framework @stmt header (Hardcoded as nvarchar for protocol framing)
-      writeParamName(buf, "@stmt");
-      buf.put(RPC_PARAM_DEFAULT);
-      buf.put((byte) TdsType.NVARCHAR.byteVal);
-      buf.putShort((short) 8000);
-      writeFrameworkCollation(buf);
+      writeFrameworkParamHeader(buf, "@stmt");
 
-      byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
       buf.putShort((short) sqlBytes.length);
       buf.put(sqlBytes);
 
@@ -79,11 +81,7 @@ public class RpcPacketBuilder {
 
       // 2. Framework @params header
       if (!params.isEmpty()) {
-        writeParamName(buf, "@params");
-        buf.put(RPC_PARAM_DEFAULT);
-        buf.put((byte) TdsType.NVARCHAR.byteVal);
-        buf.putShort((short) 8000);
-        writeFrameworkCollation(buf);
+        writeFrameworkParamHeader(buf, "@params");
 
         String paramDecl = buildParamDecl(params);
         byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
@@ -111,9 +109,20 @@ public class RpcPacketBuilder {
   }
 
   private void writeRpcHeader(ByteBuffer buf) {
-    buf.putShort((short) 0xFFFF);
+    buf.putShort(RPC_HEADER_MARKER);
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
     buf.putShort((short) 0);
+  }
+
+  /**
+   * DRY extraction for writing framework parameter headers (@stmt and @params).
+   */
+  private void writeFrameworkParamHeader(ByteBuffer buf, String paramName) {
+    writeParamName(buf, paramName);
+    buf.put(RPC_PARAM_DEFAULT);
+    buf.put((byte) TdsType.NVARCHAR.byteVal);
+    buf.putShort(MAX_NVARCHAR_SIZE);
+    writeFrameworkCollation(buf);
   }
 
   private String buildParamDecl(List<ParamEntry> params) {
