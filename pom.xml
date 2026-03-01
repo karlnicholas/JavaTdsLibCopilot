@@ -61,6 +61,14 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.5</version>
+                <configuration>
+                    <argLine>
+                        --add-opens org.tdslib.javatdslib/org.tdslib.javatdslib.transport=ALL-UNNAMED
+                        --add-opens org.tdslib.javatdslib/org.tdslib.javatdslib.protocol=ALL-UNNAMED
+                        --add-opens org.tdslib.javatdslib/org.tdslib.javatdslib.codec=ALL-UNNAMED
+                        --add-opens org.tdslib.javatdslib/org.tdslib.javatdslib.tokens.parsers=ALL-UNNAMED
+                    </argLine>
+                </configuration>
             </plugin>
 
             <plugin>
