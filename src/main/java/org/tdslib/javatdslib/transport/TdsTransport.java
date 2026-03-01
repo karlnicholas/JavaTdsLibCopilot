@@ -5,25 +5,21 @@ import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.TdsMessage;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+/**
+ * Orchestrates the TDS protocol layer.
+ * Delegates all physical I/O to the injected NetworkConnection.
+ */
 public class TdsTransport implements AutoCloseable {
-
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
+  private static final int TDS_HEADER_LENGTH = 8;
 
-  private final SocketChannel socketChannel;
+  private final NetworkConnection networkConnection;
   private final String host;
   private final int port;
 
@@ -33,46 +29,47 @@ public class TdsTransport implements AutoCloseable {
   private final QueryPacketBuilder packetBuilder;
   private final PacketAssembler messageAssembler;
 
-  private final Queue<ByteBuffer> writeQueue = new ConcurrentLinkedQueue<>();
-  private final AtomicBoolean pendingWrite = new AtomicBoolean(false);
-  private int readTimeoutMs = 60_000;
-
-  private Selector selector;
-  private ByteBuffer readBuffer;
-
   private Consumer<TdsMessage> currentMessageHandler;
   private Consumer<Throwable> currentErrorHandler;
 
-  public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
+  /**
+   * Primary constructor utilizing Dependency Injection.
+   * Allows injecting mock connections for testing without hitting a real database.
+   */
+  public TdsTransport(String host, int port, ConnectionContext context, NetworkConnection networkConnection) {
     this.host = host;
     this.port = port;
     this.context = context;
+    this.networkConnection = networkConnection;
 
     this.tlsHandshake = new TlsHandshake();
     this.packetBuilder = new QueryPacketBuilder();
     this.messageAssembler = new PacketAssembler();
-
-    this.socketChannel = SocketChannel.open();
-    this.socketChannel.configureBlocking(true);
-    this.socketChannel.socket().setSoTimeout(readTimeoutMs);
-
-    logger.trace("Initiating connection to {}:{}", host, port);
-    InetSocketAddress address = new InetSocketAddress(host, port);
-    if (!socketChannel.connect(address)) {
-      socketChannel.finishConnect();
-    }
   }
 
-  // --- Synchronous Methods for Handshake (Added Back) ---
+  /**
+   * Overloaded constructor for backwards compatibility.
+   */
+  public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
+    this(host, port, context, new NioSocketConnection(host, port, 60_000));
+  }
 
-  // Note: Only the tlsHandshake method needs to be updated
+  // --- Handshake & TLS Methods ---
+
   public void tlsHandshake(javax.net.ssl.SSLContext sslContext) throws IOException {
-    tlsHandshake.tlsHandshake(host, port, socketChannel, sslContext);
+    // Exposing the socket channel specifically for the TLS handshake phase
+    tlsHandshake.tlsHandshake(host, port, networkConnection.getSocketChannel(), sslContext);
   }
 
   public void tlsComplete() {
     tlsHandshake.close();
   }
+
+  public boolean isTlsActive() {
+    return tlsHandshake != null && tlsHandshake.isTlsActive();
+  }
+
+  // --- Synchronous Methods (Login Phase) ---
 
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
     List<ByteBuffer> packetBuffers = packetBuilder.buildPackets(
@@ -82,7 +79,7 @@ public class TdsTransport implements AutoCloseable {
     );
 
     for (ByteBuffer buf : packetBuffers) {
-      writeDirect(buf);
+      networkConnection.writeDirect(buf);
     }
   }
 
@@ -94,27 +91,27 @@ public class TdsTransport implements AutoCloseable {
     );
 
     for (ByteBuffer buffer : packetBuffers) {
-      if (tlsHandshake.isTlsActive()) {
-        tlsHandshake.writeEncrypted(buffer, socketChannel);
+      if (isTlsActive()) {
+        tlsHandshake.writeEncrypted(buffer, networkConnection.getSocketChannel());
       } else {
-        writeDirect(buffer);
+        networkConnection.writeDirect(buffer);
       }
     }
   }
 
   public List<TdsMessage> receiveFullResponse() throws IOException {
-    // Synchronous read loop for Login phase
     List<TdsMessage> messages = new ArrayList<>();
     TdsMessage msg;
     do {
-      // Basic synchronous read wrapper
-      ByteBuffer header = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN);
-      readFullySync(header);
+      // 1. Replaced magic number 8 with TDS_HEADER_LENGTH
+      ByteBuffer header = ByteBuffer.allocate(TDS_HEADER_LENGTH).order(ByteOrder.BIG_ENDIAN);
+      networkConnection.readFullySync(header);
       header.flip();
 
       int length = Short.toUnsignedInt(header.getShort(2));
-      ByteBuffer payload = ByteBuffer.allocate(length - 8).order(ByteOrder.LITTLE_ENDIAN);
-      readFullySync(payload);
+      // 2. Replaced magic number 8 with TDS_HEADER_LENGTH
+      ByteBuffer payload = ByteBuffer.allocate(length - TDS_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN);
+      networkConnection.readFullySync(payload);
       payload.flip();
 
       ByteBuffer fullPacket = ByteBuffer.allocate(length).order(ByteOrder.BIG_ENDIAN);
@@ -122,16 +119,14 @@ public class TdsTransport implements AutoCloseable {
       fullPacket.put(payload.array());
       fullPacket.flip();
 
-      // Use assembler to parse single packet (stateless for sync mode)
-      // Note: In real sync mode we might just manually parse to keep it simple
-      msg = new TdsTransport(host, port, context).buildMessageFromPacket(fullPacket);
+      msg = buildMessageFromPacket(fullPacket);
       messages.add(msg);
 
     } while (!msg.isLastPacket());
+
     return messages;
   }
 
-  // Helper for sync receive
   private TdsMessage buildMessageFromPacket(ByteBuffer packet) {
     packet.position(0);
     byte type = packet.get();
@@ -139,99 +134,28 @@ public class TdsTransport implements AutoCloseable {
     int length = Short.toUnsignedInt(packet.getShort());
     short spid = packet.getShort();
     byte packetId = packet.get();
-    packet.position(8);
+    packet.position(TDS_HEADER_LENGTH); // 3. Replaced magic number 8
     ByteBuffer payload = packet.slice();
     return new TdsMessage(type, status, length, spid, packetId, payload, System.nanoTime(), null);
   }
 
-  private void readFullySync(ByteBuffer buf) throws IOException {
-    while (buf.hasRemaining()) {
-      int read = socketChannel.read(buf);
-      if (read == -1) throw new IOException("EOF during sync read");
-    }
-  }
+  // --- Asynchronous Methods (Query Phase) ---
 
-  private void writeDirect(ByteBuffer buffer) throws IOException {
-    while (buffer.hasRemaining()) {
-      socketChannel.write(buffer);
-    }
+  public void setClientHandlers(Consumer<TdsMessage> messageHandler, Consumer<Throwable> errorHandler) {
+    this.currentMessageHandler = messageHandler;
+    this.currentErrorHandler = errorHandler;
   }
-
-  public void cancelCurrent() {
-    // Implementation for cancellation logic
-    logger.debug("Cancel requested (not fully implemented in this refactor)");
-  }
-
-  public SocketChannel getSocketChannel() {
-    return this.socketChannel;
-  }
-
-  // --- Async Methods (Existing) ---
 
   public void enterAsyncMode() throws IOException {
-    readBuffer = ByteBuffer.allocate(context.getCurrentPacketSize());
-    this.selector = Selector.open();
-    socketChannel.configureBlocking(false);
-    socketChannel.register(selector, SelectionKey.OP_READ, this);
-    startEventLoop();
-  }
+    networkConnection.enterAsyncMode(context.getCurrentPacketSize());
 
-  private void startEventLoop() {
-    Thread eventLoopThread = new Thread(() -> {
-      while (!Thread.currentThread().isInterrupted()) {
-        try {
-          if (selector.select(1000) == 0) continue;
-          Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-          while (iterator.hasNext()) {
-            SelectionKey key = iterator.next();
-            iterator.remove();
-            if (!key.isValid()) continue;
-            try {
-              if (key.isReadable()) onReadable(key);
-              if (key.isWritable()) onWritable(key);
-            } catch (Throwable t) {
-              cleanupKeyAndTransport(key);
-              if (currentErrorHandler != null) currentErrorHandler.accept(t);
-            }
-          }
-        } catch (Throwable fatal) {
-          if (currentErrorHandler != null) currentErrorHandler.accept(fatal);
-          break;
+    // Wire the network callback directly into our TDS Assembler
+    networkConnection.setHandlers(
+        buffer -> messageAssembler.processNetworkBuffer(buffer, currentMessageHandler),
+        error -> {
+          if (currentErrorHandler != null) currentErrorHandler.accept(error);
         }
-      }
-    }, "TDS-EventLoop");
-    eventLoopThread.setDaemon(true);
-    eventLoopThread.start();
-  }
-
-  private void onReadable(SelectionKey selectionKey) throws IOException {
-    int read = socketChannel.read(readBuffer);
-    if (read == -1) {
-      cleanupKeyAndTransport(selectionKey);
-      return;
-    }
-    if (read == 0) return;
-
-    readBuffer.flip();
-    try {
-      messageAssembler.processNetworkBuffer(readBuffer, currentMessageHandler);
-    } finally {
-      readBuffer.compact();
-    }
-  }
-
-  private void onWritable(SelectionKey key) throws IOException {
-    while (true) {
-      ByteBuffer buf = writeQueue.peek();
-      if (buf == null) {
-        pendingWrite.set(false);
-        key.interestOpsAnd(~SelectionKey.OP_WRITE);
-        return;
-      }
-      int written = socketChannel.write(buf);
-      if (written == 0 || buf.hasRemaining()) return;
-      writeQueue.poll();
-    }
+    );
   }
 
   public void sendQueryMessageAsync(TdsMessage tdsMessage) {
@@ -241,48 +165,18 @@ public class TdsTransport implements AutoCloseable {
         (short) 1, context.getCurrentPacketSize()
     );
     for (ByteBuffer buf : packetBuffers) {
-      writeAsync(buf);
+      networkConnection.writeAsync(buf); // Fire and forget to the event loop
     }
   }
 
-  private void writeAsync(ByteBuffer src) {
-    ByteBuffer copy = src.duplicate();
-    boolean wasEmpty = writeQueue.isEmpty();
-    writeQueue.offer(copy);
-    if (wasEmpty && pendingWrite.compareAndSet(false, true)) {
-      SelectionKey key = socketChannel.keyFor(selector);
-      if (key != null && key.isValid()) {
-        key.interestOpsOr(SelectionKey.OP_WRITE);
-        selector.wakeup();
-      }
-    }
-  }
-
-  private void cleanupKeyAndTransport(SelectionKey key) {
-    try {
-      key.cancel();
-      close();
-    } catch (Exception e) {
-      logger.warn("Failed to clean up", e);
-    }
-  }
-
-  public void setClientHandlers(Consumer<TdsMessage> messageHandler, Consumer<Throwable> errorHandler) {
-    this.currentMessageHandler = messageHandler;
-    this.currentErrorHandler = errorHandler;
+  public void cancelCurrent() {
+    logger.debug("Cancel requested");
   }
 
   @Override
   public void close() throws IOException {
-    if (socketChannel != null && socketChannel.isOpen()) {
-      socketChannel.close();
+    if (networkConnection != null) {
+      networkConnection.close();
     }
-    if (selector != null && selector.isOpen()) {
-      selector.close();
-    }
-  }
-
-  public boolean isTlsActive() {
-    return tlsHandshake != null && tlsHandshake.isTlsActive();
   }
 }

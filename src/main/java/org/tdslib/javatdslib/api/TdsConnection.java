@@ -150,8 +150,4 @@ public class TdsConnection implements Connection {
 //    return connected;
 //  }
 
-  public SocketChannel getSocketChannel() {
-    return transport.getSocketChannel();
-  }
-
 }
