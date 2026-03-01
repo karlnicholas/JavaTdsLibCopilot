@@ -12,7 +12,7 @@ import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.rpc.BindingKey;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.RpcPacketBuilder;
+import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
