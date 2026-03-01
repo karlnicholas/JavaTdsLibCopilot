@@ -13,7 +13,6 @@ public class TdsColumnMetadata implements ColumnMetadata {
   private final TdsType tdsType;
   private final Object nativeMeta;
 
-  // Constructor for Row Data (Standard Result Set)
   public TdsColumnMetadata(ColumnMeta meta) {
     this.name = meta.getName();
     this.precision = meta.getMaxLength();
@@ -29,12 +28,14 @@ public class TdsColumnMetadata implements ColumnMetadata {
 
   @Override
   public Type getType() {
-    return tdsType.r2dbcType;
+    // FIX: Use the new Mapper
+    return R2dbcTypeMapper.toR2dbcType(tdsType);
   }
 
   @Override
   public Class<?> getJavaType() {
-    return tdsType.r2dbcType.getJavaType();
+    // FIX: Use the new Mapper
+    return R2dbcTypeMapper.toR2dbcType(tdsType).getJavaType();
   }
 
   @Override

@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import io.r2dbc.spi.R2dbcType;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 
@@ -79,11 +78,14 @@ public class TypeInfoParser {
     return new TypeInfo(tdsType, maxLength, precision, scale, collation);
   }
 
+  // Replace this helper method at the bottom of the class
   private static boolean isTextType(TdsType type) {
-    return type.r2dbcType == R2dbcType.NVARCHAR ||
-        type.r2dbcType == R2dbcType.VARCHAR ||
-        type.r2dbcType == R2dbcType.CHAR ||
-        type.r2dbcType == R2dbcType.NCHAR;
+    return type == TdsType.NVARCHAR ||
+        type == TdsType.BIGVARCHR ||
+        type == TdsType.VARCHAR ||
+        type == TdsType.NCHAR ||
+        type == TdsType.BIGCHAR ||
+        type == TdsType.CHAR;
   }
 
   private static void readTableNames(ByteBuffer payload) {

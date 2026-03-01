@@ -25,15 +25,16 @@ public class TdsOutParameterMetadata implements OutParameterMetadata {
 
   @Override
   public Class<?> getJavaType() {
-    return tdsType.r2dbcType.getJavaType();
+    // FIX: Use the new Mapper
+    return R2dbcTypeMapper.toR2dbcType(tdsType).getJavaType();
   }
 
   @Override
   public Type getType() {
-    return tdsType.r2dbcType;
+    // FIX: Use the new Mapper
+    return R2dbcTypeMapper.toR2dbcType(tdsType);
   }
 
-  // These specific methods resolve the compiler errors in TdsRowSegment
   public TdsType getTdsType() {
     return tdsType;
   }

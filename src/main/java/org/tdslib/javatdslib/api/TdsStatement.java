@@ -211,7 +211,7 @@ public class TdsStatement implements Statement {
 
   private TdsType resolveTdsType(Parameter p) {
     Type t = p.getType();
-    if (t instanceof R2dbcType rType) return TdsType.forR2dbcType(rType);
+    if (t instanceof R2dbcType rType) return R2dbcTypeMapper.toTdsType(rType); // Use the new Mapper
     if (t instanceof Type.InferredType iType) return TdsType.inferFromJavaType(iType.getJavaType());
     if (p.getValue() != null) return TdsType.inferFromJavaType(p.getValue().getClass());
     return null;
