@@ -4,9 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.TdsParameter;
-import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
+import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 

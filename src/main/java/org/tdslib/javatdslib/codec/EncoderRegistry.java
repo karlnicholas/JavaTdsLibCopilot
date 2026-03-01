@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
 import org.tdslib.javatdslib.protocol.TdsParameter;
-import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 
 import java.util.ArrayList;

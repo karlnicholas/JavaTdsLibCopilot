@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.reactive;
+package org.tdslib.javatdslib.api.reactive;
 
 import io.r2dbc.spi.Result;
 import org.reactivestreams.Publisher;
@@ -7,7 +7,8 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.api.TdsResult;
-import org.tdslib.javatdslib.protocol.TdsUpdateCount;
+import org.tdslib.javatdslib.api.TdsUpdateCount;
+import org.tdslib.javatdslib.reactive.AbstractQueueDrainPublisher;
 
 import java.util.concurrent.atomic.AtomicReference;
 

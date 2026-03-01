@@ -2,8 +2,7 @@ package org.tdslib.javatdslib.tokens.visitors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-// REMOVED: import org.tdslib.javatdslib.api.R2dbcErrorTranslator;
-import org.tdslib.javatdslib.protocol.TdsServerErrorException; // ADDED
+import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;

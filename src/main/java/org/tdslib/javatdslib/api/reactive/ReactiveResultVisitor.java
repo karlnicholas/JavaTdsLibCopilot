@@ -1,10 +1,10 @@
-package org.tdslib.javatdslib.tokens.visitors;
+package org.tdslib.javatdslib.api.reactive;
 
 import io.r2dbc.spi.Result;
+import org.tdslib.javatdslib.api.SegmentTranslator;
+import org.tdslib.javatdslib.api.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.protocol.SegmentTranslator;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.protocol.TdsUpdateCount;
 import org.tdslib.javatdslib.reactive.AbstractQueueDrainPublisher;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;

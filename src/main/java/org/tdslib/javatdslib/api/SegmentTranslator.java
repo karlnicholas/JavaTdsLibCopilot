@@ -1,13 +1,7 @@
-package org.tdslib.javatdslib.protocol;
+package org.tdslib.javatdslib.api;
 
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Result;
-import org.tdslib.javatdslib.api.TdsColumnMetadata;
-import org.tdslib.javatdslib.api.TdsOutParameterMetadata;
-import org.tdslib.javatdslib.api.TdsOutParameters;
-import org.tdslib.javatdslib.api.TdsOutSegment;
-import org.tdslib.javatdslib.api.TdsRow;
-import org.tdslib.javatdslib.api.TdsRowSegment;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
