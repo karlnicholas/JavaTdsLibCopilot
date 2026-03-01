@@ -26,8 +26,8 @@ public class TdsTransport implements AutoCloseable {
   // Dependencies
   private final ConnectionContext context;
   private final TlsHandshake tlsHandshake;
-  private final QueryPacketBuilder packetBuilder;
-  private final PacketAssembler messageAssembler;
+  private final PacketEncoder packetEncoder;
+  private final MessageAssembler messageAssembler;
 
   private Consumer<TdsMessage> currentMessageHandler;
   private Consumer<Throwable> currentErrorHandler;
@@ -36,22 +36,28 @@ public class TdsTransport implements AutoCloseable {
    * Primary constructor utilizing Dependency Injection.
    * Allows injecting mock connections for testing without hitting a real database.
    */
-  public TdsTransport(String host, int port, ConnectionContext context, NetworkConnection networkConnection) {
+  public TdsTransport(String host, int port, ConnectionContext context,
+                      NetworkConnection networkConnection,
+                      PacketEncoder packetEncoder,
+                      MessageAssembler messageAssembler) {
     this.host = host;
     this.port = port;
     this.context = context;
     this.networkConnection = networkConnection;
 
     this.tlsHandshake = new TlsHandshake();
-    this.packetBuilder = new QueryPacketBuilder();
-    this.messageAssembler = new PacketAssembler();
+    this.packetEncoder = packetEncoder; // Injected!
+    this.messageAssembler = messageAssembler;
   }
 
   /**
    * Overloaded constructor for backwards compatibility.
    */
   public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
-    this(host, port, context, new NioSocketConnection(host, port, 60_000));
+    this(host, port, context,
+        new NioSocketConnection(host, port, 60_000),
+        new QueryPacketBuilder(),
+        new PacketAssembler()); // Default concrete implementations
   }
 
   // --- Handshake & TLS Methods ---
@@ -72,10 +78,9 @@ public class TdsTransport implements AutoCloseable {
   // --- Synchronous Methods (Login Phase) ---
 
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers = packetBuilder.buildPackets(
-        tdsMessage.getPacketType(), tdsMessage.getStatusFlags(),
-        context.getSpid(), tdsMessage.getPayload(),
-        (short) 1, context.getCurrentPacketSize()
+    // 1. Delegated to the injected interface
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );
 
     for (ByteBuffer buf : packetBuffers) {
@@ -84,10 +89,9 @@ public class TdsTransport implements AutoCloseable {
   }
 
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers = packetBuilder.buildPackets(
-        tdsMessage.getPacketType(), tdsMessage.getStatusFlags(),
-        context.getSpid(), tdsMessage.getPayload(),
-        (short) 1, context.getCurrentPacketSize()
+    // 2. Delegated to the injected interface
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );
 
     for (ByteBuffer buffer : packetBuffers) {
@@ -159,13 +163,12 @@ public class TdsTransport implements AutoCloseable {
   }
 
   public void sendQueryMessageAsync(TdsMessage tdsMessage) {
-    List<ByteBuffer> packetBuffers = packetBuilder.buildPackets(
-        tdsMessage.getPacketType(), tdsMessage.getStatusFlags(),
-        context.getSpid(), tdsMessage.getPayload(),
-        (short) 1, context.getCurrentPacketSize()
+    // 3. Delegated to the injected interface
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );
     for (ByteBuffer buf : packetBuffers) {
-      networkConnection.writeAsync(buf); // Fire and forget to the event loop
+      networkConnection.writeAsync(buf);
     }
   }
 

@@ -2,14 +2,27 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.TdsMessage;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-public class QueryPacketBuilder {
+public class QueryPacketBuilder implements PacketEncoder {
   private static final Logger LOGGER = LoggerFactory.getLogger(QueryPacketBuilder.class);
+
+  @Override
+  public List<ByteBuffer> encodeMessage(TdsMessage message, int spid, int maxPacketSize) {
+    return buildPackets(
+        message.getPacketType(),
+        message.getStatusFlags(),
+        spid,
+        message.getPayload(),
+        (short) 1, // startingPacketId
+        maxPacketSize
+    );
+  }
   /**
    * Builds one or more TDS packets from a payload.
    *

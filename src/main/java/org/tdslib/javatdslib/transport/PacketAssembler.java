@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-public class PacketAssembler {
+public class PacketAssembler implements MessageAssembler {
   private static final Logger logger = LoggerFactory.getLogger(PacketAssembler.class);
   private static final int TDS_HEADER_LENGTH = 8;
   private static final int STATUS_OFFSET = 1;
@@ -26,6 +26,7 @@ public class PacketAssembler {
    * Parses the network buffer. If a complete logical message is formed,
    * it is dispatched to the provided handler.
    */
+  @Override
   public void processNetworkBuffer(ByteBuffer readBuffer, Consumer<TdsMessage> messageHandler) {
     while (readBuffer.remaining() >= TDS_HEADER_LENGTH) {
       int length = Short.toUnsignedInt(readBuffer.getShort(readBuffer.position() + 2));
