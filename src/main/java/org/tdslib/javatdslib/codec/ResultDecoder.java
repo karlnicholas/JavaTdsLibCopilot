@@ -1,7 +1,8 @@
 package org.tdslib.javatdslib.codec;
 
-import java.nio.charset.Charset;
 import org.tdslib.javatdslib.protocol.TdsType;
+
+import java.nio.charset.Charset;
 
 /**
  * Interface for decoding TDS byte arrays into Java objects.

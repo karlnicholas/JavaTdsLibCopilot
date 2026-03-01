@@ -1,16 +1,17 @@
 package org.tdslib.javatdslib.handshake;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.PacketType;
+import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
+import org.tdslib.javatdslib.protocol.PreLoginResponse;
+import org.tdslib.javatdslib.transport.TdsTransport;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.protocol.PreLoginResponse;
-import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
-import org.tdslib.javatdslib.transport.TdsTransport;
 
 /**
  * Handles the Pre-Login phase of the TDS connection process.

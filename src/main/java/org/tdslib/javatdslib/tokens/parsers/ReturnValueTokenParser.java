@@ -1,6 +1,8 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import org.tdslib.javatdslib.tokens.*;
+import org.tdslib.javatdslib.tokens.Token;
+import org.tdslib.javatdslib.tokens.TokenParser;
+import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 import org.tdslib.javatdslib.transport.ConnectionContext;

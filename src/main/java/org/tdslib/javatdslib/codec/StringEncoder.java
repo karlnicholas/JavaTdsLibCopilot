@@ -1,11 +1,12 @@
 package org.tdslib.javatdslib.codec;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Codec for encoding String values into TDS CHAR/VARCHAR/NCHAR/NVARCHAR format.

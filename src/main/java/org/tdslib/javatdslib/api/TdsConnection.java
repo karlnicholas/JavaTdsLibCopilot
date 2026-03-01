@@ -1,6 +1,12 @@
 package org.tdslib.javatdslib.api;
 
-import io.r2dbc.spi.*;
+import io.r2dbc.spi.Batch;
+import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionMetadata;
+import io.r2dbc.spi.IsolationLevel;
+import io.r2dbc.spi.Statement;
+import io.r2dbc.spi.TransactionDefinition;
+import io.r2dbc.spi.ValidationDepth;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
@@ -9,7 +15,6 @@ import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.time.Duration;
 
 /**

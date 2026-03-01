@@ -1,9 +1,10 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Registry for managing and accessing ResultDecoders.

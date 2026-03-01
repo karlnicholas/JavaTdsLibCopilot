@@ -1,10 +1,11 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.util.UUID;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Decodes GUID (UUID) data types from TDS byte arrays.

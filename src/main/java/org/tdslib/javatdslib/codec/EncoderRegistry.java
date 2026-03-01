@@ -1,10 +1,10 @@
 package org.tdslib.javatdslib.codec;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Registry for managing and accessing ParameterCodecs.

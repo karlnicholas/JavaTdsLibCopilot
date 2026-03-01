@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.handshake;
 
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -15,6 +14,8 @@ import org.tdslib.javatdslib.tokens.visitors.LoginVisitor;
 import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+
+import java.util.List;
 
 /**
  * Handles the LOGIN7 phase of the TDS handshake.

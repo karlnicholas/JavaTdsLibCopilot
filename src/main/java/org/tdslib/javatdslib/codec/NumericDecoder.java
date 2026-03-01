@@ -1,11 +1,12 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Decodes numeric data types (integers, floats, decimals, money) from TDS byte arrays.

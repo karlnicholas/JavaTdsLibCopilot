@@ -1,7 +1,8 @@
 package org.tdslib.javatdslib.protocol.rpc;
 
-import java.util.Objects;
 import org.tdslib.javatdslib.protocol.TdsType;
+
+import java.util.Objects;
 
 /**
  * Immutable key for each binding.

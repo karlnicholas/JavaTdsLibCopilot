@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.transport;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.util.function.Consumer;
 
 /**

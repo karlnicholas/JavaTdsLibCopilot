@@ -10,9 +10,9 @@ import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
+import org.tdslib.javatdslib.tokens.visitors.ReactiveResultVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
-import org.tdslib.javatdslib.tokens.visitors.ReactiveResultVisitor;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

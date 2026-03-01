@@ -1,6 +1,11 @@
 package org.tdslib.javatdslib.protocol;
 
-import io.r2dbc.spi.*;
+import io.r2dbc.spi.R2dbcBadGrammarException;
+import io.r2dbc.spi.R2dbcDataIntegrityViolationException;
+import io.r2dbc.spi.R2dbcException;
+import io.r2dbc.spi.R2dbcNonTransientResourceException;
+import io.r2dbc.spi.R2dbcPermissionDeniedException;
+import io.r2dbc.spi.R2dbcTransientResourceException;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 
 public class SqlErrorTranslator {

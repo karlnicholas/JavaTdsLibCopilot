@@ -1,13 +1,14 @@
 package org.tdslib.javatdslib.handshake;
 
 import io.r2dbc.spi.R2dbcNonTransientResourceException;
-import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.PreLoginResponse;
 import org.tdslib.javatdslib.tokens.visitors.LoginVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+
+import javax.net.ssl.SSLContext;
 
 /**
  * Orchestrates the TDS handshake process, including PreLogin, TLS negotiation, and Login7.

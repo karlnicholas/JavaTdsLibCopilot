@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Decodes binary data types (BINARY, VARBINARY, IMAGE) from TDS byte arrays.

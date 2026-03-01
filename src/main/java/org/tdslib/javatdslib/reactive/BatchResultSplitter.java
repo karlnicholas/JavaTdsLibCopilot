@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.Result;
-import java.util.concurrent.atomic.AtomicReference;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -9,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.api.TdsResult;
 import org.tdslib.javatdslib.protocol.TdsUpdateCount;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Consumes a flat stream of Result.Segment and splits it into a stream of Result objects.

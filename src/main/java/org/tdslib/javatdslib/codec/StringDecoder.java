@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Decodes string data types (CHAR, VARCHAR, NCHAR, NVARCHAR, TEXT, NTEXT, XML) from TDS bytes.
