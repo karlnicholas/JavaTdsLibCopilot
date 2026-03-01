@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.rpc;
+package org.tdslib.javatdslib.protocol.rpc;
 
 import java.util.Objects;
 import org.tdslib.javatdslib.protocol.TdsType;

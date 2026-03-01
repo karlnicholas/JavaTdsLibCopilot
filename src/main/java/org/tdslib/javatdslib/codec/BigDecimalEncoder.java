@@ -5,9 +5,9 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.rpc.ParamEntry;
-import org.tdslib.javatdslib.rpc.ParameterCodec;
-import org.tdslib.javatdslib.rpc.RpcEncodingContext;
+import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
+import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding BigDecimal values into TDS DECIMAL/NUMERIC format.

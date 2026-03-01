@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.rpc;
+package org.tdslib.javatdslib.protocol.rpc;
 
 import io.r2dbc.spi.Parameter;
 

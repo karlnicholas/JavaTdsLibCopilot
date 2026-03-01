@@ -3,9 +3,9 @@ package org.tdslib.javatdslib.codec;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.rpc.ParamEntry;
-import org.tdslib.javatdslib.rpc.ParameterCodec;
-import org.tdslib.javatdslib.rpc.RpcEncodingContext;
+import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
+import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding UUID values into TDS uniqueidentifier format.

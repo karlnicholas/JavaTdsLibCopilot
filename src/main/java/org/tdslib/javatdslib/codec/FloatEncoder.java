@@ -2,9 +2,9 @@ package org.tdslib.javatdslib.codec;
 
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.rpc.ParamEntry;
-import org.tdslib.javatdslib.rpc.ParameterCodec;
-import org.tdslib.javatdslib.rpc.RpcEncodingContext;
+import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
+import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding floating-point values (Float, Double) into TDS REAL/FLOAT format.

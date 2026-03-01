@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.rpc;
+package org.tdslib.javatdslib.protocol.rpc;
 
 /**
  * Enum for TYPE_INFO "styles" in TDS.
