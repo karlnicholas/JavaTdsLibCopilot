@@ -5,7 +5,6 @@ import org.tdslib.javatdslib.packets.PacketType;
 import javax.net.ssl.*;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 
 public class TlsHandshake {
   private SSLEngine sslEngine;
@@ -18,7 +17,7 @@ public class TlsHandshake {
   public void tlsHandshake(
       String host,
       int port,
-      SocketChannel socketChannel,
+      NetworkConnection connection, // Changed from SocketChannel
       SSLContext sslContext
   ) throws IOException {
 
@@ -35,12 +34,10 @@ public class TlsHandshake {
 
     peerNetData.flip();
     sslEngine.beginHandshake();
-    doHandshake(socketChannel);
+    doHandshake(connection); // Pass the interface down
   }
 
-  // ... (The rest of doHandshake, readFully, writeEncrypted, and close remain completely unchanged) ...
-
-  private void doHandshake(final SocketChannel socketChannel) throws IOException {
+  private void doHandshake(final NetworkConnection connection) throws IOException {
     SSLEngineResult result;
     SSLEngineResult.HandshakeStatus handshakeStatus = sslEngine.getHandshakeStatus();
     final ByteBuffer dummy = ByteBuffer.allocate(0);
@@ -55,14 +52,14 @@ public class TlsHandshake {
             peerNetData.clear();
             headerBuf.clear();
 
-            readFully(headerBuf, socketChannel);
+            connection.readFullySync(headerBuf); // Replaced raw socket read
             headerBuf.flip();
 
             final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
             final int tlsDataLength = packetLength - TDS_HEADER_LENGTH;
 
             peerNetData.limit(tlsDataLength);
-            readFully(peerNetData, socketChannel);
+            connection.readFullySync(peerNetData); // Replaced raw socket read
             peerNetData.flip();
           }
 
@@ -71,7 +68,7 @@ public class TlsHandshake {
           if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
             peerNetData.compact();
             headerBuf.clear();
-            readFully(headerBuf, socketChannel);
+            connection.readFullySync(headerBuf); // Replaced raw socket read
             headerBuf.flip();
 
             final int packetLength = Short.toUnsignedInt(headerBuf.getShort(2));
@@ -82,7 +79,7 @@ public class TlsHandshake {
               throw new IOException("Buffer overflow while reading TLS payload");
             }
             peerNetData.limit(limit);
-            readFully(peerNetData, socketChannel);
+            connection.readFullySync(peerNetData); // Replaced raw socket read
 
             peerNetData.flip();
           }
@@ -111,9 +108,7 @@ public class TlsHandshake {
           myNetData.put(6, (byte) 0x01);
           myNetData.put(7, (byte) 0x00);
 
-          while (myNetData.hasRemaining()) {
-            socketChannel.write(myNetData);
-          }
+          connection.writeDirect(myNetData); // Replaced raw socket write loop
           break;
 
         case NEED_TASK:
@@ -130,14 +125,8 @@ public class TlsHandshake {
     }
   }
 
-  public void readFully(final ByteBuffer buffer, final SocketChannel socketChannel) throws IOException {
-    while (buffer.hasRemaining()) {
-      final int read = socketChannel.read(buffer);
-      if (read == -1) throw new IOException("Unexpected end of stream");
-    }
-  }
-
-  public void writeEncrypted(final ByteBuffer appData, final SocketChannel socketChannel) throws IOException {
+  // Changed from SocketChannel to NetworkConnection
+  public void writeEncrypted(final ByteBuffer appData, final NetworkConnection connection) throws IOException {
     while (appData.hasRemaining()) {
       myNetData.clear();
       final SSLEngineResult result = sslEngine.wrap(appData, myNetData);
@@ -146,9 +135,7 @@ public class TlsHandshake {
         continue;
       }
       myNetData.flip();
-      while (myNetData.hasRemaining()) {
-        socketChannel.write(myNetData);
-      }
+      connection.writeDirect(myNetData); // Replaced raw socket write loop
     }
   }
 

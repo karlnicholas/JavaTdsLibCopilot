@@ -63,8 +63,8 @@ public class TdsTransport implements AutoCloseable {
   // --- Handshake & TLS Methods ---
 
   public void tlsHandshake(javax.net.ssl.SSLContext sslContext) throws IOException {
-    // Exposing the socket channel specifically for the TLS handshake phase
-    tlsHandshake.tlsHandshake(host, port, networkConnection.getSocketChannel(), sslContext);
+    // Removed networkConnection.getSocketChannel()
+    tlsHandshake.tlsHandshake(host, port, networkConnection, sslContext);
   }
 
   public void tlsComplete() {
@@ -89,14 +89,14 @@ public class TdsTransport implements AutoCloseable {
   }
 
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
-    // 2. Delegated to the injected interface
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
         tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );
 
     for (ByteBuffer buffer : packetBuffers) {
       if (isTlsActive()) {
-        tlsHandshake.writeEncrypted(buffer, networkConnection.getSocketChannel());
+        // Removed networkConnection.getSocketChannel()
+        tlsHandshake.writeEncrypted(buffer, networkConnection);
       } else {
         networkConnection.writeDirect(buffer);
       }
