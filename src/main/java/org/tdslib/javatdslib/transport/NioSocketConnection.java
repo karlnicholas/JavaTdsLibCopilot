@@ -88,11 +88,6 @@ public class NioSocketConnection implements NetworkConnection {
     this.onError = onError;
   }
 
-  @Override
-  public SocketChannel getSocketChannel() {
-    return this.socketChannel;
-  }
-
   private void startEventLoop() {
     // Use an ExecutorService with a custom ThreadFactory for clean naming and daemon status
     this.eventLoopExecutor = Executors.newSingleThreadExecutor(r -> {

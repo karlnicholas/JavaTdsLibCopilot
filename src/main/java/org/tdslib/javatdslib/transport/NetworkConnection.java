@@ -29,9 +29,6 @@ public interface NetworkConnection extends AutoCloseable {
    */
   void setHandlers(Consumer<ByteBuffer> onDataAvailable, Consumer<Throwable> onError);
 
-  /** Exposes the underlying channel (useful for the existing TLS Handshake implementation). */
-  SocketChannel getSocketChannel();
-
   /** * Overrides AutoCloseable to restrict the thrown exception to IOException
    */
   @Override
