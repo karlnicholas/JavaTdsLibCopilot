@@ -2,7 +2,8 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.TdsVersion;
+import org.tdslib.javatdslib.protocol.TdsVersion;
+import org.tdslib.javatdslib.reactive.CollationUtils;
 
 import java.nio.charset.Charset;
 import java.util.Arrays;

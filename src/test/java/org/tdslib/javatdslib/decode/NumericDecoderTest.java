@@ -2,7 +2,8 @@ package org.tdslib.javatdslib.decode;
 
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
-import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.codec.NumericDecoder;
+import org.tdslib.javatdslib.protocol.TdsType;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

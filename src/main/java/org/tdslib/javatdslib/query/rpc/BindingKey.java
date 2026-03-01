@@ -1,7 +1,7 @@
 package org.tdslib.javatdslib.query.rpc;
 
 import java.util.Objects;
-import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Immutable key for each binding.

@@ -2,12 +2,12 @@ package org.tdslib.javatdslib.tokens.visitors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.SqlErrorTranslator;
+import org.tdslib.javatdslib.protocol.SqlErrorTranslator;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
-import org.tdslib.javatdslib.tokens.error.ErrorToken;
-import org.tdslib.javatdslib.tokens.info.InfoToken;
+import org.tdslib.javatdslib.tokens.models.ErrorToken;
+import org.tdslib.javatdslib.tokens.models.InfoToken;
 
 import java.util.function.Consumer;
 

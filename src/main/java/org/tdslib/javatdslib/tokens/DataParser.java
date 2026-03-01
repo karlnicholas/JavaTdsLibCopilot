@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib.tokens;
 
-import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.protocol.TdsType;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;

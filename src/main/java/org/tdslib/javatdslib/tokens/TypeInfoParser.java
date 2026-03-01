@@ -1,7 +1,7 @@
 package org.tdslib.javatdslib.tokens;
 
 import io.r2dbc.spi.R2dbcType;
-import org.tdslib.javatdslib.TdsType;
+import org.tdslib.javatdslib.protocol.TdsType;
 
 import java.nio.ByteBuffer;
 

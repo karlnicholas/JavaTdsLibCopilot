@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.PreLoginResponse;
+import org.tdslib.javatdslib.protocol.PreLoginResponse;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;

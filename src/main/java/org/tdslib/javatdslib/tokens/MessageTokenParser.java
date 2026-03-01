@@ -1,8 +1,8 @@
 package org.tdslib.javatdslib.tokens;
 
-import org.tdslib.javatdslib.TdsVersion;
-import org.tdslib.javatdslib.tokens.error.ErrorToken;
-import org.tdslib.javatdslib.tokens.info.InfoToken;
+import org.tdslib.javatdslib.protocol.TdsVersion;
+import org.tdslib.javatdslib.tokens.models.ErrorToken;
+import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;

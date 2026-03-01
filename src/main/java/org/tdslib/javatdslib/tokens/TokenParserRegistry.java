@@ -1,15 +1,15 @@
 package org.tdslib.javatdslib.tokens;
 
-import org.tdslib.javatdslib.tokens.colmetadata.ColMetaDataTokenParser;
-import org.tdslib.javatdslib.tokens.done.DoneInProcTokenParser;
-import org.tdslib.javatdslib.tokens.done.DoneProcTokenParser;
-import org.tdslib.javatdslib.tokens.done.DoneTokenParser;
-import org.tdslib.javatdslib.tokens.envchange.EnvChangeTokenParser;
-import org.tdslib.javatdslib.tokens.featureextack.FeatureExtAckTokenParser;
-import org.tdslib.javatdslib.tokens.loginack.LoginAckTokenParser;
-import org.tdslib.javatdslib.tokens.returnstatus.ReturnStatusTokenParser;
-import org.tdslib.javatdslib.tokens.returnvalue.ReturnValueTokenParser;
-import org.tdslib.javatdslib.tokens.row.RowTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.ColMetaDataTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.DoneInProcTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.DoneProcTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.DoneTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.EnvChangeTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.FeatureExtAckTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.LoginAckTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.ReturnStatusTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.ReturnValueTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.RowTokenParser;
 
 import java.util.HashMap;
 import java.util.Map;

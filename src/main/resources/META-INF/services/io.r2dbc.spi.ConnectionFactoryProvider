@@ -1,1 +1,1 @@
-org.tdslib.javatdslib.TdsConnectionFactoryProvider
+org.tdslib.javatdslib.api.TdsConnectionFactoryProvider

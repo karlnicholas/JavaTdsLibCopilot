@@ -11,8 +11,6 @@ import java.nio.ByteOrder;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -33,7 +31,7 @@ public class TdsTransport implements AutoCloseable {
   private final ConnectionContext context;
   private final TlsHandshake tlsHandshake;
   private final QueryPacketBuilder packetBuilder;
-  private final TdsMessageAssembler messageAssembler;
+  private final PacketAssembler messageAssembler;
 
   private final Queue<ByteBuffer> writeQueue = new ConcurrentLinkedQueue<>();
   private final AtomicBoolean pendingWrite = new AtomicBoolean(false);
@@ -52,7 +50,7 @@ public class TdsTransport implements AutoCloseable {
 
     this.tlsHandshake = new TlsHandshake();
     this.packetBuilder = new QueryPacketBuilder();
-    this.messageAssembler = new TdsMessageAssembler();
+    this.messageAssembler = new PacketAssembler();
 
     this.socketChannel = SocketChannel.open();
     this.socketChannel.configureBlocking(true);

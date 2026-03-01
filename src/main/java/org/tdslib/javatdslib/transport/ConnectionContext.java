@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib.transport;
 
-import org.tdslib.javatdslib.TdsVersion;
+import org.tdslib.javatdslib.protocol.TdsVersion;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;

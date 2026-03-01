@@ -3,9 +3,9 @@ package org.tdslib.javatdslib.tokens.visitors;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
-import org.tdslib.javatdslib.tokens.envchange.EnvChangeToken;
+import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
-import org.tdslib.javatdslib.transport.EnvChangeApplier;
+import org.tdslib.javatdslib.reactive.EnvChangeApplier;
 
 public class EnvChangeVisitor implements TokenVisitor {
   private final ConnectionContext context;

@@ -2,14 +2,14 @@ package org.tdslib.javatdslib.query.rpc;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.tdslib.javatdslib.query.rpc.codecs.BigDecimalCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.BinaryCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.BooleanCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.DateTimeCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.FloatCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.GuidCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.IntegerCodec;
-import org.tdslib.javatdslib.query.rpc.codecs.StringCodec;
+import org.tdslib.javatdslib.codec.BigDecimalCodec;
+import org.tdslib.javatdslib.codec.BinaryCodec;
+import org.tdslib.javatdslib.codec.BooleanCodec;
+import org.tdslib.javatdslib.codec.DateTimeCodec;
+import org.tdslib.javatdslib.codec.FloatCodec;
+import org.tdslib.javatdslib.codec.GuidCodec;
+import org.tdslib.javatdslib.codec.IntegerCodec;
+import org.tdslib.javatdslib.codec.StringCodec;
 
 /**
  * Registry for managing and accessing ParameterCodecs.

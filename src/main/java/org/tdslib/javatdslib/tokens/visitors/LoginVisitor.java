@@ -2,8 +2,8 @@ package org.tdslib.javatdslib.tokens.visitors;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
-import org.tdslib.javatdslib.tokens.done.DoneToken;
-import org.tdslib.javatdslib.tokens.error.ErrorToken;
+import org.tdslib.javatdslib.tokens.models.DoneToken;
+import org.tdslib.javatdslib.tokens.models.ErrorToken;
 
 public class LoginVisitor implements TokenVisitor {
   private boolean success = true;

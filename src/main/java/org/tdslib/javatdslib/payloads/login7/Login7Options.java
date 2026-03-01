@@ -1,6 +1,6 @@
 package org.tdslib.javatdslib.payloads.login7;
 
-import org.tdslib.javatdslib.TdsVersion;
+import org.tdslib.javatdslib.protocol.TdsVersion;
 
 import java.time.Instant;
 import java.time.ZoneId;
