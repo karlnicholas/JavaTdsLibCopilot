@@ -3,8 +3,8 @@ package org.tdslib.javatdslib.codec;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.tdslib.javatdslib.query.rpc.ParamEntry;
-import org.tdslib.javatdslib.query.rpc.ParameterCodec;
+import org.tdslib.javatdslib.rpc.ParamEntry;
+import org.tdslib.javatdslib.rpc.ParameterCodec;
 
 /**
  * Registry for managing and accessing ParameterCodecs.

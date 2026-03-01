@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.query.rpc;
+package org.tdslib.javatdslib.rpc;
 
 import java.nio.ByteBuffer;
 
