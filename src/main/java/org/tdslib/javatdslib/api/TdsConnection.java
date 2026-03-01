@@ -150,9 +150,4 @@ public class TdsConnection implements Connection {
   public Publisher<Boolean> validate(ValidationDepth depth) {
     return null;
   }
-
-//  public boolean isConnected() {
-//    return connected;
-//  }
-
 }

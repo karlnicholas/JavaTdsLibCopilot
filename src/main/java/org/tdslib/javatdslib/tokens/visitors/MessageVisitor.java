@@ -2,7 +2,8 @@ package org.tdslib.javatdslib.tokens.visitors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.protocol.SqlErrorTranslator;
+// REMOVED: import org.tdslib.javatdslib.api.R2dbcErrorTranslator;
+import org.tdslib.javatdslib.protocol.TdsServerErrorException; // ADDED
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
@@ -32,7 +33,18 @@ public class MessageVisitor implements TokenVisitor {
       logger.error(SERVER_MESSAGE, err.getNumber(), err.getState(), err.getMessage());
 
       if (err.isError() && errorHandler != null) {
-        errorHandler.accept(SqlErrorTranslator.createException(err));
+// Create the generic, API-agnostic exception
+        TdsServerErrorException tdsError = new TdsServerErrorException(
+            err.getMessage(),
+            (int) err.getNumber(),
+            err.getState(),
+            err.getSeverity(), // FIX: Was err.getClassLevel()
+            err.getServerName(),
+            err.getProcName(),
+            (int) err.getLineNumber()
+        );
+
+        errorHandler.accept(tdsError);
       }
     }
   }

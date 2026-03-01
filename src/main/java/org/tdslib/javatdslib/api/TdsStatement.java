@@ -133,14 +133,42 @@ public class TdsStatement implements Statement {
 
           CompositeTokenVisitor pipeline = new CompositeTokenVisitor(
               new EnvChangeVisitor(context),
-              new MessageVisitor(segmentVisitor::emitStreamError),
+              new MessageVisitor(segmentVisitor::emitStreamError), // Emits TdsServerErrorException
               segmentVisitor
           );
 
           segmentVisitor.setVisitorChain(pipeline);
 
           BatchResultSplitter resultPublisher = new BatchResultSplitter(segmentVisitor);
-          resultPublisher.subscribe(subscriber);
+
+          // --- THE FIX: Intercept and Translate the Error ---
+          resultPublisher.subscribe(new Subscriber<Result>() {
+            @Override
+            public void onSubscribe(Subscription s) {
+              subscriber.onSubscribe(s);
+            }
+
+            @Override
+            public void onNext(Result result) {
+              subscriber.onNext(result);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+              // Translate internal TDS errors to R2DBC SPI errors at the boundary
+              if (t instanceof org.tdslib.javatdslib.protocol.TdsServerErrorException tdsError) {
+                subscriber.onError(R2dbcErrorTranslator.translateException(tdsError));
+              } else {
+                subscriber.onError(t); // Pass through non-database errors (like IOExceptions)
+              }
+            }
+
+            @Override
+            public void onComplete() {
+              subscriber.onComplete();
+            }
+          });
+          // ------------------------------------------------
 
         } catch (Exception e) {
           subscriber.onSubscribe(new Subscription() {

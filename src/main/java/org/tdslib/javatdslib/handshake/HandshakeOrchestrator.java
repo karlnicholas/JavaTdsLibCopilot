@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.handshake;
 
-import io.r2dbc.spi.R2dbcNonTransientResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.PreLoginResponse;
@@ -50,9 +49,7 @@ public class HandshakeOrchestrator {
         password, database);
 
     if (!loginVisitor.isSuccess()) {
-      throw new R2dbcNonTransientResourceException(
-          loginVisitor.getErrorMessage() != null ? loginVisitor.getErrorMessage() : "Login Failed"
-      );
+      throw new SecurityException(loginVisitor.getErrorMessage() != null ? loginVisitor.getErrorMessage() : "Login Failed");
     }
     transport.tlsComplete();
   }
