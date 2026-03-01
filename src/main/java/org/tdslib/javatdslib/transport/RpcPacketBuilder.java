@@ -1,11 +1,11 @@
 package org.tdslib.javatdslib.transport;
 
-import io.r2dbc.spi.Parameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.protocol.TdsType;
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
@@ -29,7 +29,7 @@ public class RpcPacketBuilder {
   private static final short MAX_NVARCHAR_SIZE = 8000;
 
   private final String sql;
-  private final List<List<ParamEntry>> batchParams;
+  private final List<List<TdsParameter>> batchParams; // CHANGED from ParamEntry
   private final boolean update;
   private final EncoderRegistry encoderRegistry;
   private final RpcEncodingContext encodingContext;
@@ -43,7 +43,7 @@ public class RpcPacketBuilder {
    * @param encoderRegistry   the registry for parameter codecs
    * @param encodingContext the encoding context
    */
-  public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update,
+  public RpcPacketBuilder(String sql, List<List<TdsParameter>> batchParams, boolean update,
                           EncoderRegistry encoderRegistry, RpcEncodingContext encodingContext) {
     this.sql = sql;
     this.batchParams = batchParams;
@@ -78,7 +78,7 @@ public class RpcPacketBuilder {
       buf.putShort((short) sqlBytes.length);
       buf.put(sqlBytes);
 
-      List<ParamEntry> params = batchParams.get(i);
+      List<TdsParameter> params = batchParams.get(i);
 
       // 2. Framework @params header
       if (!params.isEmpty()) {
@@ -90,7 +90,7 @@ public class RpcPacketBuilder {
         buf.put(declBytes);
 
         // 3. User Values (Delegated to EncoderRegistry)
-        for (ParamEntry param : params) {
+        for (TdsParameter param : params) {
           writeParam(buf, param);
         }
       }
@@ -126,37 +126,35 @@ public class RpcPacketBuilder {
     writeFrameworkCollation(buf);
   }
 
-  private String buildParamDecl(List<ParamEntry> params) {
-    if (params.isEmpty()) {
-      return "";
-    }
+  private String buildParamDecl(List<TdsParameter> params) {
+    if (params.isEmpty()) return "";
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < params.size(); i++) {
-      ParamEntry entry = params.get(i);
-      if (i > 0) {
-        sb.append(",");
-      }
+      TdsParameter p = params.get(i);
+      if (i > 0) sb.append(",");
 
-      ParameterEncoder codec = encoderRegistry.getCodec(entry);
-      String decl = codec.getSqlTypeDeclaration(entry);
+      // Fix: Pass 'p' directly instead of 'p.type()'
+      ParameterEncoder codec = encoderRegistry.getCodec(p);
+      String decl = codec.getSqlTypeDeclaration(p);
 
-      sb.append(entry.key().name()).append(" ").append(decl);
-      if (entry.value() instanceof Parameter.Out) {
+      sb.append(p.name()).append(" ").append(decl);
+      if (p.isOutParameter()) {
         sb.append(" output");
       }
     }
     return sb.toString();
   }
 
-  private void writeParam(ByteBuffer buf, ParamEntry param) {
-    writeParamName(buf, param.key().name());
+  private void writeParam(ByteBuffer buf, TdsParameter param) {
+    writeParamName(buf, param.name());
 
-    if (param.value() instanceof Parameter.Out) {
+    if (param.isOutParameter()) {
       buf.put((byte) 0x01);
     } else {
       buf.put(RPC_PARAM_DEFAULT);
     }
 
+    // Fix: Pass 'param' directly instead of 'param.type()'
     ParameterEncoder codec = encoderRegistry.getCodec(param);
     codec.writeTypeInfo(buf, param, encodingContext);
     codec.writeValue(buf, param, encodingContext);

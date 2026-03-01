@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -13,15 +14,15 @@ import java.nio.ByteBuffer;
 public class IntegerEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.INT1 || type == TdsType.INT2
         || type == TdsType.INT4 || type == TdsType.INT8 || type == TdsType.INTN;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public String getSqlTypeDeclaration(TdsParameter entry) {
+    TdsType type = entry.type();
 
     if (type == TdsType.INT1) {
       return "tinyint";
@@ -37,7 +38,7 @@ public class IntegerEncoder implements ParameterEncoder {
     }
 
     if (type == TdsType.INTN) {
-      Object value = entry.value().getValue();
+      Object value = entry.value();
       if (value instanceof Long) {
         return "bigint";
       }
@@ -53,11 +54,11 @@ public class IntegerEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     buf.put((byte) TdsType.INTN.byteVal); // Always send as variable length INTN
 
-    TdsType type = entry.key().type();
-    Object val = entry.value().getValue();
+    TdsType type = entry.type();
+    Object val = entry.value();
     byte maxLen = 4;
 
     if (type == TdsType.INT1 || val instanceof Byte) {
@@ -72,8 +73,8 @@ public class IntegerEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0); // Null byte length
       return;

@@ -14,8 +14,7 @@ import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.protocol.rpc.BindingKey;
-import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.reactive.BatchResultSplitter;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
@@ -39,8 +38,8 @@ public class TdsStatement implements Statement {
   private final String query;
   private final TdsTransport transport;
   private final ConnectionContext context;
-  private final List<List<ParamEntry>> batchParams = new ArrayList<>();
-  private List<ParamEntry> currentParams = new ArrayList<>();
+  private final List<List<TdsParameter>> batchParams = new ArrayList<>();
+  private List<TdsParameter> currentParams = new ArrayList<>();
   private int fetchSize = 0;
 
   public TdsStatement(TdsTransport transport, ConnectionContext context, String query) {
@@ -76,7 +75,7 @@ public class TdsStatement implements Statement {
       throw new IllegalArgumentException("Unsupported parameter type: " + p.getType());
     }
 
-    currentParams.add(new ParamEntry(new BindingKey(tdsType, name), p));
+    currentParams.add(new TdsParameter(tdsType, name, p.getValue(), p instanceof Parameter.Out));
     return this;
   }
 
@@ -91,7 +90,7 @@ public class TdsStatement implements Statement {
     TdsType tdsType = TdsType.inferFromJavaType(type);
     if (tdsType == null) throw new IllegalArgumentException("Unsupported type for NULL: " + type.getName());
 
-    currentParams.add(new ParamEntry(new BindingKey(tdsType, name), null));
+    currentParams.add(new TdsParameter(tdsType, name, null, false));
     return this;
   }
 
@@ -107,7 +106,7 @@ public class TdsStatement implements Statement {
       currentParams.clear();
     }
 
-    final List<List<ParamEntry>> executions;
+    final List<List<TdsParameter>> executions;
     final boolean isSimpleBatch;
 
     if (batchParams.isEmpty()) {
@@ -130,18 +129,14 @@ public class TdsStatement implements Statement {
           }
 
           TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
-
-          // 1. Instantiate the Segment Producer
           ReactiveResultVisitor segmentVisitor = new ReactiveResultVisitor(transport, context, message, dispatcher);
 
-          // 2. Compose the Pipeline
           CompositeTokenVisitor pipeline = new CompositeTokenVisitor(
               new EnvChangeVisitor(context),
               new MessageVisitor(segmentVisitor::emitStreamError),
               segmentVisitor
           );
 
-          // 3. Attach pipeline to the producer
           segmentVisitor.setVisitorChain(pipeline);
 
           BatchResultSplitter resultPublisher = new BatchResultSplitter(segmentVisitor);
@@ -168,24 +163,14 @@ public class TdsStatement implements Statement {
     return TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
   }
 
-  private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
-    // 1. Use the shared stateless registry
+  private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
-
-    // 2. Wrap the connection context properties
     RpcEncodingContext encodingContext = new RpcEncodingContext(
         context.getVarcharCharset(),
         context.getCurrentCollationBytes()
     );
 
-    // 3. Pass dependencies to the builder
-    RpcPacketBuilder builder = new RpcPacketBuilder(
-        sql,
-        batchParams,
-        true,
-        registry,
-        encodingContext
-    );
+    RpcPacketBuilder builder = new RpcPacketBuilder(sql, executions, true, registry, encodingContext);
     ByteBuffer payload = builder.buildRpcPacket();
     return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
   }

@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -13,15 +14,15 @@ import java.nio.ByteBuffer;
 public class BinaryEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY
         || type == TdsType.VARBINARY || type == TdsType.BINARY || type == TdsType.IMAGE;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
-    byte[] data = getBytes(entry.value().getValue());
+  public String getSqlTypeDeclaration(TdsParameter entry) {
+    byte[] data = getBytes(entry.value());
     if (data != null && data.length > 8000) {
       return "varbinary(max)";
     }
@@ -29,10 +30,10 @@ public class BinaryEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     buf.put((byte) TdsType.BIGVARBIN.byteVal); // Always send as BIGVARBIN (0xA5)
 
-    byte[] data = getBytes(entry.value().getValue());
+    byte[] data = getBytes(entry.value());
     if (data != null && data.length > 8000) {
       buf.putShort((short) -1); // 0xFFFF for PLP max length
     } else {
@@ -41,8 +42,8 @@ public class BinaryEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    byte[] data = getBytes(entry.value().getValue());
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    byte[] data = getBytes(entry.value());
     if (data == null) {
       buf.putShort((short) 0xFFFF);
       return;

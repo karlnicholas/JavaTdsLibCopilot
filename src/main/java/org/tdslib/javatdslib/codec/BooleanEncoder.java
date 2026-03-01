@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -13,26 +14,26 @@ import java.nio.ByteBuffer;
 public class BooleanEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.BIT || type == TdsType.BITN;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
+  public String getSqlTypeDeclaration(TdsParameter entry) {
     return "bit";
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     // Always send as variable length BITN (0x68) for RPC
     buf.put((byte) TdsType.BITN.byteVal);
     buf.put((byte) 1); // Maximum length is 1 byte
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0); // Null byte length
       return;

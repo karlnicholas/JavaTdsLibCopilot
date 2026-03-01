@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -20,16 +21,16 @@ public class DateTimeEncoder implements ParameterEncoder {
   private static final LocalDate TDS_BASE_DATE = LocalDate.of(1, 1, 1);
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.DATE || type == TdsType.TIME
         || type == TdsType.DATETIME2 || type == TdsType.DATETIMEOFFSET
         || type == TdsType.DATETIME || type == TdsType.SMALLDATETIME || type == TdsType.DATETIMN;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public String getSqlTypeDeclaration(TdsParameter entry) {
+    TdsType type = entry.type();
     if (type == TdsType.DATE) {
       return "date";
     }
@@ -49,8 +50,8 @@ public class DateTimeEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    TdsType type = entry.key().type();
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    TdsType type = entry.type();
 
     // Modern types (DATE, TIME, DATETIME2, DTOFFSET) use scale for precision
     if (type == TdsType.DATE) {
@@ -71,14 +72,14 @@ public class DateTimeEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0);
       return;
     }
 
-    TdsType type = entry.key().type();
+    TdsType type = entry.type();
 
     if (type == TdsType.DATE && value instanceof LocalDate) {
       buf.put((byte) 3);

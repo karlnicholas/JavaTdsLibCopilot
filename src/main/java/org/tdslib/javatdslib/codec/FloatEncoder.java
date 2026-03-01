@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -13,16 +14,16 @@ import java.nio.ByteBuffer;
 public class FloatEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.FLT4 || type == TdsType.REAL
         || type == TdsType.FLT8 || type == TdsType.FLTN;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
-    TdsType type = entry.key().type();
-    Object val = entry.value().getValue();
+  public String getSqlTypeDeclaration(TdsParameter entry) {
+    TdsType type = entry.type();
+    Object val = entry.value();
 
     if (type == TdsType.FLT4 || type == TdsType.REAL || val instanceof Float) {
       return "real";
@@ -31,11 +32,11 @@ public class FloatEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     buf.put((byte) TdsType.FLTN.byteVal); // Always send as variable length FLTN
 
-    TdsType type = entry.key().type();
-    Object val = entry.value().getValue();
+    TdsType type = entry.type();
+    Object val = entry.value();
 
     if (type == TdsType.FLT4 || type == TdsType.REAL || val instanceof Float) {
       buf.put((byte) 4);
@@ -45,8 +46,8 @@ public class FloatEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0); // Null byte length
       return;

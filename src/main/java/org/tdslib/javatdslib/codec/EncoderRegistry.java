@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 
@@ -42,12 +43,12 @@ public class EncoderRegistry {
    * @return a suitable ParameterEncoder
    * @throws IllegalArgumentException if no suitable codec is found
    */
-  public ParameterEncoder getCodec(ParamEntry entry) {
+  public ParameterEncoder getCodec(TdsParameter entry) {
     for (ParameterEncoder codec : codecs) {
       if (codec.canEncode(entry)) {
         return codec;
       }
     }
-    throw new IllegalArgumentException("No codec registered for type: " + entry.key().type());
+    throw new IllegalArgumentException("No codec registered for type: " + entry.type());
   }
 }

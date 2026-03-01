@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -16,20 +17,20 @@ import java.nio.ByteBuffer;
 public class BigDecimalEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.DECIMAL || type == TdsType.NUMERIC
         || type == TdsType.DECIMALN || type == TdsType.NUMERICN;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
+  public String getSqlTypeDeclaration(TdsParameter entry) {
     int scale = getDecimalScale(entry);
     return String.format("decimal(38,%d)", scale);
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     buf.put((byte) TdsType.DECIMALN.byteVal); // Always send as variable length DECIMALN
     buf.put((byte) 17);                       // Max length for precision 38 is 17 bytes
     buf.put((byte) 38);                       // Precision
@@ -37,8 +38,8 @@ public class BigDecimalEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0); // Null byte length
       return;
@@ -54,8 +55,8 @@ public class BigDecimalEncoder implements ParameterEncoder {
     buf.put(decBytes);
   }
 
-  private int getDecimalScale(ParamEntry entry) {
-    Object value = entry.value().getValue();
+  private int getDecimalScale(TdsParameter entry) {
+    Object value = entry.value();
     if (value instanceof BigDecimal bd) {
       return Math.max(0, Math.min(38, bd.scale()));
     }

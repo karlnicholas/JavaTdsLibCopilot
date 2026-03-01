@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -14,16 +15,16 @@ import java.nio.charset.StandardCharsets;
 public class StringEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public boolean canEncode(TdsParameter entry) {
+    TdsType type = entry.type();
     return type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT
         || type == TdsType.VARCHAR || type == TdsType.CHAR || type == TdsType.TEXT
         || type == TdsType.BIGVARCHR || type == TdsType.BIGCHAR;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
-    TdsType type = entry.key().type();
+  public String getSqlTypeDeclaration(TdsParameter entry) {
+    TdsType type = entry.type();
     boolean isNational = isNationalType(type);
     boolean isLarge = isLargeString(entry);
 
@@ -35,8 +36,8 @@ public class StringEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    TdsType type = entry.key().type();
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    TdsType type = entry.type();
     buf.put((byte) type.byteVal);
 
     int encodedLen = getEncodedLength(entry, context);
@@ -54,15 +55,15 @@ public class StringEncoder implements ParameterEncoder {
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
-      writeNull(buf, entry.key().type());
+      writeNull(buf, entry.type());
       return;
     }
 
     String stringVal = (value instanceof String) ? (String) value : value.toString();
-    TdsType type = entry.key().type();
+    TdsType type = entry.type();
     boolean isNational = isNationalType(type);
 
     byte[] bytes;
@@ -84,23 +85,23 @@ public class StringEncoder implements ParameterEncoder {
     return type == TdsType.NVARCHAR || type == TdsType.NCHAR || type == TdsType.NTEXT;
   }
 
-  private boolean isLargeString(ParamEntry entry) {
-    Object val = entry.value().getValue();
+  private boolean isLargeString(TdsParameter entry) {
+    Object val = entry.value();
     if (val instanceof String s) {
       // Threshold depends on whether it's 2-byte UTF-16 or 1-byte varchar
-      return isNationalType(entry.key().type()) ? s.length() > 4000 : s.length() > 8000;
+      return isNationalType(entry.type()) ? s.length() > 4000 : s.length() > 8000;
     }
     return false;
   }
 
-  private int getEncodedLength(ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  private int getEncodedLength(TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       return 0;
     }
 
     if (value instanceof String s) {
-      if (isNationalType(entry.key().type())) {
+      if (isNationalType(entry.type())) {
         return s.length() * 2;
       }
       return s.getBytes(context.varcharCharset()).length;

@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.codec;
 
+import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
@@ -14,24 +15,24 @@ import java.util.UUID;
 public class GuidEncoder implements ParameterEncoder {
 
   @Override
-  public boolean canEncode(ParamEntry entry) {
-    return entry.key().type() == TdsType.GUID;
+  public boolean canEncode(TdsParameter entry) {
+    return entry.type() == TdsType.GUID;
   }
 
   @Override
-  public String getSqlTypeDeclaration(ParamEntry entry) {
+  public String getSqlTypeDeclaration(TdsParameter entry) {
     return "uniqueidentifier";
   }
 
   @Override
-  public void writeTypeInfo(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
+  public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
     buf.put((byte) TdsType.GUID.byteVal);
     buf.put((byte) 16); // Always 16 bytes length indicator
   }
 
   @Override
-  public void writeValue(ByteBuffer buf, ParamEntry entry, RpcEncodingContext context) {
-    Object value = entry.value().getValue();
+  public void writeValue(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
+    Object value = entry.value();
     if (value == null) {
       buf.put((byte) 0);
       return;
