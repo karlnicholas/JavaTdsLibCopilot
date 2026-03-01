@@ -17,11 +17,10 @@ public class TlsHandshake {
   public void tlsHandshake(
       String host,
       int port,
-      NetworkConnection connection, // Changed from SocketChannel
+      NetworkConnection connection,
       SSLContext sslContext
   ) throws IOException {
 
-    // SSLEngine is created using the injected Context
     this.sslEngine = sslContext.createSSLEngine(host, port);
     this.sslEngine.setUseClientMode(true);
 
@@ -125,7 +124,6 @@ public class TlsHandshake {
     }
   }
 
-  // Changed from SocketChannel to NetworkConnection
   public void writeEncrypted(final ByteBuffer appData, final NetworkConnection connection) throws IOException {
     while (appData.hasRemaining()) {
       myNetData.clear();
