@@ -6,7 +6,7 @@ import io.r2dbc.spi.RowMetadata;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.codec.DecoderRegistry;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
-import org.tdslib.javatdslib.reactive.CollationUtils;
+import org.tdslib.javatdslib.protocol.CollationUtils;
 
 import java.nio.charset.Charset;
 import java.util.List;

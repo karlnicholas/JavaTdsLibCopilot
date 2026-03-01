@@ -1,32 +1,27 @@
-package org.tdslib.javatdslib.query.rpc;
+package org.tdslib.javatdslib.codec;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.tdslib.javatdslib.codec.BigDecimalCodec;
-import org.tdslib.javatdslib.codec.BinaryCodec;
-import org.tdslib.javatdslib.codec.BooleanCodec;
-import org.tdslib.javatdslib.codec.DateTimeCodec;
-import org.tdslib.javatdslib.codec.FloatCodec;
-import org.tdslib.javatdslib.codec.GuidCodec;
-import org.tdslib.javatdslib.codec.IntegerCodec;
-import org.tdslib.javatdslib.codec.StringCodec;
+
+import org.tdslib.javatdslib.query.rpc.ParamEntry;
+import org.tdslib.javatdslib.query.rpc.ParameterCodec;
 
 /**
  * Registry for managing and accessing ParameterCodecs.
  */
-public class CodecRegistry {
+public class EncoderRegistry {
 
-  public static final CodecRegistry DEFAULT = new CodecRegistry();
+  public static final EncoderRegistry DEFAULT = new EncoderRegistry();
 
   static {
-    DEFAULT.register(new IntegerCodec());
-    DEFAULT.register(new StringCodec());
-    DEFAULT.register(new BigDecimalCodec());
-    DEFAULT.register(new BooleanCodec());
-    DEFAULT.register(new FloatCodec());
-    DEFAULT.register(new DateTimeCodec());
-    DEFAULT.register(new BinaryCodec());
-    DEFAULT.register(new GuidCodec());
+    DEFAULT.register(new IntegerEncoder());
+    DEFAULT.register(new StringEncoder());
+    DEFAULT.register(new BigDecimalEncoder());
+    DEFAULT.register(new BooleanEncoder());
+    DEFAULT.register(new FloatEncoder());
+    DEFAULT.register(new DateTimeEncoder());
+    DEFAULT.register(new BinaryEncoder());
+    DEFAULT.register(new GuidEncoder());
   }
 
   private final List<ParameterCodec> codecs = new ArrayList<>();

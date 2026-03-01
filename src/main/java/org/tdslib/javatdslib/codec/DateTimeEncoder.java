@@ -14,7 +14,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding Date/Time values into TDS formats (DATE, TIME, DATETIME2, DATETIMEOFFSET).
  */
-public class DateTimeCodec implements ParameterCodec {
+public class DateTimeEncoder implements ParameterCodec {
 
   private static final LocalDate TDS_BASE_DATE = LocalDate.of(1, 1, 1);
 

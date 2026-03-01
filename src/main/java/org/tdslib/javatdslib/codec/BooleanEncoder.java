@@ -9,7 +9,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding Boolean values into TDS BIT/BITN format.
  */
-public class BooleanCodec implements ParameterCodec {
+public class BooleanEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

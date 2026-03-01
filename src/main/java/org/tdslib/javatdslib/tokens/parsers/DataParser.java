@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.tokens;
+package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.protocol.TdsType;
 

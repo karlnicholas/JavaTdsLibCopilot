@@ -9,7 +9,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding binary data types (BINARY, VARBINARY, IMAGE) into TDS format.
  */
-public class BinaryCodec implements ParameterCodec {
+public class BinaryEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

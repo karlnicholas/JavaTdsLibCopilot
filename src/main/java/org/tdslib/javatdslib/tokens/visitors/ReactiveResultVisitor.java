@@ -5,7 +5,7 @@ import org.tdslib.javatdslib.protocol.SegmentTranslator;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.tokens.DataParser;
+import org.tdslib.javatdslib.tokens.parsers.DataParser;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenVisitor;

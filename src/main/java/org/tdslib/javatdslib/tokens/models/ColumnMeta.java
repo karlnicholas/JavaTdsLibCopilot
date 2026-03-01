@@ -1,7 +1,5 @@
 package org.tdslib.javatdslib.tokens.models;
 
-import org.tdslib.javatdslib.tokens.TypeInfo;
-
 /**
  * Column metadata holder used by COLMETADATA token parser.
  */

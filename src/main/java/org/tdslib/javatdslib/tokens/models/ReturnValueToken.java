@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens.models;
 
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenType;
-import org.tdslib.javatdslib.tokens.TypeInfo;
 
 public final class ReturnValueToken extends Token {
 

@@ -9,7 +9,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding floating-point values (Float, Double) into TDS REAL/FLOAT format.
  */
-public class FloatCodec implements ParameterCodec {
+public class FloatEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

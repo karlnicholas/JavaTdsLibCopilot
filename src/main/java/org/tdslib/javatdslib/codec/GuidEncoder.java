@@ -10,7 +10,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding UUID values into TDS uniqueidentifier format.
  */
-public class GuidCodec implements ParameterCodec {
+public class GuidEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

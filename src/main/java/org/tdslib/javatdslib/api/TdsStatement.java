@@ -4,7 +4,8 @@ import io.r2dbc.spi.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.tdslib.javatdslib.protocol.BatchResultSplitter;
+import org.tdslib.javatdslib.codec.EncoderRegistry;
+import org.tdslib.javatdslib.reactive.BatchResultSplitter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -12,7 +13,6 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.query.rpc.BindingKey;
 import org.tdslib.javatdslib.query.rpc.ParamEntry;
 import org.tdslib.javatdslib.query.rpc.RpcPacketBuilder;
-import org.tdslib.javatdslib.query.rpc.CodecRegistry;
 import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
@@ -165,7 +165,7 @@ public class TdsStatement implements Statement {
 
   private TdsMessage createRpcMessage(String sql, List<List<ParamEntry>> executions) {
     // 1. Use the shared stateless registry
-    CodecRegistry registry = CodecRegistry.DEFAULT;
+    EncoderRegistry registry = EncoderRegistry.DEFAULT;
 
     // 2. Wrap the connection context properties
     RpcEncodingContext encodingContext = new RpcEncodingContext(

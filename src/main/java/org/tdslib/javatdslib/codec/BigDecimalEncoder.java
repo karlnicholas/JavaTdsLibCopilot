@@ -12,7 +12,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding BigDecimal values into TDS DECIMAL/NUMERIC format.
  */
-public class BigDecimalCodec implements ParameterCodec {
+public class BigDecimalEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

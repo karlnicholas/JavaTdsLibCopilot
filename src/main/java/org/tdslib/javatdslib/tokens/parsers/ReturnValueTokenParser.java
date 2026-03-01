@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.tokens.*;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
+import org.tdslib.javatdslib.tokens.models.TypeInfo;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;

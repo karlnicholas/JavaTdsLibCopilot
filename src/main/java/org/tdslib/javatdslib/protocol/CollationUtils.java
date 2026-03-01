@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.reactive;
+package org.tdslib.javatdslib.protocol;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

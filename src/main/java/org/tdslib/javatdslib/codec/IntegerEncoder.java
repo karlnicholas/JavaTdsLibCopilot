@@ -9,7 +9,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding integer values (Byte, Short, Integer, Long) into TDS INT format.
  */
-public class IntegerCodec implements ParameterCodec {
+public class IntegerEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

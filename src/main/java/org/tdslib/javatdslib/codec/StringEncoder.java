@@ -10,7 +10,7 @@ import org.tdslib.javatdslib.query.rpc.RpcEncodingContext;
 /**
  * Codec for encoding String values into TDS CHAR/VARCHAR/NCHAR/NVARCHAR format.
  */
-public class StringCodec implements ParameterCodec {
+public class StringEncoder implements ParameterCodec {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

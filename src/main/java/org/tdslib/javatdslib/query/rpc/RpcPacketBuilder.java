@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 
@@ -22,7 +23,7 @@ public class RpcPacketBuilder {
   private final String sql;
   private final List<List<ParamEntry>> batchParams;
   private final boolean update;
-  private final CodecRegistry codecRegistry;
+  private final EncoderRegistry encoderRegistry;
   private final RpcEncodingContext encodingContext;
 
   /**
@@ -31,15 +32,15 @@ public class RpcPacketBuilder {
    * @param sql             the SQL statement
    * @param batchParams     the list of parameter sets for batch execution
    * @param update          whether this is an update operation
-   * @param codecRegistry   the registry for parameter codecs
+   * @param encoderRegistry   the registry for parameter codecs
    * @param encodingContext the encoding context
    */
   public RpcPacketBuilder(String sql, List<List<ParamEntry>> batchParams, boolean update,
-                          CodecRegistry codecRegistry, RpcEncodingContext encodingContext) {
+                          EncoderRegistry encoderRegistry, RpcEncodingContext encodingContext) {
     this.sql = sql;
     this.batchParams = batchParams;
     this.update = update;
-    this.codecRegistry = codecRegistry;
+    this.encoderRegistry = encoderRegistry;
     this.encodingContext = encodingContext;
   }
 
@@ -86,7 +87,7 @@ public class RpcPacketBuilder {
         buf.putShort((short) declBytes.length);
         buf.put(declBytes);
 
-        // 3. User Values (Delegated to CodecRegistry)
+        // 3. User Values (Delegated to EncoderRegistry)
         for (ParamEntry param : params) {
           writeParam(buf, param);
         }
@@ -123,7 +124,7 @@ public class RpcPacketBuilder {
         sb.append(",");
       }
 
-      ParameterCodec codec = codecRegistry.getCodec(entry);
+      ParameterCodec codec = encoderRegistry.getCodec(entry);
       String decl = codec.getSqlTypeDeclaration(entry);
 
       sb.append(entry.key().name()).append(" ").append(decl);
@@ -143,7 +144,7 @@ public class RpcPacketBuilder {
       buf.put(RPC_PARAM_DEFAULT);
     }
 
-    ParameterCodec codec = codecRegistry.getCodec(param);
+    ParameterCodec codec = encoderRegistry.getCodec(param);
     codec.writeTypeInfo(buf, param, encodingContext);
     codec.writeValue(buf, param, encodingContext);
   }
