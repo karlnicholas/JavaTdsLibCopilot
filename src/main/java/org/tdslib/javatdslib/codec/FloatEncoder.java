@@ -3,13 +3,13 @@ package org.tdslib.javatdslib.codec;
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding floating-point values (Float, Double) into TDS REAL/FLOAT format.
  */
-public class FloatEncoder implements ParameterCodec {
+public class FloatEncoder implements ParameterEncoder {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

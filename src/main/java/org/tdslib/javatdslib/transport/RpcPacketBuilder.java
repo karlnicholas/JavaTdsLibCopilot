@@ -11,7 +11,7 @@ import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
@@ -127,7 +127,7 @@ public class RpcPacketBuilder {
         sb.append(",");
       }
 
-      ParameterCodec codec = encoderRegistry.getCodec(entry);
+      ParameterEncoder codec = encoderRegistry.getCodec(entry);
       String decl = codec.getSqlTypeDeclaration(entry);
 
       sb.append(entry.key().name()).append(" ").append(decl);
@@ -147,7 +147,7 @@ public class RpcPacketBuilder {
       buf.put(RPC_PARAM_DEFAULT);
     }
 
-    ParameterCodec codec = encoderRegistry.getCodec(param);
+    ParameterEncoder codec = encoderRegistry.getCodec(param);
     codec.writeTypeInfo(buf, param, encodingContext);
     codec.writeValue(buf, param, encodingContext);
   }

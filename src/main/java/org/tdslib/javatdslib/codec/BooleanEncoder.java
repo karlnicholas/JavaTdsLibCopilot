@@ -3,13 +3,13 @@ package org.tdslib.javatdslib.codec;
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding Boolean values into TDS BIT/BITN format.
  */
-public class BooleanEncoder implements ParameterCodec {
+public class BooleanEncoder implements ParameterEncoder {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

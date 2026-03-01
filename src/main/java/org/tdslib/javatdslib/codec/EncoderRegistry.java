@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 
 /**
  * Registry for managing and accessing ParameterCodecs.
@@ -24,14 +24,14 @@ public class EncoderRegistry {
     DEFAULT.register(new GuidEncoder());
   }
 
-  private final List<ParameterCodec> codecs = new ArrayList<>();
+  private final List<ParameterEncoder> codecs = new ArrayList<>();
 
   /**
    * Registers a new codec.
    *
    * @param codec the codec to register
    */
-  public void register(ParameterCodec codec) {
+  public void register(ParameterEncoder codec) {
     codecs.add(codec);
   }
 
@@ -39,11 +39,11 @@ public class EncoderRegistry {
    * Retrieves a codec capable of encoding the given parameter entry.
    *
    * @param entry the parameter entry to encode
-   * @return a suitable ParameterCodec
+   * @return a suitable ParameterEncoder
    * @throws IllegalArgumentException if no suitable codec is found
    */
-  public ParameterCodec getCodec(ParamEntry entry) {
-    for (ParameterCodec codec : codecs) {
+  public ParameterEncoder getCodec(ParamEntry entry) {
+    for (ParameterEncoder codec : codecs) {
       if (codec.canEncode(entry)) {
         return codec;
       }

@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /**
  * Defines the contract for serializing a specific data type into the MS-TDS RPC stream.
  */
-public interface ParameterCodec {
+public interface ParameterEncoder {
 
   /**
    * Evaluates whether this codec can handle the provided parameter.

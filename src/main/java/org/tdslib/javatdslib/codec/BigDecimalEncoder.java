@@ -6,13 +6,13 @@ import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding BigDecimal values into TDS DECIMAL/NUMERIC format.
  */
-public class BigDecimalEncoder implements ParameterCodec {
+public class BigDecimalEncoder implements ParameterEncoder {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

@@ -8,13 +8,13 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding Date/Time values into TDS formats (DATE, TIME, DATETIME2, DATETIMEOFFSET).
  */
-public class DateTimeEncoder implements ParameterCodec {
+public class DateTimeEncoder implements ParameterEncoder {
 
   private static final LocalDate TDS_BASE_DATE = LocalDate.of(1, 1, 1);
 

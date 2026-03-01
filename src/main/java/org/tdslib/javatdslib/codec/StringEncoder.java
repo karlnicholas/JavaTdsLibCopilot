@@ -4,13 +4,13 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding String values into TDS CHAR/VARCHAR/NCHAR/NVARCHAR format.
  */
-public class StringEncoder implements ParameterCodec {
+public class StringEncoder implements ParameterEncoder {
 
   @Override
   public boolean canEncode(ParamEntry entry) {

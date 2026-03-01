@@ -3,13 +3,13 @@ package org.tdslib.javatdslib.codec;
 import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParamEntry;
-import org.tdslib.javatdslib.protocol.rpc.ParameterCodec;
+import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
 /**
  * Codec for encoding binary data types (BINARY, VARBINARY, IMAGE) into TDS format.
  */
-public class BinaryEncoder implements ParameterCodec {
+public class BinaryEncoder implements ParameterEncoder {
 
   @Override
   public boolean canEncode(ParamEntry entry) {
