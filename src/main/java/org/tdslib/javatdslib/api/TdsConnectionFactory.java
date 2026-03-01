@@ -4,11 +4,13 @@ import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryMetadata;
 import io.r2dbc.spi.ConnectionFactoryOptions;
+import io.r2dbc.spi.Option;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.handshake.HandshakeOrchestrator;
+import org.tdslib.javatdslib.security.SslConfiguration;
 import org.tdslib.javatdslib.security.SslContextBuilder;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.DefaultConnectionContext;
@@ -27,13 +29,17 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 public class TdsConnectionFactory implements ConnectionFactory {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
 
+  // Moved Custom Options to the API boundary
+  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE = Option.valueOf("trustServerCertificate");
+  public static final Option<String> TRUST_STORE = Option.valueOf("trustStore");
+  public static final Option<String> TRUST_STORE_PASSWORD = Option.valueOf("trustStorePassword");
+
   private final ConnectionFactoryOptions options;
 
   public TdsConnectionFactory(ConnectionFactoryOptions options) {
     this.options = options;
   }
 
-  // TdsConnectionFactory.java (Refactored Subscription)
   @Override
   public Publisher<? extends Connection> create() {
     return subscriber -> {
@@ -55,7 +61,23 @@ public class TdsConnectionFactory implements ConnectionFactory {
               String password = (String) options.getValue(PASSWORD);
               String database = (String) options.getValue(DATABASE);
 
-              SSLContext sslContext = SslContextBuilder.build(options);
+              // Extract SSL Options
+              Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
+              boolean trustAll = false;
+              if (rawTrust instanceof Boolean b) {
+                trustAll = b;
+              } else if (rawTrust != null) {
+                trustAll = Boolean.parseBoolean(rawTrust.toString());
+              }
+
+              // Build Internal Security Config
+              SslConfiguration sslConfig = new SslConfiguration(
+                  trustAll,
+                  (String) options.getValue(TRUST_STORE),
+                  (String) options.getValue(TRUST_STORE_PASSWORD)
+              );
+
+              SSLContext sslContext = SslContextBuilder.build(sslConfig);
               ConnectionContext context = new DefaultConnectionContext();
               TdsTransport transport = new TdsTransport(hostname, port, context);
 

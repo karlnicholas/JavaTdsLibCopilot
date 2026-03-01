@@ -1,8 +1,5 @@
 package org.tdslib.javatdslib.security;
 
-import io.r2dbc.spi.ConnectionFactoryOptions;
-import io.r2dbc.spi.Option;
-
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -14,33 +11,20 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 
 /**
- * Builds an SSLContext based on connection options.
+ * Builds an SSLContext based on standard SSL configuration.
  */
 public class SslContextBuilder {
-
-  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE =
-      Option.valueOf("trustServerCertificate");
-  public static final Option<String> TRUST_STORE = Option.valueOf("trustStore");
-  public static final Option<String> TRUST_STORE_PASSWORD = Option.valueOf("trustStorePassword");
 
   /**
    * Builds an SSLContext.
    *
-   * @param options the connection factory options
+   * @param config the generic SSL configuration
    * @return the configured SSLContext
    * @throws Exception if an error occurs during SSL context creation
    */
-  public static SSLContext build(ConnectionFactoryOptions options) throws Exception {
-    Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
-    boolean trustAll = false;
+  public static SSLContext build(SslConfiguration config) throws Exception {
 
-    if (rawTrust instanceof Boolean b) {
-      trustAll = b;
-    } else if (rawTrust != null) {
-      trustAll = Boolean.parseBoolean(rawTrust.toString());
-    }
-
-    if (trustAll) {
+    if (config.trustServerCertificate()) {
       // Development Mode: Trust all certificates
       TrustManager[] trustAllCerts = new TrustManager[]{
           new X509TrustManager() {
@@ -64,11 +48,11 @@ public class SslContextBuilder {
     }
 
     // Production Mode: Strict Validation
-    String trustStorePath = (String) options.getValue(TRUST_STORE);
+    String trustStorePath = config.trustStorePath();
 
     if (trustStorePath != null) {
-      // User provided a specific TrustStore via R2DBC options
-      String trustStorePassword = (String) options.getValue(TRUST_STORE_PASSWORD);
+      // User provided a specific TrustStore
+      String trustStorePassword = config.trustStorePassword();
       char[] password = trustStorePassword != null ? trustStorePassword.toCharArray() : null;
 
       KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
