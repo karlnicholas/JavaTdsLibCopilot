@@ -2,14 +2,17 @@ package org.tdslib.javatdslib.api;
 
 import io.r2dbc.spi.OutParameters;
 import io.r2dbc.spi.OutParametersMetadata;
-import org.tdslib.javatdslib.codec.DecoderRegistry;
-import org.tdslib.javatdslib.protocol.TdsType;
-
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.tdslib.javatdslib.codec.DecoderRegistry;
+import org.tdslib.javatdslib.protocol.TdsType;
 
-// 4. Standalone OutParameters Implementation
+/**
+ * Implementation of {@link OutParameters} for the TDS protocol. This class holds the output
+ * parameters returned from a stored procedure execution, providing access to their values and
+ * metadata.
+ */
 public class TdsOutParameters implements OutParameters {
   private final List<byte[]> rawValues;
   private final TdsOutParametersMetadata metadata;
@@ -17,7 +20,17 @@ public class TdsOutParameters implements OutParameters {
   private final Map<String, Integer> nameToIndex;
   private final java.nio.charset.Charset varcharCharset; // <-- Add this
 
-  public TdsOutParameters(List<byte[]> rawValues, List<TdsOutParameterMetadata> metadataList, java.nio.charset.Charset varcharCharset) {
+  /**
+   * Constructs a new TdsOutParameters instance.
+   *
+   * @param rawValues The raw byte values of the output parameters.
+   * @param metadataList The metadata for each output parameter.
+   * @param varcharCharset The charset used for decoding VARCHAR parameters.
+   */
+  public TdsOutParameters(
+      List<byte[]> rawValues,
+      List<TdsOutParameterMetadata> metadataList,
+      java.nio.charset.Charset varcharCharset) {
     this.rawValues = rawValues;
     this.metadataList = metadataList;
     this.metadata = new TdsOutParametersMetadata(metadataList);
@@ -47,7 +60,9 @@ public class TdsOutParameters implements OutParameters {
     }
 
     byte[] data = rawValues.get(index);
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
 
     TdsOutParameterMetadata meta = metadataList.get(index);
     TdsType tdsType = meta.getTdsType();

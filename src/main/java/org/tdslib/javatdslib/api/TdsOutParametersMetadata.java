@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.api;
 
 import io.r2dbc.spi.OutParameterMetadata;
 import io.r2dbc.spi.OutParametersMetadata;
-
 import java.util.Collections;
 import java.util.List;
 
@@ -25,8 +24,8 @@ class TdsOutParametersMetadata implements OutParametersMetadata {
   @Override
   public OutParameterMetadata getParameterMetadata(String name) {
     for (TdsOutParameterMetadata meta : metadatas) {
-      if (name.equalsIgnoreCase(meta.getName()) ||
-              (meta.getName() != null && meta.getName().equalsIgnoreCase("@" + name))) {
+      if (name.equalsIgnoreCase(meta.getName())
+          || (meta.getName() != null && meta.getName().equalsIgnoreCase("@" + name))) {
         return meta;
       }
     }

@@ -1,10 +1,5 @@
 package org.tdslib.javatdslib.api;
 
-import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.ConnectionFactoryOptions;
-import io.r2dbc.spi.ConnectionFactoryProvider;
-import io.r2dbc.spi.Option;
-
 import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
 import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
@@ -12,14 +7,24 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
 import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
+import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.ConnectionFactoryOptions;
+import io.r2dbc.spi.ConnectionFactoryProvider;
+import io.r2dbc.spi.Option;
+
+/**
+ * A provider for creating {@link TdsConnectionFactory} instances. This class is discovered by the
+ * R2DBC SPI mechanism and is responsible for validating configuration options and instantiating the
+ * connection factory for the TDS driver.
+ */
 public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
 
   // Define your unique driver name
   public static final String TDS_DRIVER = "javatdslib";
 
   /**
-   * This returns the specific driver identifier this provider supports.
-   * When the user sets .option(DRIVER, "tds"), this is what matches.
+   * This returns the specific driver identifier this provider supports. When the user sets
+   * .option(DRIVER, "tds"), this is what matches.
    */
   @Override
   public String getDriver() {
@@ -27,8 +32,8 @@ public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
   }
 
   /**
-   * R2DBC calls this to create the actual factory instance.
-   * You extract the raw configuration (host, port, user) here.
+   * R2DBC calls this to create the actual factory instance. You extract the raw configuration
+   * (host, port, user) here.
    */
   @Override
   public ConnectionFactory create(ConnectionFactoryOptions options) {
@@ -46,15 +51,15 @@ public class TdsConnectionFactoryProvider implements ConnectionFactoryProvider {
 
   private void requireOption(Option<?> option, ConnectionFactoryOptions options) {
     if (!options.hasOption(option)) {
-      throw new IllegalArgumentException("Connection Factory is missing required option: " + option.name());
+      throw new IllegalArgumentException(
+          "Connection Factory is missing required option: " + option.name());
     }
   }
 
-
   /**
-   * This logic determines if your driver claims the user's request.
-   * The default implementation checks if options.getValue(DRIVER) equals getDriver().
-   * You can override it for complex logic, but usually, the default is sufficient.
+   * This logic determines if your driver claims the user's request. The default implementation
+   * checks if options.getValue(DRIVER) equals getDriver(). You can override it for complex logic,
+   * but usually, the default is sufficient.
    */
   @Override
   public boolean supports(ConnectionFactoryOptions options) {

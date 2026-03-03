@@ -2,6 +2,11 @@ package org.tdslib.javatdslib.api;
 
 import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -14,18 +19,23 @@ import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
+/**
+ * An implementation of the R2DBC {@link Batch} interface for executing multiple SQL statements as a
+ * single unit. This class buffers the SQL statements and sends them to the server in a single
+ * request when executed.
+ */
 public class TdsBatch implements Batch {
 
   private final TdsTransport transport;
   private final ConnectionContext context;
   private final List<String> statements = new ArrayList<>();
 
+  /**
+   * Constructs a new TdsBatch.
+   *
+   * @param transport The transport layer for sending the batch execution request.
+   * @param context The connection context associated with this batch.
+   */
   public TdsBatch(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
     this.context = context;
@@ -45,44 +55,47 @@ public class TdsBatch implements Batch {
     return new Publisher<Result>() {
       @Override
       public void subscribe(Subscriber<? super Result> subscriber) {
-        subscriber.onSubscribe(new Subscription() {
-          private final AtomicBoolean completed = new AtomicBoolean(false);
+        subscriber.onSubscribe(
+            new Subscription() {
+              private final AtomicBoolean completed = new AtomicBoolean(false);
 
-          @Override
-          public void request(long n) {
-            if (n <= 0) {
-              subscriber.onError(new IllegalArgumentException("n must be > 0"));
-              return;
-            }
+              @Override
+              public void request(long n) {
+                if (n <= 0) {
+                  subscriber.onError(new IllegalArgumentException("n must be > 0"));
+                  return;
+                }
 
-            if (!completed.compareAndSet(false, true)) {
-              return;
-            }
+                if (!completed.compareAndSet(false, true)) {
+                  return;
+                }
 
-            try {
-              if (statements.isEmpty()) {
-                subscriber.onComplete();
-                return;
+                try {
+                  if (statements.isEmpty()) {
+                    subscriber.onComplete();
+                    return;
+                  }
+
+                  String batchSql = String.join(";\n", statements);
+                  TdsMessage message = createSqlBatchMessage(batchSql);
+
+                  // Injecting dependencies into the visitor
+                  TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
+
+                  subscriber.onNext(
+                      new TdsResult(
+                          new ReactiveResultVisitor(transport, context, message, dispatcher)));
+                  subscriber.onComplete();
+                } catch (Exception e) {
+                  subscriber.onError(e);
+                }
               }
 
-              String batchSql = String.join(";\n", statements);
-              TdsMessage message = createSqlBatchMessage(batchSql);
-
-              // Injecting dependencies into the visitor
-              TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
-
-              subscriber.onNext(new TdsResult(new ReactiveResultVisitor(transport, context, message, dispatcher)));
-              subscriber.onComplete();
-            } catch (Exception e) {
-              subscriber.onError(e);
-            }
-          }
-
-          @Override
-          public void cancel() {
-            completed.set(true);
-          }
-        });
+              @Override
+              public void cancel() {
+                completed.set(true);
+              }
+            });
       }
     };
   }

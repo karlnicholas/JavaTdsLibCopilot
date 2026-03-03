@@ -1,6 +1,10 @@
 package org.tdslib.javatdslib.api.reactive;
 
 import io.r2dbc.spi.Result;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.tdslib.javatdslib.api.SegmentTranslator;
 import org.tdslib.javatdslib.api.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
@@ -20,12 +24,13 @@ import org.tdslib.javatdslib.tokens.parsers.DataParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Segment> implements TokenVisitor {
+/**
+ * A reactive visitor that processes TDS tokens and translates them into R2DBC {@link Result.Segment}s.
+ * This class acts as a bridge between the low-level TDS protocol and the reactive R2DBC API,
+ * emitting row data, update counts, and other results as they are received from the database.
+ */
+public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Segment>
+    implements TokenVisitor {
 
   private final TdsTransport transport;
   private final ConnectionContext context;
@@ -40,17 +45,40 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   private final List<ReturnValueToken> returnValues = new ArrayList<>();
   private boolean hasError = false;
 
-  public ReactiveResultVisitor(TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage, TokenDispatcher tokenDispatcher) {
+  /**
+   * Constructs a new ReactiveResultVisitor.
+   *
+   * @param transport       The TDS transport layer for sending and receiving messages.
+   * @param context         The connection context, containing session-specific information.
+   * @param queryTdsMessage The initial TDS query message to be sent.
+   * @param tokenDispatcher The dispatcher responsible for parsing TDS tokens from messages.
+   */
+  public ReactiveResultVisitor(
+      TdsTransport transport,
+      ConnectionContext context,
+      TdsMessage queryTdsMessage,
+      TokenDispatcher tokenDispatcher) {
     this.transport = transport;
     this.context = context;
     this.queryTdsMessage = queryTdsMessage;
     this.tokenDispatcher = tokenDispatcher;
   }
 
+  /**
+   * Sets an optional next visitor in the chain to process tokens. If set, tokens will be forwarded
+   * to this visitor instead of being processed by this class.
+   *
+   * @param visitorChain The next token visitor in the processing chain.
+   */
   public void setVisitorChain(TokenVisitor visitorChain) {
     this.visitorChain = visitorChain;
   }
 
+  /**
+   * Emits an error to the downstream subscriber.
+   *
+   * @param t The throwable to emit.
+   */
   public void emitStreamError(Throwable t) {
     super.error(t);
   }
@@ -73,19 +101,27 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   }
 
   private void messageHandler(TdsMessage tdsMessage) {
-    if (isCancelled.get()) return;
-    tokenDispatcher.processMessage(tdsMessage, context, visitorChain != null ? visitorChain : this);
+    if (isCancelled.get()) {
+      return;
+    }
+    TokenVisitor visitor = visitorChain != null ? visitorChain : this;
+    tokenDispatcher.processMessage(tdsMessage, context, visitor);
   }
 
   private void errorHandler(Throwable t) {
-    if (!isCancelled.get()) error(t);
+    if (!isCancelled.get()) {
+      error(t);
+    }
   }
 
   @Override
   public void onToken(Token token) {
-    if (isCancelled.get()) return;
+    if (isCancelled.get()) {
+      return;
+    }
 
-    // FIX: Swapped enum switch for instanceof checks to safely cast and avoid enum qualification errors
+    // FIX: Swapped enum switch for instanceof checks to safely cast and avoid enum qualification
+    // errors
     if (token instanceof ColMetaDataToken) {
       this.currentMetaData = (ColMetaDataToken) token;
 

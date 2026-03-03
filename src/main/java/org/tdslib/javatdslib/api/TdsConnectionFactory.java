@@ -1,10 +1,19 @@
 package org.tdslib.javatdslib.api;
 
+import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
+import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
+import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
+import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
+import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
+
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryMetadata;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import io.r2dbc.spi.Option;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLContext;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
@@ -16,26 +25,27 @@ import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.DefaultConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import javax.net.ssl.SSLContext;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
-import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
-import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
-import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
-import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
-
+/**
+ * An R2DBC {@link ConnectionFactory} for creating connections to a TDS-based database. This factory
+ * uses {@link ConnectionFactoryOptions} to configure connection details such as host, port, user,
+ * and password, as well as custom SSL settings.
+ */
 public class TdsConnectionFactory implements ConnectionFactory {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
 
   // Moved Custom Options to the API boundary
-  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE = Option.valueOf("trustServerCertificate");
+  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE =
+      Option.valueOf("trustServerCertificate");
   public static final Option<String> TRUST_STORE = Option.valueOf("trustStore");
   public static final Option<String> TRUST_STORE_PASSWORD = Option.valueOf("trustStorePassword");
 
   private final ConnectionFactoryOptions options;
 
+  /**
+   * Constructs a new TdsConnectionFactory with the specified options.
+   *
+   * @param options The configuration options for creating connections.
+   */
   public TdsConnectionFactory(ConnectionFactoryOptions options) {
     this.options = options;
   }
@@ -43,73 +53,81 @@ public class TdsConnectionFactory implements ConnectionFactory {
   @Override
   public Publisher<? extends Connection> create() {
     return subscriber -> {
-      subscriber.onSubscribe(new Subscription() {
-        private final AtomicBoolean isCanceled = new AtomicBoolean(false);
+      subscriber.onSubscribe(
+          new Subscription() {
+            private final AtomicBoolean isCanceled = new AtomicBoolean(false);
 
-        @Override
-        public void request(long n) {
-          if (n <= 0) return;
-
-          // Offload the blocking I/O to a background thread
-          CompletableFuture.runAsync(() -> {
-            if (isCanceled.get()) return;
-
-            try {
-              String hostname = options.getRequiredValue(HOST).toString();
-              int port = options.getValue(PORT) == null ? 1433 : (int) options.getValue(PORT);
-              String username = (String) options.getValue(USER);
-              String password = (String) options.getValue(PASSWORD);
-              String database = (String) options.getValue(DATABASE);
-
-              // Extract SSL Options
-              Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
-              boolean trustAll = false;
-              if (rawTrust instanceof Boolean b) {
-                trustAll = b;
-              } else if (rawTrust != null) {
-                trustAll = Boolean.parseBoolean(rawTrust.toString());
+            @Override
+            public void request(long n) {
+              if (n <= 0) {
+                return;
               }
 
-              // Build Internal Security Config
-              SslConfiguration sslConfig = new SslConfiguration(
-                  trustAll,
-                  (String) options.getValue(TRUST_STORE),
-                  (String) options.getValue(TRUST_STORE_PASSWORD)
-              );
+              // Offload the blocking I/O to a background thread
+              CompletableFuture.runAsync(
+                  () -> {
+                    if (isCanceled.get()) {
+                      return;
+                    }
 
-              SSLContext sslContext = SslContextBuilder.build(sslConfig);
-              ConnectionContext context = new DefaultConnectionContext();
-              TdsTransport transport = new TdsTransport(hostname, port, context);
+                    try {
+                      String hostname = options.getRequiredValue(HOST).toString();
+                      int port =
+                          options.getValue(PORT) == null ? 1433 : (int) options.getValue(PORT);
+                      String username = (String) options.getValue(USER);
+                      String password = (String) options.getValue(PASSWORD);
+                      String database = (String) options.getValue(DATABASE);
 
-              try {
-                HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
-                orchestrator.performHandshake(transport, context, sslContext, hostname, username, password, database);
+                      // Extract SSL Options
+                      Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
+                      boolean trustAll = false;
+                      if (rawTrust instanceof Boolean b) {
+                        trustAll = b;
+                      } else if (rawTrust != null) {
+                        trustAll = Boolean.parseBoolean(rawTrust.toString());
+                      }
 
-                transport.enterAsyncMode();
+                      // Build Internal Security Config
+                      SslConfiguration sslConfig =
+                          new SslConfiguration(
+                              trustAll,
+                              (String) options.getValue(TRUST_STORE),
+                              (String) options.getValue(TRUST_STORE_PASSWORD));
 
-                if (!isCanceled.get()) {
-                  subscriber.onNext(new TdsConnection(transport, context));
-                  subscriber.onComplete();
-                } else {
-                  transport.close(); // Clean up if canceled during handshake
-                }
+                      SSLContext sslContext = SslContextBuilder.build(sslConfig);
+                      ConnectionContext context = new DefaultConnectionContext();
+                      TdsTransport transport = new TdsTransport(hostname, port, context);
 
-              } catch (Exception e) {
-                logger.error("Handshake failed", e);
-                transport.close();
-                subscriber.onError(e);
-              }
-            } catch (Exception e) {
-              subscriber.onError(e);
+                      try {
+                        HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
+                        orchestrator.performHandshake(
+                            transport, context, sslContext, hostname, username, password, database);
+
+                        transport.enterAsyncMode();
+
+                        if (!isCanceled.get()) {
+                          subscriber.onNext(new TdsConnection(transport, context));
+                          subscriber.onComplete();
+                        } else {
+                          transport.close(); // Clean up if canceled during handshake
+                        }
+
+                      } catch (Exception e) {
+                        logger.error("Handshake failed", e);
+                        transport.close();
+                        subscriber.onError(e);
+                      }
+                    } catch (Exception e) {
+                      subscriber.onError(e);
+                    }
+                  });
+            }
+
+            @Override
+            public void cancel() {
+              isCanceled.set(true);
             }
           });
-        }
-
-        @Override
-        public void cancel() {
-          isCanceled.set(true);
-        }
-      });
     };
   }
 

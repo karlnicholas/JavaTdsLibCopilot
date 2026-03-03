@@ -8,6 +8,9 @@ import io.r2dbc.spi.R2dbcPermissionDeniedException;
 import io.r2dbc.spi.R2dbcTransientResourceException;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 
+/**
+ * Translator for converting TDS protocol errors into R2DBC exceptions.
+ */
 public class R2dbcErrorTranslator {
 
   /**
