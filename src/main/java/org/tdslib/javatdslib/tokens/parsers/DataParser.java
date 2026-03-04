@@ -1,7 +1,6 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.streaming.TdsClob;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 

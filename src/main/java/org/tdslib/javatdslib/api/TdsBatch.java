@@ -2,20 +2,21 @@ package org.tdslib.javatdslib.api;
 
 import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.packets.PacketType;
+import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
+import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.TdsTransport;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
-import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.transport.ConnectionContext;
-import org.tdslib.javatdslib.transport.TdsTransport;
 
 /**
  * An implementation of the R2DBC {@link Batch} interface for executing multiple SQL statements as a

@@ -2,19 +2,19 @@ package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Result;
-import java.util.ArrayList;
-import java.util.List;
-
+import org.tdslib.javatdslib.api.TdsRow;
 import org.tdslib.javatdslib.internal.TdsColumnMetadata;
 import org.tdslib.javatdslib.internal.TdsOutParameterMetadata;
 import org.tdslib.javatdslib.internal.TdsOutParameters;
 import org.tdslib.javatdslib.internal.TdsOutSegment;
-import org.tdslib.javatdslib.api.TdsRow;
 import org.tdslib.javatdslib.internal.TdsRowSegment;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A utility class for translating TDS protocol components into R2DBC {@link Result.Segment}s. This

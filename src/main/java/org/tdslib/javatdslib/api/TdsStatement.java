@@ -6,18 +6,9 @@ import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import io.r2dbc.spi.Type;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.tdslib.javatdslib.reactive.BatchResultSplitter;
-import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
-import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
-import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -25,12 +16,22 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
+import org.tdslib.javatdslib.reactive.BatchResultSplitter;
+import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
+import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
+import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
 import org.tdslib.javatdslib.tokens.visitors.CompositeTokenVisitor;
 import org.tdslib.javatdslib.tokens.visitors.EnvChangeVisitor;
 import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Implementation of {@link Statement} for the TDS protocol. This class allows for the execution of

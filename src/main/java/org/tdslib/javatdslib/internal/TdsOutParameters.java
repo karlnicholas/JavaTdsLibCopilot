@@ -2,11 +2,12 @@ package org.tdslib.javatdslib.internal;
 
 import io.r2dbc.spi.OutParameters;
 import io.r2dbc.spi.OutParametersMetadata;
+import org.tdslib.javatdslib.codec.DecoderRegistry;
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import org.tdslib.javatdslib.codec.DecoderRegistry;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 /**
  * Implementation of {@link OutParameters} for the TDS protocol. This class holds the output

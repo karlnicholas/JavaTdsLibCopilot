@@ -5,8 +5,6 @@ import io.r2dbc.spi.Clob;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
-import java.nio.charset.Charset;
-import java.util.List;
 import org.tdslib.javatdslib.codec.DecoderRegistry;
 import org.tdslib.javatdslib.internal.TdsRowMetadata;
 import org.tdslib.javatdslib.protocol.CollationUtils;
@@ -14,6 +12,9 @@ import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.streaming.TdsBlob;
 import org.tdslib.javatdslib.streaming.TdsClob;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
+
+import java.nio.charset.Charset;
+import java.util.List;
 
 /**
  * Implementation of {@link Row} for the TDS protocol. This class represents a single row of data in
