@@ -2,12 +2,15 @@ package org.tdslib.javatdslib.api.reactive;
 
 import io.r2dbc.spi.Result;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.tdslib.javatdslib.api.SegmentTranslator;
 import org.tdslib.javatdslib.api.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.protocol.CollationUtils;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.reactive.AbstractQueueDrainPublisher;
 import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
@@ -45,6 +48,9 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   private ColMetaDataToken currentMetaData;
   private final List<ReturnValueToken> returnValues = new ArrayList<>();
   private boolean hasError = false;
+
+  // NEW: Keep a reference to the active decoder
+  private StatefulTokenDecoder activeDecoder;
 
   /**
    * Constructs a new ReactiveResultVisitor.
@@ -85,20 +91,17 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   protected void onRequest(long n) {
     if (isQuerySent.compareAndSet(false, true)) {
       try {
-        // 1. Determine the top of the visitor chain
         TokenVisitor pipeline = visitorChain != null ? visitorChain : this;
 
-        // 2. Create the new Stateful Decoder
-        StatefulTokenDecoder decoder = new StatefulTokenDecoder(
+        // NEW: Save the instance to the class field
+        this.activeDecoder = new StatefulTokenDecoder(
             TokenParserRegistry.DEFAULT,
             context,
-            pipeline
+            pipeline,
+            transport // (Assumes StatefulTokenDecoder was updated to accept transport)
         );
 
-        // 3. Wire the decoder to the Transport using the new Stream methods
-        transport.setStreamHandlers(decoder, this::errorHandler);
-
-        // 4. Send the query
+        transport.setStreamHandlers(this.activeDecoder, this::errorHandler);
         transport.sendQueryMessageAsync(queryTdsMessage);
       } catch (Exception e) {
         error(e);
@@ -123,16 +126,18 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
       return;
     }
 
-    // FIX: Swapped enum switch for instanceof checks to safely cast and avoid enum qualification
-    // errors
     if (token instanceof ColMetaDataToken) {
       this.currentMetaData = (ColMetaDataToken) token;
 
     } else if (token instanceof RawRowToken) {
       RawRowToken rawRow = (RawRowToken) token;
-      List<byte[]> columnData = parseRowBytes(rawRow.getPayload(), currentMetaData);
-      emit(SegmentTranslator.createRowSegment(columnData, currentMetaData, context));
 
+      // FIX: Expect a List of Objects, not just byte arrays
+      List<Object> columnData = parseRowBytes(rawRow.getPayload(), currentMetaData);
+
+      // Note: You will need to ensure SegmentTranslator.createRowSegment
+      // is updated to accept List<Object> instead of List<byte[]>
+      emit(SegmentTranslator.createRowSegment(columnData, currentMetaData, context));
     } else if (token instanceof DoneToken) {
       DoneToken done = (DoneToken) token;
       if (!this.returnValues.isEmpty()) {
@@ -163,12 +168,24 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
     }
   }
 
-  private List<byte[]> parseRowBytes(ByteBuffer payload, ColMetaDataToken metaData) {
-    List<byte[]> rowData = new ArrayList<>();
+  // Update the parseRowBytes method:
+  private List<Object> parseRowBytes(ByteBuffer payload, ColMetaDataToken metaData) {
+    List<Object> rowData = new ArrayList<>();
     if (metaData != null) {
       for (ColumnMeta col : metaData.getColumns()) {
         TdsType type = TdsType.valueOf(col.getDataType());
-        byte[] data = DataParser.getDataBytes(payload, type, col.getMaxLength());
+
+        // --- Dynamically resolve the Charset ---
+        Charset charset = StandardCharsets.UTF_16LE; // Default for NVARCHAR and XML
+        if (type == TdsType.BIGVARCHR || type == TdsType.VARCHAR || type == TdsType.TEXT) {
+          byte[] collation = col.getTypeInfo() != null ? col.getTypeInfo().getCollation() : null;
+          charset = collation != null
+              ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
+              : context.getVarcharCharset();
+        }
+
+        // Pass the charset down to DataParser
+        Object data = DataParser.getDataBytes(payload, type, col.getMaxLength(), transport, activeDecoder, charset);
         rowData.add(data);
       }
     }

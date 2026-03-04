@@ -15,7 +15,7 @@ import org.tdslib.javatdslib.tokens.models.ColumnMeta;
  * a result set, providing access to column values by index or name.
  */
 public class TdsRow implements Row {
-  private final List<byte[]> columnData;
+  private final List<Object> columnData;
   private final List<ColumnMetadata> columnMetadata;
   private final TdsRowMetadata rowMetadata;
   private final Charset varcharCharset;
@@ -28,7 +28,7 @@ public class TdsRow implements Row {
    * @param varcharCharset The charset to use for decoding VARCHAR columns.
    */
   public TdsRow(
-      List<byte[]> columnData, List<ColumnMetadata> columnMetadata, Charset varcharCharset) {
+      List<Object> columnData, List<ColumnMetadata> columnMetadata, Charset varcharCharset) {
     this.columnData = columnData;
     this.columnMetadata = columnMetadata;
     this.rowMetadata = new TdsRowMetadata(columnMetadata);
@@ -46,12 +46,21 @@ public class TdsRow implements Row {
       throw new IllegalArgumentException("Invalid Column Index: " + index);
     }
 
-    byte[] data = columnData.get(index);
+    // FIX: Retrieve as Object first
+    Object rawData = columnData.get(index);
     ColumnMetadata meta = columnMetadata.get(index);
 
-    if (data == null) {
+    if (rawData == null) {
       return null;
     }
+
+    // --- MVC INTERCEPT: Return the Clob proxy directly ---
+    if (rawData instanceof org.tdslib.javatdslib.streaming.TdsClob && type.isAssignableFrom(io.r2dbc.spi.Clob.class)) {
+      return type.cast(rawData);
+    }
+
+    // If it's not a streaming proxy, it must be a standard byte[] payload
+    byte[] data = (byte[]) rawData;
 
     var typeInfo = ((ColumnMeta) meta.getNativeTypeMetadata()).getTypeInfo();
     TdsType tdsType = typeInfo.getTdsType();

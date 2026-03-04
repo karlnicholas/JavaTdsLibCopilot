@@ -41,12 +41,16 @@ public class ReturnValueTokenParser implements TokenParser {
     // 5. TYPE_INFO (Robust Parsing)
     TypeInfo typeInfo = TypeInfoParser.parse(payload);
 
-    byte[] value = DataParser.getDataBytes(payload, typeInfo.getTdsType(), typeInfo.getMaxLength());
 
-    // 6. Value (Decode using TypeInfo)
-//    int len = Byte.toUnsignedInt(payload.get());
-//    byte[] value = new byte[len];
-//    payload.get(value);
+    // FIX: Pass null for streaming args, and provide the context's charset
+    byte[] value = (byte[]) DataParser.getDataBytes(
+        payload,
+        typeInfo.getTdsType(),
+        typeInfo.getMaxLength(),
+        null,
+        null,
+        context.getEffectiveCharset()
+    );
 
     return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, value);
   }

@@ -25,7 +25,7 @@ public class SegmentTranslator {
    * @return A {@link TdsRowSegment} containing the structured row data.
    */
   public static Result.Segment createRowSegment(
-      List<byte[]> columnData, ColMetaDataToken metaDataToken, ConnectionContext context) {
+      List<Object> columnData, ColMetaDataToken metaDataToken, ConnectionContext context) {
     List<ColumnMetadata> metaList = new ArrayList<>();
     if (metaDataToken != null) {
       for (ColumnMeta cm : metaDataToken.getColumns()) {

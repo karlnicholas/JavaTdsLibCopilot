@@ -1,51 +1,48 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.protocol.TdsType;
+import org.tdslib.javatdslib.streaming.TdsClob;
+import org.tdslib.javatdslib.transport.TdsStreamHandler;
+import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 
 public class DataParser {
 
-  public static byte[] getDataBytes(ByteBuffer payload, TdsType type, int maxLength) {
-    byte[] data = null;
+  // Add Charset to the signature
+  public static Object getDataBytes(ByteBuffer payload, TdsType type, int maxLength,
+                                    TdsTransport transport, TdsStreamHandler decoder,
+                                    java.nio.charset.Charset charset) {
+    Object data = null;
 
     switch (type.strategy) {
       case FIXED:
-        // DATE (0x28) is special: It is FIXED in Metadata (no length sent)
-        // but VARIABLE in RowData (length byte sent: 0x03 or 0x00 for null)
         if (type == TdsType.DATE) {
           int len = payload.get() & 0xFF;
-          if (len > 0) {
-            data = readBytes(payload, len);
-          }
+          if (len > 0) data = readBytes(payload, len);
         } else {
-          // Standard Fixed types (INT4, FLT8, etc.)
           data = readBytes(payload, type.fixedSize);
         }
         break;
 
-      case SCALE_LEN:  // e.g. DATETIME2, TIME, DATETIMEOFFSET
-      case PREC_SCALE: // e.g. Legacy DECIMAL/NUMERIC
-      case BYTELEN:    // INTN, BITN, DECIMALN, MONEYN, etc.
+      case SCALE_LEN:
+      case PREC_SCALE:
+      case BYTELEN:
         int len = payload.get() & 0xFF;
         if (len > 0) data = readBytes(payload, len);
         break;
 
-      case USHORTLEN: // NVARCHAR, VARBINARY, BIGCHAR, BIGBINARY
-        // FIX: Check if this is a MAX type (0xFFFF).
-        // If Metadata Length is 65535, the Row Data uses PLP encoding.
+      case USHORTLEN:
         if (maxLength == 65535) {
-          data = readPlp(payload);
+          data = readPlp(payload, transport, decoder, charset);
         } else {
-          // Standard short-length string/binary
           int varLen = Short.toUnsignedInt(payload.getShort());
           if (varLen != 0xFFFF) data = readBytes(payload, varLen);
         }
         break;
 
-      case PLP: // XML is always PLP
-        data = readPlp(payload);
+      case PLP:
+        data = readPlp(payload, transport, decoder, charset);
         break;
 
       case LONGLEN:
@@ -59,8 +56,10 @@ public class DataParser {
           payload.get(timestamp);
           int dataLen = payload.getInt();
           if (dataLen > 0) {
-            data = new byte[dataLen];
-            payload.get(data);
+            // FIX: Read into a typed byte array first, then assign to the Object (fixes Error 3)
+            byte[] tempBytes = new byte[dataLen];
+            payload.get(tempBytes);
+            data = tempBytes;
           } else {
             data = new byte[0];
           }
@@ -69,37 +68,27 @@ public class DataParser {
     }
     return data;
   }
+
   private static byte[] readBytes(ByteBuffer buf, int length) {
     byte[] b = new byte[length];
     buf.get(b);
     return b;
   }
 
-  private static byte[] readPlp(ByteBuffer payload) {
-    // [MS-TDS] 2.2.5.4.2 Partial Length Prefixed (PLP) DataTypes
-    long totalLength = payload.getLong(); // 8 bytes: Total length of data (or -1 if unknown)
-
-    // Note: If totalLength is -1 (0xFFFFFFFFFFFFFFFF), strictly speaking we should still read chunks.
-    // But for a simple NULL check in some implementations, 0xFF.. might be used.
-    // Usually NULL is represented by the PLP header indicating a null value before this function is called,
-    // but in TDS PLP, a null instance is often just a 0xFFFFFFFFFFFFFFFF total length.
+  private static Object readPlp(ByteBuffer payload, TdsTransport transport, TdsStreamHandler decoder, java.nio.charset.Charset charset) {
+    long totalLength = payload.getLong();
     if (totalLength == -1L && payload.remaining() == 0) return null;
-
-    // In many cases, null PLP is handled by the caller or specific header bits,
-    // but 0xFFFFFFFFFFFFFFFF is the "PLP Null" marker.
     if (totalLength == 0xFFFFFFFFFFFFFFFFL) return null;
 
-    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    transport.suspendNetworkRead();
 
-    // Read Chunks
-    while (true) {
-      int chunkLen = payload.getInt(); // 4 bytes: Length of current chunk
-      if (chunkLen == 0) break;        // PLP_TERMINATOR
-
-      byte[] chunk = new byte[chunkLen];
-      payload.get(chunk);
-      buffer.writeBytes(chunk);
+    ByteBuffer leftover = null;
+    if (payload.hasRemaining()) {
+      leftover = ByteBuffer.allocate(payload.remaining()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+      leftover.put(payload);
+      leftover.flip();
     }
-    return buffer.toByteArray();
+    // Pass charset to the proxy
+    return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
   }
 }
