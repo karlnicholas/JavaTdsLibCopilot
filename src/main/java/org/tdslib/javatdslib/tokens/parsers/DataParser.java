@@ -34,7 +34,8 @@ public class DataParser {
 
       case USHORTLEN:
         if (maxLength == 65535) {
-          data = readPlp(payload, transport, decoder, charset);
+          // Pass the type parameter down
+          data = readPlp(payload, transport, decoder, charset, type);
         } else {
           int varLen = Short.toUnsignedInt(payload.getShort());
           if (varLen != 0xFFFF) data = readBytes(payload, varLen);
@@ -42,7 +43,8 @@ public class DataParser {
         break;
 
       case PLP:
-        data = readPlp(payload, transport, decoder, charset);
+        // Pass the type parameter down
+        data = readPlp(payload, transport, decoder, charset, type);
         break;
 
       case LONGLEN:
@@ -75,7 +77,8 @@ public class DataParser {
     return b;
   }
 
-  private static Object readPlp(ByteBuffer payload, TdsTransport transport, TdsStreamHandler decoder, java.nio.charset.Charset charset) {
+  // Update signature to include TdsType
+  private static Object readPlp(ByteBuffer payload, TdsTransport transport, TdsStreamHandler decoder, java.nio.charset.Charset charset, TdsType type) {
     long totalLength = payload.getLong();
     if (totalLength == -1L && payload.remaining() == 0) return null;
     if (totalLength == 0xFFFFFFFFFFFFFFFFL) return null;
@@ -88,7 +91,12 @@ public class DataParser {
       leftover.put(payload);
       leftover.flip();
     }
-    // Pass charset to the proxy
-    return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
+
+    // Route to Blob for binary types, Clob for character types
+    if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
+      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, leftover);
+    } else {
+      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
+    }
   }
 }
