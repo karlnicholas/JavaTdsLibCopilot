@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.api;
+package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.R2dbcType;
 import org.tdslib.javatdslib.protocol.TdsType;

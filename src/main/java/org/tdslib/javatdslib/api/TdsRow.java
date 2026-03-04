@@ -1,13 +1,18 @@
 package org.tdslib.javatdslib.api;
 
+import io.r2dbc.spi.Blob;
+import io.r2dbc.spi.Clob;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import java.nio.charset.Charset;
 import java.util.List;
 import org.tdslib.javatdslib.codec.DecoderRegistry;
+import org.tdslib.javatdslib.internal.TdsRowMetadata;
 import org.tdslib.javatdslib.protocol.CollationUtils;
 import org.tdslib.javatdslib.protocol.TdsType;
+import org.tdslib.javatdslib.streaming.TdsBlob;
+import org.tdslib.javatdslib.streaming.TdsClob;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 
 /**
@@ -54,13 +59,13 @@ public class TdsRow implements Row {
       return null;
     }
 
-// --- MVC INTERCEPT: Return the Clob proxy directly ---
-    if (rawData instanceof org.tdslib.javatdslib.streaming.TdsClob && type.isAssignableFrom(io.r2dbc.spi.Clob.class)) {
+    // --- MVC INTERCEPT: Return the Clob proxy directly ---
+    if (rawData instanceof TdsClob && type.isAssignableFrom(Clob.class)) {
       return type.cast(rawData);
     }
 
     // --- MVC INTERCEPT: Return the Blob proxy directly ---
-    if (rawData instanceof org.tdslib.javatdslib.streaming.TdsBlob && type.isAssignableFrom(io.r2dbc.spi.Blob.class)) {
+    if (rawData instanceof TdsBlob && type.isAssignableFrom(Blob.class)) {
       return type.cast(rawData);
     }
 

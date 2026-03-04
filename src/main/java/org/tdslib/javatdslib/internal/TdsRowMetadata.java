@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.api;
+package org.tdslib.javatdslib.internal;
 
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.RowMetadata;
@@ -7,10 +7,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-class TdsRowMetadata implements RowMetadata {
+public class TdsRowMetadata implements RowMetadata {
   private final List<ColumnMetadata> metadata;
 
-  TdsRowMetadata(List<ColumnMetadata> metadata) {
+  public TdsRowMetadata(List<ColumnMetadata> metadata) {
     this.metadata = metadata;
   }
 

@@ -1,8 +1,9 @@
-package org.tdslib.javatdslib.api;
+package org.tdslib.javatdslib.internal;
 
 import io.r2dbc.spi.OutParameterMetadata;
 import io.r2dbc.spi.Type;
 import org.tdslib.javatdslib.protocol.TdsType;
+import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 
 /**

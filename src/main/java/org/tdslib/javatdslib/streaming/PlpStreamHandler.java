@@ -6,7 +6,6 @@ import org.tdslib.javatdslib.transport.TdsTransport;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 
 public class PlpStreamHandler implements TdsStreamHandler {
 
