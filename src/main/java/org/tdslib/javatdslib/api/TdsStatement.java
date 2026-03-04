@@ -142,16 +142,13 @@ public class TdsStatement implements Statement {
             message = createRpcMessage(query, executions);
           }
 
-          TokenDispatcher dispatcher = new TokenDispatcher(TokenParserRegistry.DEFAULT);
-          ReactiveResultVisitor segmentVisitor =
-              new ReactiveResultVisitor(transport, context, message, dispatcher);
+          ReactiveResultVisitor segmentVisitor = new ReactiveResultVisitor(transport, context, message); // Updated
 
-          CompositeTokenVisitor pipeline =
-              new CompositeTokenVisitor(
-                  new EnvChangeVisitor(context),
-                  new MessageVisitor(
-                      segmentVisitor::emitStreamError), // Emits TdsServerErrorException
-                  segmentVisitor);
+          CompositeTokenVisitor pipeline = new CompositeTokenVisitor(
+              new EnvChangeVisitor(context),
+              new MessageVisitor(segmentVisitor::emitStreamError),
+              segmentVisitor
+          );
 
           segmentVisitor.setVisitorChain(pipeline);
 

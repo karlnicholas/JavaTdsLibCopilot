@@ -10,8 +10,10 @@ import org.tdslib.javatdslib.api.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.reactive.AbstractQueueDrainPublisher;
+import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenDispatcher;
+import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
@@ -35,7 +37,6 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   private final TdsTransport transport;
   private final ConnectionContext context;
   private final TdsMessage queryTdsMessage;
-  private final TokenDispatcher tokenDispatcher;
 
   private TokenVisitor visitorChain;
   private final AtomicBoolean isQuerySent = new AtomicBoolean(false);
@@ -51,17 +52,14 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
    * @param transport       The TDS transport layer for sending and receiving messages.
    * @param context         The connection context, containing session-specific information.
    * @param queryTdsMessage The initial TDS query message to be sent.
-   * @param tokenDispatcher The dispatcher responsible for parsing TDS tokens from messages.
    */
   public ReactiveResultVisitor(
       TdsTransport transport,
       ConnectionContext context,
-      TdsMessage queryTdsMessage,
-      TokenDispatcher tokenDispatcher) {
+      TdsMessage queryTdsMessage) {
     this.transport = transport;
     this.context = context;
     this.queryTdsMessage = queryTdsMessage;
-    this.tokenDispatcher = tokenDispatcher;
   }
 
   /**
@@ -87,7 +85,20 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   protected void onRequest(long n) {
     if (isQuerySent.compareAndSet(false, true)) {
       try {
-        transport.setClientHandlers(this::messageHandler, this::errorHandler);
+        // 1. Determine the top of the visitor chain
+        TokenVisitor pipeline = visitorChain != null ? visitorChain : this;
+
+        // 2. Create the new Stateful Decoder
+        StatefulTokenDecoder decoder = new StatefulTokenDecoder(
+            TokenParserRegistry.DEFAULT,
+            context,
+            pipeline
+        );
+
+        // 3. Wire the decoder to the Transport using the new Stream methods
+        transport.setStreamHandlers(decoder, this::errorHandler);
+
+        // 4. Send the query
         transport.sendQueryMessageAsync(queryTdsMessage);
       } catch (Exception e) {
         error(e);
@@ -98,14 +109,6 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   @Override
   protected void onCancel() {
     transport.cancelCurrent();
-  }
-
-  private void messageHandler(TdsMessage tdsMessage) {
-    if (isCancelled.get()) {
-      return;
-    }
-    TokenVisitor visitor = visitorChain != null ? visitorChain : this;
-    tokenDispatcher.processMessage(tdsMessage, context, visitor);
   }
 
   private void errorHandler(Throwable t) {

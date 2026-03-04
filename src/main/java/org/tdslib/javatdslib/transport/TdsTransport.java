@@ -27,9 +27,8 @@ public class TdsTransport implements AutoCloseable {
   private final ConnectionContext context;
   private final TlsHandshake tlsHandshake;
   private final PacketEncoder packetEncoder;
-  private final MessageAssembler messageAssembler;
 
-  private Consumer<TdsMessage> currentMessageHandler;
+  private TdsStreamHandler currentStreamHandler;
   private Consumer<Throwable> currentErrorHandler;
 
   /**
@@ -38,16 +37,14 @@ public class TdsTransport implements AutoCloseable {
    */
   public TdsTransport(String host, int port, ConnectionContext context,
                       NetworkConnection networkConnection,
-                      PacketEncoder packetEncoder,
-                      MessageAssembler messageAssembler) {
+                      PacketEncoder packetEncoder) { // FIX: Removed TdsStreamHandler from constructor
     this.host = host;
     this.port = port;
     this.context = context;
     this.networkConnection = networkConnection;
 
     this.tlsHandshake = new TlsHandshake();
-    this.packetEncoder = packetEncoder; // Injected!
-    this.messageAssembler = messageAssembler;
+    this.packetEncoder = packetEncoder;
   }
 
   /**
@@ -56,14 +53,12 @@ public class TdsTransport implements AutoCloseable {
   public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
     this(host, port, context,
         new NioSocketConnection(host, port, 60_000),
-        new QueryPacketBuilder(),
-        new PacketAssembler()); // Default concrete implementations
+        new QueryPacketBuilder()); // FIX: Removed the hardcoded null
   }
 
   // --- Handshake & TLS Methods ---
 
   public void tlsHandshake(javax.net.ssl.SSLContext sslContext) throws IOException {
-    // Removed networkConnection.getSocketChannel()
     tlsHandshake.tlsHandshake(host, port, networkConnection, sslContext);
   }
 
@@ -78,7 +73,6 @@ public class TdsTransport implements AutoCloseable {
   // --- Synchronous Methods (Login Phase) ---
 
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
-    // 1. Delegated to the injected interface
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
         tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );
@@ -95,7 +89,6 @@ public class TdsTransport implements AutoCloseable {
 
     for (ByteBuffer buffer : packetBuffers) {
       if (isTlsActive()) {
-        // Removed networkConnection.getSocketChannel()
         tlsHandshake.writeEncrypted(buffer, networkConnection);
       } else {
         networkConnection.writeDirect(buffer);
@@ -107,13 +100,11 @@ public class TdsTransport implements AutoCloseable {
     List<TdsMessage> messages = new ArrayList<>();
     TdsMessage msg;
     do {
-      // 1. Replaced magic number 8 with TDS_HEADER_LENGTH
       ByteBuffer header = ByteBuffer.allocate(TDS_HEADER_LENGTH).order(ByteOrder.BIG_ENDIAN);
       networkConnection.readFullySync(header);
       header.flip();
 
       int length = Short.toUnsignedInt(header.getShort(2));
-      // 2. Replaced magic number 8 with TDS_HEADER_LENGTH
       ByteBuffer payload = ByteBuffer.allocate(length - TDS_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN);
       networkConnection.readFullySync(payload);
       payload.flip();
@@ -138,32 +129,52 @@ public class TdsTransport implements AutoCloseable {
     int length = Short.toUnsignedInt(packet.getShort());
     short spid = packet.getShort();
     byte packetId = packet.get();
-    packet.position(TDS_HEADER_LENGTH); // 3. Replaced magic number 8
+    packet.position(TDS_HEADER_LENGTH);
     ByteBuffer payload = packet.slice();
     return new TdsMessage(type, status, length, spid, packetId, payload, System.nanoTime(), null);
   }
 
   // --- Asynchronous Methods (Query Phase) ---
 
-  public void setClientHandlers(Consumer<TdsMessage> messageHandler, Consumer<Throwable> errorHandler) {
-    this.currentMessageHandler = messageHandler;
+  public void setStreamHandlers(TdsStreamHandler streamHandler, Consumer<Throwable> errorHandler) {
+    this.currentStreamHandler = streamHandler;
     this.currentErrorHandler = errorHandler;
   }
 
   public void enterAsyncMode() throws IOException {
     networkConnection.enterAsyncMode(context.getCurrentPacketSize());
 
-    // Wire the network callback directly into our TDS Assembler
+    // FIX: Create a dynamic router lambda.
+    // This allows the TdsChunkDecoder to always route bytes to the active query's decoder.
+    TdsStreamHandler dynamicRouter = (payload, isEom) -> {
+      if (currentStreamHandler != null) {
+        currentStreamHandler.onPayloadAvailable(payload, isEom);
+      } else {
+        logger.warn("Received TDS payload chunk but no active stream handler is registered.");
+      }
+    };
+
+    // Instantiate the decoder with the dynamic router
+    TdsChunkDecoder decoder = new TdsChunkDecoder(dynamicRouter);
+
     networkConnection.setHandlers(
-        buffer -> messageAssembler.processNetworkBuffer(buffer, currentMessageHandler),
+        buffer -> decoder.decode(buffer),
         error -> {
           if (currentErrorHandler != null) currentErrorHandler.accept(error);
         }
     );
   }
 
+  // Expose the backpressure controls to the higher-level Stateful Parser
+  public void suspendNetworkRead() {
+    networkConnection.suspendRead();
+  }
+
+  public void resumeNetworkRead() {
+    networkConnection.resumeRead();
+  }
+
   public void sendQueryMessageAsync(TdsMessage tdsMessage) {
-    // 3. Delegated to the injected interface
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
         tdsMessage, context.getSpid(), context.getCurrentPacketSize()
     );

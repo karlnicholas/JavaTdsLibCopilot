@@ -129,12 +129,17 @@ public class NioSocketConnection implements NetworkConnection {
     }
     if (read == 0) return;
 
+    logger.trace("NIO: Read {} bytes from socket", read); // ADD THIS
+
     readBuffer.flip();
     try {
       if (onDataAvailable != null) {
+        // The downstream consumer (TdsChunkDecoder) will advance the buffer's position
+        // exactly by the number of bytes it consumes.
         onDataAvailable.accept(readBuffer);
       }
     } finally {
+      // Any unconsumed bytes (e.g., partial headers or suspended streams) are preserved
       readBuffer.compact();
     }
   }
@@ -159,6 +164,26 @@ public class NioSocketConnection implements NetworkConnection {
       close();
     } catch (Exception e) {
       logger.warn("Failed to clean up", e);
+    }
+  }
+
+  @Override
+  public void suspendRead() {
+    if (selector == null) return;
+    SelectionKey key = socketChannel.keyFor(selector);
+    if (key != null && key.isValid()) {
+      key.interestOpsAnd(~SelectionKey.OP_READ);
+      selector.wakeup(); // Force selector to recognize the change immediately
+    }
+  }
+
+  @Override
+  public void resumeRead() {
+    if (selector == null) return;
+    SelectionKey key = socketChannel.keyFor(selector);
+    if (key != null && key.isValid()) {
+      key.interestOpsOr(SelectionKey.OP_READ);
+      selector.wakeup();
     }
   }
 

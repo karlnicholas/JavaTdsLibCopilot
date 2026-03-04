@@ -10,26 +10,22 @@ import java.util.function.Consumer;
  */
 public interface NetworkConnection extends AutoCloseable {
 
-  /** Synchronously reads data until the buffer is full. */
   void readFullySync(ByteBuffer buffer) throws IOException;
 
-  /** Synchronously writes the entire buffer to the network. */
   void writeDirect(ByteBuffer buffer) throws IOException;
 
-  /** Transitions the connection to non-blocking mode and starts the event loop. */
   void enterAsyncMode(int bufferSize) throws IOException;
 
-  /** Queues a buffer for asynchronous writing. */
   void writeAsync(ByteBuffer buffer);
 
-  /** * Sets the callbacks for asynchronous events.
-   * @param onDataAvailable Called when new bytes are read into the buffer.
-   * @param onError Called when a network or event loop error occurs.
-   */
   void setHandlers(Consumer<ByteBuffer> onDataAvailable, Consumer<Throwable> onError);
 
-  /** * Overrides AutoCloseable to restrict the thrown exception to IOException
-   */
+  /** Suspends reading from the network socket (TCP Backpressure). */
+  void suspendRead();
+
+  /** Resumes reading from the network socket. */
+  void resumeRead();
+
   @Override
   void close() throws IOException;
 }
