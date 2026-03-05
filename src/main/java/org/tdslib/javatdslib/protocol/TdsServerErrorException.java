@@ -1,8 +1,8 @@
 package org.tdslib.javatdslib.protocol;
 
 /**
- * A generic, internal exception representing an ERROR token received from SQL Server. Decoupled from
- * any specific database API (like JDBC or R2DBC).
+ * A generic, internal exception representing an ERROR token received from SQL Server. Decoupled
+ * from any specific database API (like JDBC or R2DBC).
  */
 public class TdsServerErrorException extends RuntimeException {
   private final int errorNumber;

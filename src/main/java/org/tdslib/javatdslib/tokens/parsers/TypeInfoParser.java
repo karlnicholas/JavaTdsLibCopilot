@@ -1,15 +1,18 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 
-import java.nio.ByteBuffer;
-
-/**
- * Shared parser for the TYPE_INFO stream structure.
- */
+/** Shared parser for the TYPE_INFO stream structure. */
 public class TypeInfoParser {
 
+  /**
+   * Parses the TYPE_INFO structure from the payload.
+   *
+   * @param payload The buffer containing the TYPE_INFO data.
+   * @return The parsed TypeInfo object.
+   */
   public static TypeInfo parse(ByteBuffer payload) {
     // 1. Read Data Type
     int dataTypeByte = payload.get() & 0xFF;
@@ -66,13 +69,17 @@ public class TypeInfoParser {
       case PLP:
         byte schemaPresent = payload.get();
         if (schemaPresent != 0) {
-          throw new UnsupportedOperationException("XML with Schema validation is not yet supported");
+          throw new UnsupportedOperationException(
+              "XML with Schema validation is not yet supported");
         }
         break;
 
       case SCALE_LEN:
         scale = payload.get();
         break;
+
+      default:
+        throw new IllegalArgumentException("Unsupported length strategy: " + tdsType.strategy);
     }
 
     return new TypeInfo(tdsType, maxLength, precision, scale, collation);
@@ -80,12 +87,12 @@ public class TypeInfoParser {
 
   // Replace this helper method at the bottom of the class
   private static boolean isTextType(TdsType type) {
-    return type == TdsType.NVARCHAR ||
-        type == TdsType.BIGVARCHR ||
-        type == TdsType.VARCHAR ||
-        type == TdsType.NCHAR ||
-        type == TdsType.BIGCHAR ||
-        type == TdsType.CHAR;
+    return type == TdsType.NVARCHAR
+        || type == TdsType.BIGVARCHR
+        || type == TdsType.VARCHAR
+        || type == TdsType.NCHAR
+        || type == TdsType.BIGCHAR
+        || type == TdsType.CHAR;
   }
 
   private static void readTableNames(ByteBuffer payload) {

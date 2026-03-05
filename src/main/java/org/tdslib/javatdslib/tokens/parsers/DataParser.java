@@ -1,24 +1,43 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Parser for reading data values from a TDS stream based on the data type. This class handles the
+ * extraction of raw bytes or streaming objects (BLOB/CLOB) from the payload.
+ */
 public class DataParser {
 
-  // Add Charset to the signature
-  public static Object getDataBytes(ByteBuffer payload, TdsType type, int maxLength,
-                                    TdsTransport transport, TdsStreamHandler decoder,
-                                    java.nio.charset.Charset charset) {
+  /**
+   * Reads data bytes from the payload based on the TDS type and length strategy.
+   *
+   * @param payload The buffer containing the data.
+   * @param type The TDS data type.
+   * @param maxLength The maximum length of the data.
+   * @param transport The transport layer for reading streaming data.
+   * @param decoder The stream handler for processing streaming data.
+   * @param charset The charset to use for character data.
+   * @return The read data as an Object (byte[] or TdsBlob/TdsClob).
+   */
+  public static Object getDataBytes(
+      ByteBuffer payload,
+      TdsType type,
+      int maxLength,
+      TdsTransport transport,
+      TdsStreamHandler decoder,
+      java.nio.charset.Charset charset) {
     Object data = null;
 
     switch (type.strategy) {
       case FIXED:
         if (type == TdsType.DATE) {
           int len = payload.get() & 0xFF;
-          if (len > 0) data = readBytes(payload, len);
+          if (len > 0) {
+            data = readBytes(payload, len);
+          }
         } else {
           data = readBytes(payload, type.fixedSize);
         }
@@ -28,7 +47,9 @@ public class DataParser {
       case PREC_SCALE:
       case BYTELEN:
         int len = payload.get() & 0xFF;
-        if (len > 0) data = readBytes(payload, len);
+        if (len > 0) {
+          data = readBytes(payload, len);
+        }
         break;
 
       case USHORTLEN:
@@ -37,7 +58,9 @@ public class DataParser {
           data = readPlp(payload, transport, decoder, charset, type);
         } else {
           int varLen = Short.toUnsignedInt(payload.getShort());
-          if (varLen != 0xFFFF) data = readBytes(payload, varLen);
+          if (varLen != 0xFFFF) {
+            data = readBytes(payload, varLen);
+          }
         }
         break;
 
@@ -66,6 +89,9 @@ public class DataParser {
           }
         }
         break;
+
+      default:
+        throw new IllegalArgumentException("Unsupported length strategy: " + type.strategy);
     }
     return data;
   }
@@ -77,10 +103,19 @@ public class DataParser {
   }
 
   // Update signature to include TdsType
-  private static Object readPlp(ByteBuffer payload, TdsTransport transport, TdsStreamHandler decoder, java.nio.charset.Charset charset, TdsType type) {
+  private static Object readPlp(
+      ByteBuffer payload,
+      TdsTransport transport,
+      TdsStreamHandler decoder,
+      java.nio.charset.Charset charset,
+      TdsType type) {
     long totalLength = payload.getLong();
-    if (totalLength == -1L && payload.remaining() == 0) return null;
-    if (totalLength == 0xFFFFFFFFFFFFFFFFL) return null;
+    if (totalLength == -1L && payload.remaining() == 0) {
+      return null;
+    }
+    if (totalLength == 0xFFFFFFFFFFFFFFFFL) {
+      return null;
+    }
 
     transport.suspendNetworkRead();
 

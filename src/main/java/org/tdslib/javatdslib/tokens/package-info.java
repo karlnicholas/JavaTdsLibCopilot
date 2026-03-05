@@ -1,7 +1,7 @@
 /**
  * The event-driven TDS token parsing system.
- * <p>
- * This package implements a stateless parsing architecture where
+ *
+ * <p>This package implements a stateless parsing architecture where
  * {@link org.tdslib.javatdslib.tokens.TokenDispatcher} emits tokens to
  * {@link org.tdslib.javatdslib.tokens.TokenVisitor} implementations.
  * <ul>

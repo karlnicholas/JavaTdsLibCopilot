@@ -1,8 +1,6 @@
 package org.tdslib.javatdslib.tokens.models;
 
-/**
- * Wraps the raw status bits of a DONE token and provides safe accessors.
- */
+/** Wraps the raw status bits of a DONE token and provides safe accessors. */
 public class DoneStatus {
 
   private final int value;
@@ -59,6 +57,11 @@ public class DoneStatus {
     return "DoneStatus(raw=" + Integer.toHexString(value) + ")";
   }
 
+  /**
+   * Indicates whether the DONE token includes a valid row count.
+   *
+   * @return true if the COUNT bit is set
+   */
   public boolean hasCount() {
     return (value & BIT_COUNT) > 0;
   }

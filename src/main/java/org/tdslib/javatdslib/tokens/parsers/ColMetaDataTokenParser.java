@@ -1,5 +1,9 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.tokens.Token;
@@ -9,19 +13,20 @@ import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Parser for the COLMETADATA token (0x81). This token describes the result set metadata, including
+ * column names, types, and lengths.
+ */
 public class ColMetaDataTokenParser implements TokenParser {
   private static Logger log = LoggerFactory.getLogger(ColMetaDataTokenParser.class);
 
   @Override
-  public Token parse(final ByteBuffer payload, final byte tokenType,
-                     final ConnectionContext context) {
+  public Token parse(
+      final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
     if (tokenType != (byte) 0x81) {
-      throw new IllegalArgumentException("Expected COL_METADATA token (0x81), but got 0x" + Integer.toHexString(tokenType & 0xFF));
+      throw new IllegalArgumentException(
+          "Expected COL_METADATA token (0x81), but got 0x"
+              + Integer.toHexString(tokenType & 0xFF));
     }
 
     final short columnCount = payload.getShort();

@@ -10,8 +10,8 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 /**
- * A reusable Reactive Streams Publisher that manages backpressure using an unbounded concurrent queue
- * and a standard drain loop.
+ * A reusable Reactive Streams Publisher that manages backpressure using an unbounded concurrent
+ * queue and a standard drain loop.
  */
 public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Subscription {
 

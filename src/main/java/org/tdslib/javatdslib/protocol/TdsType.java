@@ -4,8 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Enumeration of TDS data types. This enum maps TDS type identifiers to their corresponding
- * length strategies and fixed sizes, and provides utility methods for type inference.
+ * Enumeration of TDS data types. This enum maps TDS type identifiers to their corresponding length
+ * strategies and fixed sizes, and provides utility methods for type inference.
  */
 public enum TdsType {
 
@@ -71,6 +71,13 @@ public enum TdsType {
   public final LengthStrategy strategy;
   public final int fixedSize;
 
+  /**
+   * Constructs a new TdsType.
+   *
+   * @param byteVal The byte value representing the TDS type.
+   * @param strategy The length strategy for the type.
+   * @param fixedSize The fixed size of the type, or -1 if variable length.
+   */
   TdsType(int byteVal, LengthStrategy strategy, int fixedSize) {
     this.byteVal = byteVal;
     this.strategy = strategy;
@@ -89,9 +96,7 @@ public enum TdsType {
     return BYTE_MAP.getOrDefault(b & 0xFF, null);
   }
 
-  /**
-   * Strategy for determining the length of a TDS type.
-   */
+  /** Strategy for determining the length of a TDS type. */
   public enum LengthStrategy {
     FIXED,
     BYTELEN,

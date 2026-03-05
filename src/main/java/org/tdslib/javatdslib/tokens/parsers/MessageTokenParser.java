@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import org.tdslib.javatdslib.protocol.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
@@ -8,33 +10,29 @@ import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-
 /**
  * A unified parser for TDS "Message" tokens.
- * <p>
- * Handles both:
+ *
+ * <p>Handles both:
  * <ul>
  * <li>{@link TokenType#ERROR} (0xAA)</li>
  * <li>{@link TokenType#INFO} (0xAB)</li>
  * </ul>
- * <p>
- * These tokens share an identical binary structure but differ in semantic meaning
+ *
+ * <p>These tokens share an identical binary structure but differ in semantic meaning
  * (Errors have severity &gt; 10, Info messages have severity &le; 10).
  */
 public class MessageTokenParser implements TokenParser {
 
   @Override
-  public Token parse(final ByteBuffer payload,
-                     final byte tokenType,
-                     final ConnectionContext context) {
+  public Token parse(
+      final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
 
     // 1. Validate that this parser is handling the correct token types
     if (tokenType != TokenType.ERROR.getValue() && tokenType != TokenType.INFO.getValue()) {
       throw new IllegalArgumentException(
-              "MessageTokenParser expects ERROR (0xAA) or INFO (0xAB), but got: 0x"
-                      + String.format("%02X", tokenType));
+          "MessageTokenParser expects ERROR (0xAA) or INFO (0xAB), but got: 0x"
+              + String.format("%02X", tokenType));
     }
 
     final int start = payload.position();
@@ -86,24 +84,21 @@ public class MessageTokenParser implements TokenParser {
       final int actualConsumed = consumed - 2;
       // In production, you might log this as a warning rather than printing to stderr
       System.err.printf(
-              "WARN: Length mismatch in MessageToken - claimed %d, consumed %d%n",
-              claimed, actualConsumed
-      );
+          "WARN: Length mismatch in MessageToken - claimed %d, consumed %d%n",
+          claimed, actualConsumed);
     }
 
     // 7. Return specific Token implementation
     if (tokenType == TokenType.INFO.getValue()) {
       return new InfoToken(
-              tokenType, number, state, severity, message, serverName, procName, lineNumber);
+          tokenType, number, state, severity, message, serverName, procName, lineNumber);
     } else {
       return new ErrorToken(
-              tokenType, number, state, severity, message, serverName, procName, lineNumber);
+          tokenType, number, state, severity, message, serverName, procName, lineNumber);
     }
   }
 
-  /**
-   * Reads a US_VARCHAR (Unsigned Short Length + Unicode Characters).
-   */
+  /** Reads a US_VARCHAR (Unsigned Short Length + Unicode Characters). */
   private String readUsVarChar(final ByteBuffer buf) {
     // Length is number of CHARACTERS (not bytes)
     final int charCount = Short.toUnsignedInt(buf.getShort());
@@ -118,9 +113,7 @@ public class MessageTokenParser implements TokenParser {
     return new String(bytes, StandardCharsets.UTF_16LE);
   }
 
-  /**
-   * Reads a B_VARCHAR (Byte Length + Unicode Characters).
-   */
+  /** Reads a B_VARCHAR (Byte Length + Unicode Characters). */
   private String readBvarChar(final ByteBuffer buf) {
     // Length is number of CHARACTERS (not bytes)
     final int charCount = Byte.toUnsignedInt(buf.get());
