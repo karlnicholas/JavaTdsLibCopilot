@@ -19,6 +19,7 @@ import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsParameter;
+import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 import org.tdslib.javatdslib.reactive.BatchResultSplitter;
@@ -171,8 +172,7 @@ public class TdsStatement implements Statement {
                 @Override
                 public void onError(Throwable t) {
                   // Translate internal TDS errors to R2DBC SPI errors at the boundary
-                  if (t
-                      instanceof org.tdslib.javatdslib.protocol.TdsServerErrorException tdsError) {
+                  if (t instanceof TdsServerErrorException tdsError) {
                     subscriber.onError(R2dbcErrorTranslator.translateException(tdsError));
                   } else {
                     subscriber.onError(t); // Pass through non-database errors (like IOExceptions)
