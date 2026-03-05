@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.handshake;
 
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.PreLoginResponse;
@@ -7,11 +8,7 @@ import org.tdslib.javatdslib.tokens.visitors.LoginVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import javax.net.ssl.SSLContext;
-
-/**
- * Orchestrates the TDS handshake process, including PreLogin, TLS negotiation, and Login7.
- */
+/** Orchestrates the TDS handshake process, including PreLogin, TLS negotiation, and Login7. */
 public class HandshakeOrchestrator {
   private static final Logger logger = LoggerFactory.getLogger(HandshakeOrchestrator.class);
 
@@ -21,18 +18,24 @@ public class HandshakeOrchestrator {
   /**
    * Performs the full TDS handshake.
    *
-   * @param transport  the transport layer
-   * @param context    the connection context
+   * @param transport the transport layer
+   * @param context the connection context
    * @param sslContext the SSL context for encryption
-   * @param hostname   the server hostname
-   * @param username   the login username
-   * @param password   the login password
-   * @param database   the initial database
+   * @param hostname the server hostname
+   * @param username the login username
+   * @param password the login password
+   * @param database the initial database
    * @throws Exception if the handshake fails
    */
-  public void performHandshake(TdsTransport transport, ConnectionContext context,
-                               SSLContext sslContext, String hostname, String username,
-                               String password, String database) throws Exception {
+  public void performHandshake(
+      TdsTransport transport,
+      ConnectionContext context,
+      SSLContext sslContext,
+      String hostname,
+      String username,
+      String password,
+      String database)
+      throws Exception {
 
     // 1. Pre-Login
     PreLoginResponse preLoginResponse = preLoginPhase.execute(transport);
@@ -45,11 +48,14 @@ public class HandshakeOrchestrator {
     }
 
     // 3. Login7 Auth
-    LoginVisitor loginVisitor = login7Phase.execute(transport, context, hostname, username,
-        password, database);
+    LoginVisitor loginVisitor =
+        login7Phase.execute(transport, context, hostname, username, password, database);
 
     if (!loginVisitor.isSuccess()) {
-      throw new SecurityException(loginVisitor.getErrorMessage() != null ? loginVisitor.getErrorMessage() : "Login Failed");
+      throw new SecurityException(
+          loginVisitor.getErrorMessage() != null
+              ? loginVisitor.getErrorMessage()
+              : "Login Failed");
     }
     transport.tlsComplete();
   }

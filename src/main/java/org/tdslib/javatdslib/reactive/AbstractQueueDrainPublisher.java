@@ -1,18 +1,17 @@
 package org.tdslib.javatdslib.reactive;
 
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 
 /**
- * A reusable Reactive Streams Publisher that manages backpressure
- * using an unbounded concurrent queue and a standard drain loop.
+ * A reusable Reactive Streams Publisher that manages backpressure using an unbounded concurrent queue
+ * and a standard drain loop.
  */
 public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Subscription {
 
@@ -39,11 +38,14 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
     }
 
     // Add demand safely avoiding overflow
-    long current, next;
+    long current;
+    long next;
     do {
       current = demand.get();
       next = current + n;
-      if (next < 0) next = Long.MAX_VALUE;
+      if (next < 0) {
+        next = Long.MAX_VALUE;
+      }
     } while (!demand.compareAndSet(current, next));
 
     // Optional hook for subclasses to trigger work when demand arrives
@@ -60,27 +62,23 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
     }
   }
 
-  /**
-   * Called to push a new item into the queue and trigger a drain.
-   */
+  /** Called to push a new item into the queue and trigger a drain. */
   protected void emit(T item) {
-    if (isCancelled.get() || upstreamDone.get()) return;
+    if (isCancelled.get() || upstreamDone.get()) {
+      return;
+    }
     buffer.offer(item);
     drain();
   }
 
-  /**
-   * Called to signal that no more items will be emitted.
-   */
+  /** Called to signal that no more items will be emitted. */
   protected void complete() {
     if (upstreamDone.compareAndSet(false, true)) {
       drain();
     }
   }
 
-  /**
-   * Called to signal a terminal error.
-   */
+  /** Called to signal a terminal error. */
   protected void error(Throwable t) {
     if (upstreamDone.compareAndSet(false, true)) {
       this.terminalError = t;
@@ -89,20 +87,22 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
   }
 
   /**
-   * Subclasses can override this to initiate network requests
-   * on the first downstream demand.
+   * Subclasses can override this to initiate network requests on the first downstream demand.
    */
-  protected void onRequest(long n) { }
+  protected void onRequest(long n) {}
 
   /**
-   * Subclasses can override this to clean up network resources
-   * when the downstream cancels.
+   * Subclasses can override this to clean up network resources when the downstream cancels.
    */
-  protected void onCancel() { }
+  protected void onCancel() {}
 
   private void drain() {
-    if (subscriber == null) return;
-    if (wip.getAndIncrement() != 0) return;
+    if (subscriber == null) {
+      return;
+    }
+    if (wip.getAndIncrement() != 0) {
+      return;
+    }
 
     int missed = 1;
     do {
@@ -129,7 +129,9 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
           return;
         }
 
-        if (empty) break;
+        if (empty) {
+          break;
+        }
 
         subscriber.onNext(item);
         emitted++;

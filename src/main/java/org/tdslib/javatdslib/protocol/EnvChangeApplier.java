@@ -1,26 +1,26 @@
 package org.tdslib.javatdslib.protocol;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
-import org.tdslib.javatdslib.tokens.models.EnvChangeType;
-import org.tdslib.javatdslib.transport.ConnectionContext;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
+import org.tdslib.javatdslib.tokens.models.EnvChangeType;
+import org.tdslib.javatdslib.transport.ConnectionContext;
 
 /**
- * Handles applying ENVCHANGE tokens to the ConnectionContext.
- * Extracted from TdsTransport to satisfy SRP.
+ * Handles applying ENVCHANGE tokens to the ConnectionContext. Extracted from TdsTransport to
+ * satisfy SRP.
  */
 public class EnvChangeApplier {
   private static final Logger logger = LoggerFactory.getLogger(EnvChangeApplier.class);
 
   private static final Map<Integer, String> COMMON_SORTID_NAMES = new HashMap<>();
+
   static {
     COMMON_SORTID_NAMES.put(52, "SQL_Latin1_General_CP1_CI_AS (Sort Order 52)");
     COMMON_SORTID_NAMES.put(51, "SQL_Latin1_General_CP1_CS_AS");
@@ -29,9 +29,16 @@ public class EnvChangeApplier {
     COMMON_SORTID_NAMES.put(55, "SQL_Latin1_General_CP850_CS_AS");
   }
 
+  /**
+   * Applies the environment change specified by the token to the connection context.
+   *
+   * @param change The environment change token.
+   * @param context The connection context to update.
+   */
   public static void apply(EnvChangeToken change, ConnectionContext context) {
     EnvChangeType type = change.getChangeType();
-    Charset charset = context.isUnicodeEnabled() ? StandardCharsets.UTF_16LE : StandardCharsets.US_ASCII;
+    Charset charset =
+        context.isUnicodeEnabled() ? StandardCharsets.UTF_16LE : StandardCharsets.US_ASCII;
     ByteBuffer buf = ByteBuffer.wrap(change.getValueBytes());
 
     switch (type) {
@@ -85,7 +92,8 @@ public class EnvChangeApplier {
         context.setCollationBytes(newCollationData);
 
         if (newInfoLen >= 5) {
-          ByteBuffer collationBuf = ByteBuffer.wrap(newCollationData).order(ByteOrder.LITTLE_ENDIAN);
+          ByteBuffer collationBuf =
+              ByteBuffer.wrap(newCollationData).order(ByteOrder.LITTLE_ENDIAN);
           final int fullLcid = collationBuf.getInt();
           final int baseLcid = fullLcid & 0x000FFFFF;
 

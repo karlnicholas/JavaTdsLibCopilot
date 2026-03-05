@@ -1,8 +1,6 @@
 package org.tdslib.javatdslib.tokens.models;
 
-/**
- * Column metadata holder used by COLMETADATA token parser.
- */
+/** Column metadata holder used by COLMETADATA token parser. */
 public class ColumnMeta {
   private final int columnNumber;
   private final String name;
@@ -10,8 +8,21 @@ public class ColumnMeta {
   private final short flags;
   private final TypeInfo typeInfo; // Replaces individual fields
 
-  public ColumnMeta(final int columnNumber, final String name,
-                    final int userType, final short flags, final TypeInfo typeInfo) {
+  /**
+   * Constructs a new ColumnMeta.
+   *
+   * @param columnNumber The column number.
+   * @param name The column name.
+   * @param userType The user type.
+   * @param flags The column flags.
+   * @param typeInfo The type information for the column.
+   */
+  public ColumnMeta(
+      final int columnNumber,
+      final String name,
+      final int userType,
+      final short flags,
+      final TypeInfo typeInfo) {
     this.columnNumber = columnNumber;
     this.name = name;
     this.userType = userType;
@@ -19,22 +30,47 @@ public class ColumnMeta {
     this.typeInfo = typeInfo;
   }
 
-  public String getName() { return name; }
-  public int getUserType() { return userType; }
-  public short getFlags() { return flags; }
+  public String getName() {
+    return name;
+  }
+
+  public int getUserType() {
+    return userType;
+  }
+
+  public short getFlags() {
+    return flags;
+  }
 
   // Delegates
-  public byte getDataType() { return (byte) typeInfo.getTdsType().byteVal; }
-  public int getMaxLength() { return typeInfo.getMaxLength(); }
-  public byte getScale() { return typeInfo.getScale(); }
-  public byte getPrecision() { return typeInfo.getPrecision(); }
-  public byte[] getCollation() { return typeInfo.getCollation(); }
+  public byte getDataType() {
+    return (byte) typeInfo.getTdsType().byteVal;
+  }
 
-  public TypeInfo getTypeInfo() { return typeInfo; }
+  public int getMaxLength() {
+    return typeInfo.getMaxLength();
+  }
+
+  public byte getScale() {
+    return typeInfo.getScale();
+  }
+
+  public byte getPrecision() {
+    return typeInfo.getPrecision();
+  }
+
+  public byte[] getCollation() {
+    return typeInfo.getCollation();
+  }
+
+  public TypeInfo getTypeInfo() {
+    return typeInfo;
+  }
 
   @Override
   public String toString() {
-    return String.format("Column %d: %s (type=%s, maxLen=%d)",
+    return String.format(
+        "Column %d: %s (type=%s, maxLen=%d)",
         columnNumber, name, typeInfo.getTdsType(), typeInfo.getMaxLength());
   }
 }

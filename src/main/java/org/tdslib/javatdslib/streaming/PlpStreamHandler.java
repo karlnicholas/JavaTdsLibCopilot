@@ -1,12 +1,16 @@
 package org.tdslib.javatdslib.streaming;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import org.reactivestreams.Subscriber;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
+/**
+ * A stream handler for processing Partially Length-Prefixed (PLP) character data. This handler
+ * reads chunks of data from the TDS stream, decodes them using the specified charset, and emits
+ * them as {@link CharSequence}s to a subscriber.
+ */
 public class PlpStreamHandler implements TdsStreamHandler {
 
   private final TdsTransport transport;
@@ -19,7 +23,19 @@ public class PlpStreamHandler implements TdsStreamHandler {
 
   private final java.nio.charset.Charset charset;
 
-  public PlpStreamHandler(TdsTransport transport, TdsStreamHandler controlPlaneHandler, Subscriber<? super CharSequence> subscriber, java.nio.charset.Charset charset) {
+  /**
+   * Constructs a new PlpStreamHandler.
+   *
+   * @param transport The transport layer for reading data.
+   * @param controlPlaneHandler The handler to switch back to after processing the PLP data.
+   * @param subscriber The subscriber to receive the decoded character data.
+   * @param charset The charset used to decode the character data.
+   */
+  public PlpStreamHandler(
+      TdsTransport transport,
+      TdsStreamHandler controlPlaneHandler,
+      Subscriber<? super CharSequence> subscriber,
+      java.nio.charset.Charset charset) {
     this.transport = transport;
     this.controlPlaneHandler = controlPlaneHandler;
     this.subscriber = subscriber;
@@ -35,7 +51,9 @@ public class PlpStreamHandler implements TdsStreamHandler {
         while (payload.hasRemaining() && lengthBuffer.hasRemaining()) {
           lengthBuffer.put(payload.get());
         }
-        if (lengthBuffer.hasRemaining()) return; // Wait for next packet
+        if (lengthBuffer.hasRemaining()) {
+          return; // Wait for next packet
+        }
 
         lengthBuffer.flip();
         pendingChunkBytes = lengthBuffer.getInt();

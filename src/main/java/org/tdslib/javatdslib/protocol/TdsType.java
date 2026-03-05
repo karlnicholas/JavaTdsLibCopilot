@@ -3,6 +3,10 @@ package org.tdslib.javatdslib.protocol;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Enumeration of TDS data types. This enum maps TDS type identifiers to their corresponding
+ * length strategies and fixed sizes, and provides utility methods for type inference.
+ */
 public enum TdsType {
 
   // --- Integers ---
@@ -81,28 +85,75 @@ public enum TdsType {
     }
   }
 
-  public static TdsType valueOf(byte b) { return BYTE_MAP.getOrDefault(b & 0xFF, null); }
-
-  public enum LengthStrategy {
-    FIXED, BYTELEN, USHORTLEN, SCALE_LEN, PLP, PREC_SCALE, LONGLEN
+  public static TdsType valueOf(byte b) {
+    return BYTE_MAP.getOrDefault(b & 0xFF, null);
   }
 
+  /**
+   * Strategy for determining the length of a TDS type.
+   */
+  public enum LengthStrategy {
+    FIXED,
+    BYTELEN,
+    USHORTLEN,
+    SCALE_LEN,
+    PLP,
+    PREC_SCALE,
+    LONGLEN
+  }
+
+  /**
+   * Infers the TDS type from a Java class.
+   *
+   * @param clazz The Java class to infer the TDS type from.
+   * @return The inferred TDS type, or null if no mapping exists.
+   */
   public static TdsType inferFromJavaType(Class<?> clazz) {
-    if (clazz == Integer.class || clazz == int.class) return INTN;
-    if (clazz == Long.class || clazz == long.class) return INTN;
-    if (clazz == Short.class || clazz == short.class) return INTN;
-    if (clazz == Byte.class || clazz == byte.class) return INTN;
-    if (java.math.BigDecimal.class.isAssignableFrom(clazz)) return DECIMALN;
-    if (clazz == Double.class || clazz == double.class) return FLTN;
-    if (clazz == Float.class || clazz == float.class) return REAL;
-    if (clazz == Boolean.class || clazz == boolean.class) return BITN;
-    if (clazz == java.time.LocalDate.class) return DATE;
-    if (clazz == java.time.LocalTime.class) return TIME;
-    if (clazz == java.time.LocalDateTime.class) return DATETIME2;
-    if (clazz == java.time.OffsetDateTime.class) return DATETIMEOFFSET;
-    if (clazz == String.class) return NVARCHAR;
-    if (java.nio.ByteBuffer.class.isAssignableFrom(clazz) || clazz == byte[].class) return BIGVARBIN;
-    if (clazz == java.util.UUID.class) return GUID;
+    if (clazz == Integer.class || clazz == int.class) {
+      return INTN;
+    }
+    if (clazz == Long.class || clazz == long.class) {
+      return INTN;
+    }
+    if (clazz == Short.class || clazz == short.class) {
+      return INTN;
+    }
+    if (clazz == Byte.class || clazz == byte.class) {
+      return INTN;
+    }
+    if (java.math.BigDecimal.class.isAssignableFrom(clazz)) {
+      return DECIMALN;
+    }
+    if (clazz == Double.class || clazz == double.class) {
+      return FLTN;
+    }
+    if (clazz == Float.class || clazz == float.class) {
+      return REAL;
+    }
+    if (clazz == Boolean.class || clazz == boolean.class) {
+      return BITN;
+    }
+    if (clazz == java.time.LocalDate.class) {
+      return DATE;
+    }
+    if (clazz == java.time.LocalTime.class) {
+      return TIME;
+    }
+    if (clazz == java.time.LocalDateTime.class) {
+      return DATETIME2;
+    }
+    if (clazz == java.time.OffsetDateTime.class) {
+      return DATETIMEOFFSET;
+    }
+    if (clazz == String.class) {
+      return NVARCHAR;
+    }
+    if (java.nio.ByteBuffer.class.isAssignableFrom(clazz) || clazz == byte[].class) {
+      return BIGVARBIN;
+    }
+    if (clazz == java.util.UUID.class) {
+      return GUID;
+    }
     return null;
   }
 }

@@ -1,6 +1,12 @@
 package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.Result;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.CollationUtils;
@@ -20,17 +26,11 @@ import org.tdslib.javatdslib.tokens.parsers.DataParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
- * A reactive visitor that processes TDS tokens and translates them into R2DBC {@link Result.Segment}s.
- * This class acts as a bridge between the low-level TDS protocol and the reactive R2DBC API,
- * emitting row data, update counts, and other results as they are received from the database.
+ * A reactive visitor that processes TDS tokens and translates them into R2DBC {@link
+ * Result.Segment}s. This class acts as a bridge between the low-level TDS protocol and the reactive
+ * R2DBC API, emitting row data, update counts, and other results as they are received from the
+ * database.
  */
 public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Segment>
     implements TokenVisitor {
@@ -53,14 +53,12 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   /**
    * Constructs a new ReactiveResultVisitor.
    *
-   * @param transport       The TDS transport layer for sending and receiving messages.
-   * @param context         The connection context, containing session-specific information.
+   * @param transport The TDS transport layer for sending and receiving messages.
+   * @param context The connection context, containing session-specific information.
    * @param queryTdsMessage The initial TDS query message to be sent.
    */
   public ReactiveResultVisitor(
-      TdsTransport transport,
-      ConnectionContext context,
-      TdsMessage queryTdsMessage) {
+      TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage) {
     this.transport = transport;
     this.context = context;
     this.queryTdsMessage = queryTdsMessage;
@@ -92,12 +90,13 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
         TokenVisitor pipeline = visitorChain != null ? visitorChain : this;
 
         // NEW: Save the instance to the class field
-        this.activeDecoder = new StatefulTokenDecoder(
-            TokenParserRegistry.DEFAULT,
-            context,
-            pipeline,
-            transport // (Assumes StatefulTokenDecoder was updated to accept transport)
-        );
+        this.activeDecoder =
+            new StatefulTokenDecoder(
+                TokenParserRegistry.DEFAULT,
+                context,
+                pipeline,
+                transport // (Assumes StatefulTokenDecoder was updated to accept transport)
+                );
 
         transport.setStreamHandlers(this.activeDecoder, this::errorHandler);
         transport.sendQueryMessageAsync(queryTdsMessage);
@@ -177,13 +176,17 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
         Charset charset = StandardCharsets.UTF_16LE; // Default for NVARCHAR and XML
         if (type == TdsType.BIGVARCHR || type == TdsType.VARCHAR || type == TdsType.TEXT) {
           byte[] collation = col.getTypeInfo() != null ? col.getTypeInfo().getCollation() : null;
-          charset = collation != null
-              ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
-              : context.getVarcharCharset();
+          charset =
+              collation != null
+                  ? CollationUtils.getCharsetFromCollation(collation)
+                      .orElse(context.getVarcharCharset())
+                  : context.getVarcharCharset();
         }
 
         // Pass the charset down to DataParser
-        Object data = DataParser.getDataBytes(payload, type, col.getMaxLength(), transport, activeDecoder, charset);
+        Object data =
+            DataParser.getDataBytes(
+                payload, type, col.getMaxLength(), transport, activeDecoder, charset);
         rowData.add(data);
       }
     }

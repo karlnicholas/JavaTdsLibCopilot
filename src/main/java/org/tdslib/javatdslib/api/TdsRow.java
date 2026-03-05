@@ -5,6 +5,8 @@ import io.r2dbc.spi.Clob;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
+import java.nio.charset.Charset;
+import java.util.List;
 import org.tdslib.javatdslib.codec.DecoderRegistry;
 import org.tdslib.javatdslib.internal.TdsRowMetadata;
 import org.tdslib.javatdslib.protocol.CollationUtils;
@@ -12,9 +14,6 @@ import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.streaming.TdsBlob;
 import org.tdslib.javatdslib.streaming.TdsClob;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
-
-import java.nio.charset.Charset;
-import java.util.List;
 
 /**
  * Implementation of {@link Row} for the TDS protocol. This class represents a single row of data in
@@ -54,7 +53,6 @@ public class TdsRow implements Row {
 
     // FIX: Retrieve as Object first
     Object rawData = columnData.get(index);
-    ColumnMetadata meta = columnMetadata.get(index);
 
     if (rawData == null) {
       return null;
@@ -69,6 +67,8 @@ public class TdsRow implements Row {
     if (rawData instanceof TdsBlob && type.isAssignableFrom(Blob.class)) {
       return type.cast(rawData);
     }
+
+    ColumnMetadata meta = columnMetadata.get(index);
 
     // If it's not a streaming proxy, it must be a standard byte[] payload
     byte[] data = (byte[]) rawData;

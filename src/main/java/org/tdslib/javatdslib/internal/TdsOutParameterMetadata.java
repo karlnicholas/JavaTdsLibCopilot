@@ -7,9 +7,9 @@ import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 
 /**
- * Implementation of {@link OutParameterMetadata} for the TDS protocol.
- * This class provides metadata information about an output parameter returned from a stored procedure,
- * such as its name, type, and scale.
+ * Implementation of {@link OutParameterMetadata} for the TDS protocol. This class provides metadata
+ * information about an output parameter returned from a stored procedure, such as its name, type,
+ * and scale.
  */
 public class TdsOutParameterMetadata implements OutParameterMetadata {
   private final String name;

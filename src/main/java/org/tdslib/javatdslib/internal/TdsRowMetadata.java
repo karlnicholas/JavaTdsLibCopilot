@@ -2,14 +2,22 @@ package org.tdslib.javatdslib.internal;
 
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.RowMetadata;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Implementation of {@link RowMetadata} for the TDS protocol. This class provides metadata
+ * information about the columns in a row, allowing access by index or name.
+ */
 public class TdsRowMetadata implements RowMetadata {
   private final List<ColumnMetadata> metadata;
 
+  /**
+   * Constructs a new TdsRowMetadata.
+   *
+   * @param metadata The list of column metadata for the row.
+   */
   public TdsRowMetadata(List<ColumnMetadata> metadata) {
     this.metadata = metadata;
   }
@@ -33,9 +41,7 @@ public class TdsRowMetadata implements RowMetadata {
         .orElseThrow(() -> new NoSuchElementException("Column name '" + name + "' does not exist"));
   }
 
-  /**
-   * Updated to return List<? extends ColumnMetadata> to match R2DBC SPI.
-   */
+  /** Updated to return List<? extends ColumnMetadata> to match R2DBC SPI. */
   @Override
   public List<? extends ColumnMetadata> getColumnMetadatas() {
     return Collections.unmodifiableList(metadata);

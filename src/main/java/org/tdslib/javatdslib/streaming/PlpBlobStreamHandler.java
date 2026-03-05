@@ -1,12 +1,15 @@
 package org.tdslib.javatdslib.streaming;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import org.reactivestreams.Subscriber;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
+/**
+ * A stream handler for processing Partially Length-Prefixed (PLP) BLOB data. This handler reads
+ * chunks of data from the TDS stream and emits them as {@link ByteBuffer}s to a subscriber.
+ */
 public class PlpBlobStreamHandler implements TdsStreamHandler {
 
   private final TdsTransport transport;
@@ -17,7 +20,17 @@ public class PlpBlobStreamHandler implements TdsStreamHandler {
   private boolean expectingChunkLength = true;
   private final ByteBuffer lengthBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
 
-  public PlpBlobStreamHandler(TdsTransport transport, TdsStreamHandler controlPlaneHandler, Subscriber<? super ByteBuffer> subscriber) {
+  /**
+   * Constructs a new PlpBlobStreamHandler.
+   *
+   * @param transport The transport layer for reading data.
+   * @param controlPlaneHandler The handler to switch back to after processing the BLOB.
+   * @param subscriber The subscriber to receive the BLOB data chunks.
+   */
+  public PlpBlobStreamHandler(
+      TdsTransport transport,
+      TdsStreamHandler controlPlaneHandler,
+      Subscriber<? super ByteBuffer> subscriber) {
     this.transport = transport;
     this.controlPlaneHandler = controlPlaneHandler;
     this.subscriber = subscriber;
@@ -31,7 +44,9 @@ public class PlpBlobStreamHandler implements TdsStreamHandler {
         while (payload.hasRemaining() && lengthBuffer.hasRemaining()) {
           lengthBuffer.put(payload.get());
         }
-        if (lengthBuffer.hasRemaining()) return; // Wait for next packet
+        if (lengthBuffer.hasRemaining()) {
+          return; // Wait for next packet
+        }
 
         lengthBuffer.flip();
         pendingChunkBytes = lengthBuffer.getInt();
