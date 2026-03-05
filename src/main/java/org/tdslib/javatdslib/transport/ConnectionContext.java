@@ -1,17 +1,16 @@
 package org.tdslib.javatdslib.transport;
 
-import org.tdslib.javatdslib.protocol.TdsVersion;
-
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import org.tdslib.javatdslib.protocol.TdsVersion;
 
 /**
- * Represents the current session/connection state in a TDS connection.
- * Tracks environment changes (ENVCHANGE), login ack info, and other server-driven state.
+ * Represents the current session/connection state in a TDS connection. Tracks environment changes
+ * (ENVCHANGE), login ack info, and other server-driven state.
  *
- * <p>Getters are used for query execution and client awareness.
- * Setters are called internally by {@code ApplyingTokenVisitor} on ENVCHANGE/LOGINACK.
+ * <p>Getters are used for query execution and client awareness. Setters are called internally by
+ * {@code ApplyingTokenVisitor} on ENVCHANGE/LOGINACK.
  */
 public interface ConnectionContext {
 
@@ -40,7 +39,18 @@ public interface ConnectionContext {
    */
   boolean isUnicodeEnabled();
 
+  /**
+   * Indicates whether UTF-8 support has been negotiated for this session.
+   *
+   * @return true if UTF-8 is negotiated
+   */
   boolean isUtf8Negotiated();
+
+  /**
+   * Sets whether UTF-8 support has been negotiated for this session.
+   *
+   * @param negotiated true if UTF-8 is negotiated
+   */
   void setUtf8Negotiated(boolean negotiated);
 
   // === Database ===
@@ -172,8 +182,8 @@ public interface ConnectionContext {
   // === Reset / Recovery ===
 
   /**
-   * Resets session state to defaults (called on resetConnection flag or explicit reset).
-   * Should clear database, transaction state, etc., but keep TDS version.
+   * Resets session state to defaults (called on resetConnection flag or explicit reset). Should
+   * clear database, transaction state, etc., but keep TDS version.
    */
   void resetToDefaults();
 
@@ -190,12 +200,13 @@ public interface ConnectionContext {
    * @param spid the SPID for this session; may be zero or negative if not available
    */
   void setSpid(int spid);
-// Add these to the interface
+
+  // Add these to the interface
 
   /**
-   * Returns the Java Charset most appropriate for decoding non-Unicode (varchar/char) data
-   * based on the current server collation (ENVCHANGE type 7).
-   * Returns empty if unknown, Unicode-only, or no collation set.
+   * Returns the Java Charset most appropriate for decoding non-Unicode (varchar/char) data based on
+   * the current server collation (ENVCHANGE type 7). Returns empty if unknown, Unicode-only, or no
+   * collation set.
    */
   Optional<Charset> getNonUnicodeCharset();
 
@@ -205,13 +216,12 @@ public interface ConnectionContext {
    */
   default Charset getEffectiveCharset() {
     if (isUnicodeEnabled()) {
-      return StandardCharsets.UTF_16LE;  // TDS uses UTF-16LE for nvarchar/nchar
+      return StandardCharsets.UTF_16LE; // TDS uses UTF-16LE for nvarchar/nchar
     }
     return getNonUnicodeCharset().orElse(StandardCharsets.ISO_8859_1); // fallback
   }
-  /**
-   * Returns UTF-8 if negotiated, otherwise falls back to the Server Collation Code Page.
-   */
+
+  /** Returns UTF-8 if negotiated, otherwise falls back to the Server Collation Code Page. */
   default Charset getVarcharCharset() {
     if (isUtf8Negotiated()) {
       return StandardCharsets.UTF_8;

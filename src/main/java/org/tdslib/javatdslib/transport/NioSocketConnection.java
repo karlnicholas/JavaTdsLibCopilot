@@ -1,8 +1,5 @@
 package org.tdslib.javatdslib.transport;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -16,7 +13,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * An implementation of {@link NetworkConnection} using Java NIO {@link SocketChannel}. This class
+ * handles both synchronous and asynchronous I/O operations, managing a background event loop for
+ * non-blocking communication.
+ */
 public class NioSocketConnection implements NetworkConnection {
   private static final Logger logger = LoggerFactory.getLogger(NioSocketConnection.class);
   private ExecutorService eventLoopExecutor;
@@ -31,6 +35,14 @@ public class NioSocketConnection implements NetworkConnection {
   private Consumer<ByteBuffer> onDataAvailable;
   private Consumer<Throwable> onError;
 
+  /**
+   * Constructs a new NioSocketConnection.
+   *
+   * @param host The hostname to connect to.
+   * @param port The port to connect to.
+   * @param readTimeoutMs The read timeout in milliseconds for synchronous operations.
+   * @throws IOException If an I/O error occurs during connection establishment.
+   */
   public NioSocketConnection(String host, int port, int readTimeoutMs) throws IOException {
     this.socketChannel = SocketChannel.open();
     this.socketChannel.configureBlocking(true);
@@ -47,7 +59,9 @@ public class NioSocketConnection implements NetworkConnection {
   public void readFullySync(ByteBuffer buffer) throws IOException {
     while (buffer.hasRemaining()) {
       int read = socketChannel.read(buffer);
-      if (read == -1) throw new IOException("EOF during sync read");
+      if (read == -1) {
+        throw new IOException("EOF during sync read");
+      }
     }
   }
 
@@ -90,35 +104,50 @@ public class NioSocketConnection implements NetworkConnection {
 
   private void startEventLoop() {
     // Use an ExecutorService with a custom ThreadFactory for clean naming and daemon status
-    this.eventLoopExecutor = Executors.newSingleThreadExecutor(r -> {
-      Thread t = new Thread(r, "TDS-EventLoop-" + socketChannel.socket().getLocalPort());
-      t.setDaemon(true);
-      return t;
-    });
+    this.eventLoopExecutor =
+        Executors.newSingleThreadExecutor(
+            r -> {
+              Thread t = new Thread(r, "TDS-EventLoop-" + socketChannel.socket().getLocalPort());
+              t.setDaemon(true);
+              return t;
+            });
 
-    eventLoopExecutor.submit(() -> {
-      while (!Thread.currentThread().isInterrupted()) {
-        try {
-          if (selector.select(1000) == 0) continue;
-          Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-          while (iterator.hasNext()) {
-            SelectionKey key = iterator.next();
-            iterator.remove();
-            if (!key.isValid()) continue;
+    eventLoopExecutor.submit(
+        () -> {
+          while (!Thread.currentThread().isInterrupted()) {
             try {
-              if (key.isReadable()) onReadable(key);
-              if (key.isWritable()) onWritable(key);
-            } catch (Throwable t) {
-              cleanupKeyAndTransport(key);
-              if (onError != null) onError.accept(t);
+              if (selector.select(1000) == 0) {
+                continue;
+              }
+              Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+              while (iterator.hasNext()) {
+                SelectionKey key = iterator.next();
+                iterator.remove();
+                if (!key.isValid()) {
+                  continue;
+                }
+                try {
+                  if (key.isReadable()) {
+                    onReadable(key);
+                  }
+                  if (key.isWritable()) {
+                    onWritable(key);
+                  }
+                } catch (Throwable t) {
+                  cleanupKeyAndTransport(key);
+                  if (onError != null) {
+                    onError.accept(t);
+                  }
+                }
+              }
+            } catch (Throwable fatal) {
+              if (onError != null) {
+                onError.accept(fatal);
+              }
+              break; // Exit the event loop
             }
           }
-        } catch (Throwable fatal) {
-          if (onError != null) onError.accept(fatal);
-          break; // Exit the event loop
-        }
-      }
-    });
+        });
   }
 
   private void onReadable(SelectionKey selectionKey) throws IOException {
@@ -127,7 +156,9 @@ public class NioSocketConnection implements NetworkConnection {
       cleanupKeyAndTransport(selectionKey);
       return;
     }
-    if (read == 0) return;
+    if (read == 0) {
+      return;
+    }
 
     logger.trace("NIO: Read {} bytes from socket", read); // ADD THIS
 
@@ -153,7 +184,9 @@ public class NioSocketConnection implements NetworkConnection {
         return;
       }
       int written = socketChannel.write(buf);
-      if (written == 0 || buf.hasRemaining()) return;
+      if (written == 0 || buf.hasRemaining()) {
+        return;
+      }
       writeQueue.poll();
     }
   }
@@ -169,7 +202,9 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void suspendRead() {
-    if (selector == null) return;
+    if (selector == null) {
+      return;
+    }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
       key.interestOpsAnd(~SelectionKey.OP_READ);
@@ -179,7 +214,9 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void resumeRead() {
-    if (selector == null) return;
+    if (selector == null) {
+      return;
+    }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
       key.interestOpsOr(SelectionKey.OP_READ);

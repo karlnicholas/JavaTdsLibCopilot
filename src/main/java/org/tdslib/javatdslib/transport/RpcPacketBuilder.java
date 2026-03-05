@@ -1,5 +1,9 @@
 package org.tdslib.javatdslib.transport;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
@@ -9,14 +13,7 @@ import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-
-/**
- * Builds TDS RPC packets for executing parameterized queries.
- */
+/** Builds TDS RPC packets for executing parameterized queries. */
 public class RpcPacketBuilder {
   private static final Logger logger = LoggerFactory.getLogger(RpcPacketBuilder.class);
 
@@ -36,14 +33,18 @@ public class RpcPacketBuilder {
   /**
    * Creates a new RpcPacketBuilder.
    *
-   * @param sql             the SQL statement
-   * @param batchParams     the list of parameter sets for batch execution
-   * @param update          whether this is an update operation
-   * @param encoderRegistry   the registry for parameter codecs
+   * @param sql the SQL statement
+   * @param batchParams the list of parameter sets for batch execution
+   * @param update whether this is an update operation
+   * @param encoderRegistry the registry for parameter codecs
    * @param encodingContext the encoding context
    */
-  public RpcPacketBuilder(String sql, List<List<TdsParameter>> batchParams, boolean update,
-                          EncoderRegistry encoderRegistry, RpcEncodingContext encodingContext) {
+  public RpcPacketBuilder(
+      String sql,
+      List<List<TdsParameter>> batchParams,
+      boolean update,
+      EncoderRegistry encoderRegistry,
+      RpcEncodingContext encodingContext) {
     this.sql = sql;
     this.batchParams = batchParams;
     this.update = update;
@@ -98,8 +99,8 @@ public class RpcPacketBuilder {
     buf.flip();
     if (update) {
       byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
-      ByteBuffer fullPayload = ByteBuffer.allocate(allHeadersBytes.length + buf.limit())
-          .order(ByteOrder.LITTLE_ENDIAN);
+      ByteBuffer fullPayload =
+          ByteBuffer.allocate(allHeadersBytes.length + buf.limit()).order(ByteOrder.LITTLE_ENDIAN);
       fullPayload.put(allHeadersBytes);
       fullPayload.put(buf);
       fullPayload.flip();
@@ -114,9 +115,7 @@ public class RpcPacketBuilder {
     buf.putShort((short) 0);
   }
 
-  /**
-   * DRY extraction for writing framework parameter headers (@stmt and @params).
-   */
+  /** DRY extraction for writing framework parameter headers (@stmt and @params). */
   private void writeFrameworkParamHeader(ByteBuffer buf, String paramName) {
     writeParamName(buf, paramName);
     buf.put(RPC_PARAM_DEFAULT);
@@ -126,11 +125,15 @@ public class RpcPacketBuilder {
   }
 
   private String buildParamDecl(List<TdsParameter> params) {
-    if (params.isEmpty()) return "";
+    if (params.isEmpty()) {
+      return "";
+    }
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < params.size(); i++) {
       TdsParameter p = params.get(i);
-      if (i > 0) sb.append(",");
+      if (i > 0) {
+        sb.append(",");
+      }
 
       // Fix: Pass 'p' directly instead of 'p.type()'
       ParameterEncoder codec = encoderRegistry.getCodec(p);

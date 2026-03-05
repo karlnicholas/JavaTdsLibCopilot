@@ -1,14 +1,18 @@
 package org.tdslib.javatdslib.transport;
 
-import org.tdslib.javatdslib.packets.PacketType;
-
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLSession;
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import org.tdslib.javatdslib.packets.PacketType;
 
+/**
+ * Handles the TLS handshake process for a TDS connection. This class wraps the {@link SSLEngine}
+ * and manages the wrapping and unwrapping of data during the handshake and subsequent encrypted
+ * communication.
+ */
 public class TlsHandshake {
   private SSLEngine sslEngine;
   private ByteBuffer myNetData;
@@ -17,12 +21,18 @@ public class TlsHandshake {
 
   private static final int TDS_HEADER_LENGTH = 8;
 
+  /**
+   * Initiates and performs the TLS handshake.
+   *
+   * @param host The hostname of the server.
+   * @param port The port number of the server.
+   * @param connection The network connection to use for I/O.
+   * @param sslContext The SSL context to create the SSLEngine from.
+   * @throws IOException If an I/O error occurs during the handshake.
+   */
   public void tlsHandshake(
-      String host,
-      int port,
-      NetworkConnection connection,
-      SSLContext sslContext
-  ) throws IOException {
+      String host, int port, NetworkConnection connection, SSLContext sslContext)
+      throws IOException {
 
     this.sslEngine = sslContext.createSSLEngine(host, port);
     this.sslEngine.setUseClientMode(true);
@@ -127,7 +137,15 @@ public class TlsHandshake {
     }
   }
 
-  public void writeEncrypted(final ByteBuffer appData, final NetworkConnection connection) throws IOException {
+  /**
+   * Encrypts and writes application data to the network connection.
+   *
+   * @param appData The application data to encrypt and write.
+   * @param connection The network connection to write to.
+   * @throws IOException If an I/O error occurs.
+   */
+  public void writeEncrypted(final ByteBuffer appData, final NetworkConnection connection)
+      throws IOException {
     while (appData.hasRemaining()) {
       myNetData.clear();
       final SSLEngineResult result = sslEngine.wrap(appData, myNetData);
@@ -140,16 +158,22 @@ public class TlsHandshake {
     }
   }
 
-  public boolean isTlsActive() { return sslEngine != null; }
+  public boolean isTlsActive() {
+    return sslEngine != null;
+  }
 
+  /** Closes the TLS handshake and releases resources. */
   public void close() {
     if (sslEngine != null) {
       try {
         sslEngine.closeOutbound();
       } catch (Exception e) {
+        // Ignore exceptions during close
       } finally {
         sslEngine = null;
-        if (myNetData != null) myNetData.clear();
+        if (myNetData != null) {
+          myNetData.clear();
+        }
       }
     }
   }

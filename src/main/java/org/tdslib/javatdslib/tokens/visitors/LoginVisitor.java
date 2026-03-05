@@ -5,6 +5,10 @@ import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 
+/**
+ * A {@link TokenVisitor} that processes tokens during the login phase. It tracks the success or
+ * failure of the login attempt by monitoring ERROR, DONE, and LOGINACK tokens.
+ */
 public class LoginVisitor implements TokenVisitor {
   private boolean success = true;
   private String errorMessage = null;
@@ -31,6 +35,11 @@ public class LoginVisitor implements TokenVisitor {
     }
   }
 
-  public boolean isSuccess() { return success; }
-  public String getErrorMessage() { return errorMessage; }
+  public boolean isSuccess() {
+    return success;
+  }
+
+  public String getErrorMessage() {
+    return errorMessage;
+  }
 }

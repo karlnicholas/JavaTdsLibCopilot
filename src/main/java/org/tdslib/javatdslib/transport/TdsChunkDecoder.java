@@ -1,13 +1,12 @@
 package org.tdslib.javatdslib.transport;
 
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
-
 /**
- * Strips 8-byte TDS headers from the network stream and forwards the raw payload
- * chunks directly to the TdsStreamHandler.
+ * Strips 8-byte TDS headers from the network stream and forwards the raw payload chunks directly to
+ * the TdsStreamHandler.
  */
 public class TdsChunkDecoder {
   private static final Logger logger = LoggerFactory.getLogger(TdsChunkDecoder.class);
@@ -20,10 +19,20 @@ public class TdsChunkDecoder {
   private int currentChunkBytesRemaining = 0;
   private boolean currentChunkIsEom = false;
 
+  /**
+   * Constructs a new TdsChunkDecoder.
+   *
+   * @param streamHandler The handler to receive the decoded payload chunks.
+   */
   public TdsChunkDecoder(TdsStreamHandler streamHandler) {
     this.streamHandler = streamHandler;
   }
 
+  /**
+   * Decodes the incoming network buffer, stripping TDS headers and forwarding the payload.
+   *
+   * @param networkBuffer The buffer containing the raw network data.
+   */
   public void decode(ByteBuffer networkBuffer) {
     while (networkBuffer.hasRemaining()) {
 
@@ -40,13 +49,12 @@ public class TdsChunkDecoder {
         networkBuffer.position(headerStart + TDS_HEADER_LENGTH); // Skip header
         currentChunkBytesRemaining = length - TDS_HEADER_LENGTH;
         currentChunkIsEom = (status & EOM_BIT) != 0;
-        networkBuffer.position(headerStart + TDS_HEADER_LENGTH); // Skip header
-        currentChunkBytesRemaining = length - TDS_HEADER_LENGTH;
-        currentChunkIsEom = (status & EOM_BIT) != 0;
 
         // ADD THIS
-        logger.trace("DECODER: Stripped header. Payload size: {}, Is EOM: {}",
-            currentChunkBytesRemaining, currentChunkIsEom);
+        logger.trace(
+            "DECODER: Stripped header. Payload size: {}, Is EOM: {}",
+            currentChunkBytesRemaining,
+            currentChunkIsEom);
       }
 
       // 2. Stream the payload directly to the parser
@@ -54,7 +62,8 @@ public class TdsChunkDecoder {
         int bytesAvailable = networkBuffer.remaining();
         int bytesToRead = Math.min(bytesAvailable, currentChunkBytesRemaining);
 
-        // Create a protected window (slice) so the parser can't read past the current chunk boundary
+        // Create a protected window (slice) so the parser can't read past the current chunk
+        // boundary
         int originalLimit = networkBuffer.limit();
         networkBuffer.limit(networkBuffer.position() + bytesToRead);
         ByteBuffer payloadSlice = networkBuffer.slice();

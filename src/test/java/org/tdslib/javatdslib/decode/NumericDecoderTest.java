@@ -1,13 +1,14 @@
 package org.tdslib.javatdslib.decode;
 
-import static org.junit.jupiter.api.Assertions.*;
-import org.junit.jupiter.api.Test;
-import org.tdslib.javatdslib.codec.NumericDecoder;
-import org.tdslib.javatdslib.protocol.TdsType;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.Test;
+import org.tdslib.javatdslib.codec.NumericDecoder;
+import org.tdslib.javatdslib.protocol.TdsType;
 
 class NumericDecoderTest {
 
@@ -18,11 +19,15 @@ class NumericDecoderTest {
     // TDS Decimal Format: [0] = Sign (1 pos, 0 neg), [1..N] = Little-Endian Magnitude
     // Representing -123.45 with scale 2
     // Magnitude 12345 = 0x3039. In TDS bytes (LE): [0x39, 0x30]
-    byte[] negativeBytes = new byte[] { 0, 0x39, 0x30 };
-    byte[] positiveBytes = new byte[] { 1, 0x39, 0x30 };
+    byte[] negativeBytes = new byte[] {0, 0x39, 0x30};
+    byte[] positiveBytes = new byte[] {1, 0x39, 0x30};
 
-    BigDecimal negResult = decoder.decode(negativeBytes, TdsType.DECIMAL, BigDecimal.class, 2, StandardCharsets.UTF_8);
-    BigDecimal posResult = decoder.decode(positiveBytes, TdsType.DECIMAL, BigDecimal.class, 2, StandardCharsets.UTF_8);
+    BigDecimal negResult =
+        decoder.decode(
+            negativeBytes, TdsType.DECIMAL, BigDecimal.class, 2, StandardCharsets.UTF_8);
+    BigDecimal posResult =
+        decoder.decode(
+            positiveBytes, TdsType.DECIMAL, BigDecimal.class, 2, StandardCharsets.UTF_8);
 
     assertEquals(new BigDecimal("-123.45"), negResult, "Negative sign bit (0) failed");
     assertEquals(new BigDecimal("123.45"), posResult, "Positive sign bit (1) failed");
@@ -33,9 +38,10 @@ class NumericDecoderTest {
     // SQL Server TINYINT 255 is 0xFF.
     // Java bytes are signed, so (byte)0xFF is -1.
     // Our fix: (data[0] & 0xFF)
-    byte[] tinyIntBytes = new byte[] { (byte) 0xFF };
+    byte[] tinyIntBytes = new byte[] {(byte) 0xFF};
 
-    Integer result = decoder.decode(tinyIntBytes, TdsType.INT1, Integer.class, 0, StandardCharsets.UTF_8);
+    Integer result =
+        decoder.decode(tinyIntBytes, TdsType.INT1, Integer.class, 0, StandardCharsets.UTF_8);
 
     assertEquals(255, result, "TINYINT sign extension fix failed; should be 255, not -1");
   }
@@ -53,7 +59,8 @@ class NumericDecoderTest {
     bb.putInt(high);
     bb.putInt(low);
 
-    BigDecimal result = decoder.decode(bb.array(), TdsType.MONEY, BigDecimal.class, 4, StandardCharsets.UTF_8);
+    BigDecimal result =
+        decoder.decode(bb.array(), TdsType.MONEY, BigDecimal.class, 4, StandardCharsets.UTF_8);
 
     assertEquals(new BigDecimal("922337203685477.5807"), result);
   }

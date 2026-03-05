@@ -7,9 +7,19 @@ import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
+/**
+ * A {@link TokenVisitor} that listens for ENVCHANGE tokens and applies the changes to the
+ * {@link ConnectionContext}. This ensures that the connection state (e.g., database, charset,
+ * packet size) is kept in sync with the server.
+ */
 public class EnvChangeVisitor implements TokenVisitor {
   private final ConnectionContext context;
 
+  /**
+   * Constructs a new EnvChangeVisitor.
+   *
+   * @param context The connection context to update with environment changes.
+   */
   public EnvChangeVisitor(ConnectionContext context) {
     this.context = context;
   }

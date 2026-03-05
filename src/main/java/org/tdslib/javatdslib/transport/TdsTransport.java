@@ -1,19 +1,17 @@
 package org.tdslib.javatdslib.transport;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.TdsMessage;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.TdsMessage;
 
 /**
- * Orchestrates the TDS protocol layer.
- * Delegates all physical I/O to the injected NetworkConnection.
+ * Orchestrates the TDS protocol layer. Delegates all physical I/O to the injected NetworkConnection.
  */
 public class TdsTransport implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
@@ -32,12 +30,21 @@ public class TdsTransport implements AutoCloseable {
   private Consumer<Throwable> currentErrorHandler;
 
   /**
-   * Primary constructor utilizing Dependency Injection.
-   * Allows injecting mock connections for testing without hitting a real database.
+   * Primary constructor utilizing Dependency Injection. Allows injecting mock connections for testing
+   * without hitting a real database.
+   *
+   * @param host The hostname of the server.
+   * @param port The port number of the server.
+   * @param context The connection context.
+   * @param networkConnection The network connection to use.
+   * @param packetEncoder The packet encoder to use.
    */
-  public TdsTransport(String host, int port, ConnectionContext context,
-                      NetworkConnection networkConnection,
-                      PacketEncoder packetEncoder) { // FIX: Removed TdsStreamHandler from constructor
+  public TdsTransport(
+      String host,
+      int port,
+      ConnectionContext context,
+      NetworkConnection networkConnection,
+      PacketEncoder packetEncoder) { // FIX: Removed TdsStreamHandler from constructor
     this.host = host;
     this.port = port;
     this.context = context;
@@ -49,43 +56,73 @@ public class TdsTransport implements AutoCloseable {
 
   /**
    * Overloaded constructor for backwards compatibility.
+   *
+   * @param host The hostname of the server.
+   * @param port The port number of the server.
+   * @param context The connection context.
+   * @throws IOException If an I/O error occurs.
    */
   public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
-    this(host, port, context,
+    this(
+        host,
+        port,
+        context,
         new NioSocketConnection(host, port, 60_000),
         new QueryPacketBuilder()); // FIX: Removed the hardcoded null
   }
 
   // --- Handshake & TLS Methods ---
 
+  /**
+   * Performs the TLS handshake.
+   *
+   * @param sslContext The SSL context to use.
+   * @throws IOException If an I/O error occurs.
+   */
   public void tlsHandshake(javax.net.ssl.SSLContext sslContext) throws IOException {
     tlsHandshake.tlsHandshake(host, port, networkConnection, sslContext);
   }
 
+  /** Completes the TLS handshake and cleans up resources. */
   public void tlsComplete() {
     tlsHandshake.close();
   }
 
+  /**
+   * Checks if TLS is currently active.
+   *
+   * @return true if TLS is active, false otherwise.
+   */
   public boolean isTlsActive() {
     return tlsHandshake != null && tlsHandshake.isTlsActive();
   }
 
   // --- Synchronous Methods (Login Phase) ---
 
+  /**
+   * Sends a TDS message directly to the network without encryption.
+   *
+   * @param tdsMessage The message to send.
+   * @throws IOException If an I/O error occurs.
+   */
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
-        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
-    );
+    List<ByteBuffer> packetBuffers =
+        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
     for (ByteBuffer buf : packetBuffers) {
       networkConnection.writeDirect(buf);
     }
   }
 
+  /**
+   * Sends a TDS message, encrypting it if TLS is active.
+   *
+   * @param tdsMessage The message to send.
+   * @throws IOException If an I/O error occurs.
+   */
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
-        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
-    );
+    List<ByteBuffer> packetBuffers =
+        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
     for (ByteBuffer buffer : packetBuffers) {
       if (isTlsActive()) {
@@ -96,6 +133,12 @@ public class TdsTransport implements AutoCloseable {
     }
   }
 
+  /**
+   * Receives a full TDS response synchronously.
+   *
+   * @return A list of TDS messages received.
+   * @throws IOException If an I/O error occurs.
+   */
   public List<TdsMessage> receiveFullResponse() throws IOException {
     List<TdsMessage> messages = new ArrayList<>();
     TdsMessage msg;
@@ -105,7 +148,8 @@ public class TdsTransport implements AutoCloseable {
       header.flip();
 
       int length = Short.toUnsignedInt(header.getShort(2));
-      ByteBuffer payload = ByteBuffer.allocate(length - TDS_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN);
+      ByteBuffer payload =
+          ByteBuffer.allocate(length - TDS_HEADER_LENGTH).order(ByteOrder.LITTLE_ENDIAN);
       networkConnection.readFullySync(payload);
       payload.flip();
 
@@ -136,23 +180,35 @@ public class TdsTransport implements AutoCloseable {
 
   // --- Asynchronous Methods (Query Phase) ---
 
+  /**
+   * Sets the handlers for asynchronous stream processing.
+   *
+   * @param streamHandler The handler for stream data.
+   * @param errorHandler The handler for errors.
+   */
   public void setStreamHandlers(TdsStreamHandler streamHandler, Consumer<Throwable> errorHandler) {
     this.currentStreamHandler = streamHandler;
     this.currentErrorHandler = errorHandler;
   }
 
+  /**
+   * Enters asynchronous mode for the transport.
+   *
+   * @throws IOException If an I/O error occurs.
+   */
   public void enterAsyncMode() throws IOException {
     networkConnection.enterAsyncMode(context.getCurrentPacketSize());
 
     // FIX: Create a dynamic router lambda.
     // This allows the TdsChunkDecoder to always route bytes to the active query's decoder.
-    TdsStreamHandler dynamicRouter = (payload, isEom) -> {
-      if (currentStreamHandler != null) {
-        currentStreamHandler.onPayloadAvailable(payload, isEom);
-      } else {
-        logger.warn("Received TDS payload chunk but no active stream handler is registered.");
-      }
-    };
+    TdsStreamHandler dynamicRouter =
+        (payload, isEom) -> {
+          if (currentStreamHandler != null) {
+            currentStreamHandler.onPayloadAvailable(payload, isEom);
+          } else {
+            logger.warn("Received TDS payload chunk but no active stream handler is registered.");
+          }
+        };
 
     // Instantiate the decoder with the dynamic router
     TdsChunkDecoder decoder = new TdsChunkDecoder(dynamicRouter);
@@ -160,29 +216,38 @@ public class TdsTransport implements AutoCloseable {
     networkConnection.setHandlers(
         buffer -> decoder.decode(buffer),
         error -> {
-          if (currentErrorHandler != null) currentErrorHandler.accept(error);
-        }
-    );
+          if (currentErrorHandler != null) {
+            currentErrorHandler.accept(error);
+          }
+        });
   }
 
   // Expose the backpressure controls to the higher-level Stateful Parser
+
+  /** Suspends reading from the network. */
   public void suspendNetworkRead() {
     networkConnection.suspendRead();
   }
 
+  /** Resumes reading from the network. */
   public void resumeNetworkRead() {
     networkConnection.resumeRead();
   }
 
+  /**
+   * Sends a query message asynchronously.
+   *
+   * @param tdsMessage The message to send.
+   */
   public void sendQueryMessageAsync(TdsMessage tdsMessage) {
-    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
-        tdsMessage, context.getSpid(), context.getCurrentPacketSize()
-    );
+    List<ByteBuffer> packetBuffers =
+        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
     for (ByteBuffer buf : packetBuffers) {
       networkConnection.writeAsync(buf);
     }
   }
 
+  /** Cancels the current operation. */
   public void cancelCurrent() {
     logger.debug("Cancel requested");
   }
