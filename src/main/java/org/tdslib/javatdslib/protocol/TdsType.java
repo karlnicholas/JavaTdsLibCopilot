@@ -92,6 +92,12 @@ public enum TdsType {
     }
   }
 
+  /**
+   * Returns the TdsType corresponding to the given byte value.
+   *
+   * @param b The byte value representing the TDS type.
+   * @return The TdsType, or null if not found.
+   */
   public static TdsType valueOf(byte b) {
     return BYTE_MAP.getOrDefault(b & 0xFF, null);
   }

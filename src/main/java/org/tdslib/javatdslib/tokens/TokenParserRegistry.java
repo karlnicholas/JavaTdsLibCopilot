@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.tokens;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.tdslib.javatdslib.tokens.parsers.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.DoneProcTokenParser;
@@ -12,12 +14,7 @@ import org.tdslib.javatdslib.tokens.parsers.ReturnStatusTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnValueTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.RowTokenParser;
 
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * A central, thread-safe registry for all MS-TDS token parsers.
- */
+/** A central, thread-safe registry for all MS-TDS token parsers. */
 public class TokenParserRegistry {
 
   public static final TokenParserRegistry DEFAULT = new TokenParserRegistry();
@@ -40,10 +37,22 @@ public class TokenParserRegistry {
 
   private final Map<Byte, TokenParser> parsers = new HashMap<>();
 
+  /**
+   * Registers a parser for a specific token type.
+   *
+   * @param type The token type to register the parser for.
+   * @param parser The parser instance.
+   */
   public void register(TokenType type, TokenParser parser) {
     parsers.put(type.getValue(), parser);
   }
 
+  /**
+   * Retrieves the parser registered for the given token type byte.
+   *
+   * @param tokenTypeByte The byte value of the token type.
+   * @return The registered parser, or null if no parser is found.
+   */
   public TokenParser getParser(byte tokenTypeByte) {
     return parsers.get(tokenTypeByte);
   }

@@ -11,7 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.TdsMessage;
 
 /**
- * Orchestrates the TDS protocol layer. Delegates all physical I/O to the injected NetworkConnection.
+ * Orchestrates the TDS protocol layer.
+ * Delegates all physical I/O to the injected NetworkConnection.
  */
 public class TdsTransport implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
@@ -30,7 +31,8 @@ public class TdsTransport implements AutoCloseable {
   private Consumer<Throwable> currentErrorHandler;
 
   /**
-   * Primary constructor utilizing Dependency Injection. Allows injecting mock connections for testing
+   * Primary constructor utilizing Dependency Injection.
+   * Allows injecting mock connections for testing
    * without hitting a real database.
    *
    * @param host The hostname of the server.
