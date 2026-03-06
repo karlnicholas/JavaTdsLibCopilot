@@ -3,55 +3,50 @@ package org.tdslib.javatdslib.streaming;
 import io.r2dbc.spi.Blob;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-/**
- * Implementation of {@link Blob} for the TDS protocol. This class represents a Binary Large Object
- * (BLOB) that can be streamed from the database. It handles the streaming of data chunks using the
- * underlying TDS transport.
- */
 public class TdsBlob implements Blob {
-
   private final TdsTransport transport;
   private final TdsStreamHandler controlPlaneHandler;
-  private final ByteBuffer leftoverBytes;
+  private final ByteBuffer plpData;
 
-  /**
-   * Constructs a new TdsBlob.
-   *
-   * @param transport The transport layer for reading BLOB data.
-   * @param controlPlaneHandler The handler to switch back to after the BLOB is fully read.
-   * @param leftoverBytes Any bytes already read from the stream that belong to this BLOB.
-   */
   public TdsBlob(
-      TdsTransport transport, TdsStreamHandler controlPlaneHandler, ByteBuffer leftoverBytes) {
+      TdsTransport transport, TdsStreamHandler controlPlaneHandler, ByteBuffer plpData) {
     this.transport = transport;
     this.controlPlaneHandler = controlPlaneHandler;
-    this.leftoverBytes = leftoverBytes;
+    this.plpData = plpData; // Now holds the fully extracted clean data
   }
 
   @Override
   public Publisher<ByteBuffer> stream() {
-    return subscriber -> {
-      PlpBlobStreamHandler plpHandler =
-          new PlpBlobStreamHandler(transport, controlPlaneHandler, subscriber);
+    return new Publisher<ByteBuffer>() {
+      @Override
+      public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
+        subscriber.onSubscribe(new Subscription() {
+          @Override
+          public void request(long n) {
+            if (n > 0 && plpData != null && plpData.hasRemaining()) {
+              // Emit the buffered PLP data instantly when requested
+              subscriber.onNext(plpData.duplicate());
+              plpData.position(plpData.limit());
+              subscriber.onComplete();
+            } else if (n > 0) {
+              subscriber.onComplete();
+            }
+          }
 
-      // Hijack the network stream
-      transport.setStreamHandlers(plpHandler, null);
-
-      // Feed the leftover bytes FIRST!
-      if (leftoverBytes != null && leftoverBytes.hasRemaining()) {
-        plpHandler.onPayloadAvailable(leftoverBytes, false);
+          @Override
+          public void cancel() {}
+        });
       }
-
-      // Open the valve for future packets!
-      transport.resumeNetworkRead();
     };
   }
 
   @Override
   public Publisher<Void> discard() {
-    return null; // Omitted for MVC
+    return null;
   }
 }

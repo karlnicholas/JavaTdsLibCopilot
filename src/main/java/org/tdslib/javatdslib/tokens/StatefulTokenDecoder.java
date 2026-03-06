@@ -91,7 +91,7 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
         }
 
         if (currentTokenType == TokenType.ROW.getValue()) {
-          if (!processRowToken(accumulator)) {
+          if (!processRowToken(accumulator, isEom)) {
             break;
           }
           expectingNewToken = true;
@@ -130,7 +130,7 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
     }
   }
 
-  private boolean processRowToken(ByteBuffer buffer) {
+  private boolean processRowToken(ByteBuffer buffer, boolean isEom) {
     try {
       buffer.mark();
       TokenParser parser = registry.getParser(TokenType.ROW.getValue());
@@ -138,6 +138,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       visitor.onToken(token);
       return true;
     } catch (java.nio.BufferUnderflowException e) {
+      // TRACING UPDATE: Expose the stack trace and buffer metrics
+      logger.warn("ROW parser underflowed! Buffer pos: {}, limit: {}, remaining bytes: {}, EOM is {}",
+          buffer.position(), buffer.limit(), buffer.remaining(), isEom, e);
       buffer.reset();
       return false;
     } catch (Exception e) {

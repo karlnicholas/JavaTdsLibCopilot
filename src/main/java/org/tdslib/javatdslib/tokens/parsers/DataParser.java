@@ -102,13 +102,13 @@ public class DataParser {
     return b;
   }
 
-  // Update signature to include TdsType
   private static Object readPlp(
       ByteBuffer payload,
       TdsTransport transport,
       TdsStreamHandler decoder,
       java.nio.charset.Charset charset,
       TdsType type) {
+
     long totalLength = payload.getLong();
     if (totalLength == -1L && payload.remaining() == 0) {
       return null;
@@ -117,20 +117,31 @@ public class DataParser {
       return null;
     }
 
-    transport.suspendNetworkRead();
+    // FIX: Extract ONLY the PLP chunks. Do NOT steal the trailing columns!
+    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
 
-    ByteBuffer leftover = null;
-    if (payload.hasRemaining()) {
-      leftover = ByteBuffer.allocate(payload.remaining()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-      leftover.put(payload);
-      leftover.flip();
+    while (payload.hasRemaining()) {
+      int chunkLength = payload.getInt();
+      if (chunkLength == 0) {
+        break; // PLP_TERMINATOR reached. Payload is now perfectly positioned at Col 3.
+      }
+
+      byte[] chunkData = new byte[chunkLength];
+      payload.get(chunkData);
+      try {
+        baos.write(chunkData);
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to buffer PLP chunk", e);
+      }
     }
 
-    // Route to Blob for binary types, Clob for character types
+    ByteBuffer isolatedPlpData = ByteBuffer.wrap(baos.toByteArray());
+
+    // Because the Row is parsed synchronously, we return a Blob backed by memory.
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, leftover);
+      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, isolatedPlpData);
     } else {
-      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
+      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, isolatedPlpData, charset);
     }
   }
 }
