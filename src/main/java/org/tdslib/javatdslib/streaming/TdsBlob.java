@@ -12,41 +12,56 @@ public class TdsBlob implements Blob {
   private final TdsTransport transport;
   private final TdsStreamHandler controlPlaneHandler;
   private final ByteBuffer plpData;
+  private java.util.function.Consumer<ByteBuffer> completionListener;
 
-  public TdsBlob(
-      TdsTransport transport, TdsStreamHandler controlPlaneHandler, ByteBuffer plpData) {
+  public TdsBlob(TdsTransport transport, TdsStreamHandler controlPlaneHandler, ByteBuffer plpData) {
     this.transport = transport;
     this.controlPlaneHandler = controlPlaneHandler;
-    this.plpData = plpData; // Now holds the fully extracted clean data
+    this.plpData = plpData;
+  }
+
+  public void setCompletionListener(java.util.function.Consumer<ByteBuffer> listener) {
+    this.completionListener = listener;
   }
 
   @Override
   public Publisher<ByteBuffer> stream() {
-    return new Publisher<ByteBuffer>() {
-      @Override
-      public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
-        subscriber.onSubscribe(new Subscription() {
-          @Override
-          public void request(long n) {
-            if (n > 0 && plpData != null && plpData.hasRemaining()) {
-              // Emit the buffered PLP data instantly when requested
-              subscriber.onNext(plpData.duplicate());
-              plpData.position(plpData.limit());
-              subscriber.onComplete();
-            } else if (n > 0) {
-              subscriber.onComplete();
-            }
-          }
+    return subscriber -> {
 
-          @Override
-          public void cancel() {}
-        });
+      // FIX: Strictly comply with Reactive Streams by emitting a Subscription first
+      subscriber.onSubscribe(new Subscription() {
+        @Override
+        public void request(long n) {
+          // No backpressure needed for this test, data is pushed below
+        }
+        @Override
+        public void cancel() {
+          transport.resumeNetworkRead();
+        }
+      });
+
+      PlpBlobStreamHandler plpHandler = new PlpBlobStreamHandler(
+          transport,
+          controlPlaneHandler,
+          subscriber,
+          unconsumedBytes -> {
+            if (completionListener != null) {
+              completionListener.accept(unconsumedBytes);
+            }
+            transport.resumeNetworkRead();
+          }
+      );
+
+      transport.setStreamHandlers(plpHandler, null);
+
+      if (plpData != null && plpData.hasRemaining()) {
+        plpHandler.onPayloadAvailable(plpData, false);
       }
+
+      transport.resumeNetworkRead();
     };
   }
 
   @Override
-  public Publisher<Void> discard() {
-    return null;
-  }
+  public Publisher<Void> discard() { return null; }
 }

@@ -110,38 +110,29 @@ public class DataParser {
       TdsType type) {
 
     long totalLength = payload.getLong();
-    if (totalLength == -1L && payload.remaining() == 0) {
-      return null;
-    }
-    if (totalLength == 0xFFFFFFFFFFFFFFFFL) {
-      return null;
-    }
+    if (totalLength == -1L && payload.remaining() == 0) return null;
+    if (totalLength == 0xFFFFFFFFFFFFFFFFL) return null;
 
-    // FIX: Extract ONLY the PLP chunks. Do NOT steal the trailing columns!
-    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+    // 1. Capture ONLY the leftover bytes in the CURRENT network packet.
+    // Do NOT loop and steal the whole stream!
+    ByteBuffer leftover = null;
+    if (payload.hasRemaining()) {
+      leftover = ByteBuffer.allocate(payload.remaining()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+      leftover.put(payload);
+      leftover.flip();
 
-    while (payload.hasRemaining()) {
-      int chunkLength = payload.getInt();
-      if (chunkLength == 0) {
-        break; // PLP_TERMINATOR reached. Payload is now perfectly positioned at Col 3.
-      }
-
-      byte[] chunkData = new byte[chunkLength];
-      payload.get(chunkData);
-      try {
-        baos.write(chunkData);
-      } catch (Exception e) {
-        throw new RuntimeException("Failed to buffer PLP chunk", e);
-      }
+      // 2. Consume the payload buffer so the Row Parser knows we took these bytes
+      payload.position(payload.limit());
     }
 
-    ByteBuffer isolatedPlpData = ByteBuffer.wrap(baos.toByteArray());
+    // 3. Suspend network reads! The StreamHandler will open the valve when the user subscribes.
+    transport.suspendNetworkRead();
 
-    // Because the Row is parsed synchronously, we return a Blob backed by memory.
+    // 4. Return the streaming objects tied to the network
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, isolatedPlpData);
+      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, leftover);
     } else {
-      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, isolatedPlpData, charset);
+      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
     }
   }
 }

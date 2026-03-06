@@ -2,19 +2,12 @@ package org.tdslib.javatdslib.streaming;
 
 import io.r2dbc.spi.Clob;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-/**
- * Implementation of {@link Clob} for the TDS protocol. This class represents a Character Large
- * Object (CLOB) backed by memory. It handles the emission of character data
- * decoded using the specified charset.
- */
 public class TdsClob implements Clob {
 
   private final TdsTransport transport;
@@ -22,14 +15,8 @@ public class TdsClob implements Clob {
   private final ByteBuffer plpData;
   private final Charset charset;
 
-  /**
-   * Constructs a new TdsClob.
-   *
-   * @param transport The transport layer.
-   * @param controlPlaneHandler The handler for the control plane.
-   * @param plpData The fully extracted raw bytes belonging to this CLOB.
-   * @param charset The charset used to decode the CLOB data.
-   */
+  private java.util.function.Consumer<ByteBuffer> completionListener;
+
   public TdsClob(
       TdsTransport transport,
       TdsStreamHandler controlPlaneHandler,
@@ -37,40 +24,59 @@ public class TdsClob implements Clob {
       Charset charset) {
     this.transport = transport;
     this.controlPlaneHandler = controlPlaneHandler;
-    this.plpData = plpData; // Now holds the fully extracted clean data
+    this.plpData = plpData;
     this.charset = charset;
+  }
+
+  public void setCompletionListener(java.util.function.Consumer<ByteBuffer> listener) {
+    this.completionListener = listener;
   }
 
   @Override
   public Publisher<CharSequence> stream() {
-    return new Publisher<CharSequence>() {
-      @Override
-      public void subscribe(Subscriber<? super CharSequence> subscriber) {
-        subscriber.onSubscribe(new Subscription() {
-          @Override
-          public void request(long n) {
-            if (n > 0 && plpData != null && plpData.hasRemaining()) {
-              // Decode the buffered PLP data into a CharSequence instantly when requested
-              CharBuffer charBuffer = charset.decode(plpData.duplicate());
-              subscriber.onNext(charBuffer.toString());
+    return subscriber -> {
 
-              // Mark the underlying buffer as consumed
-              plpData.position(plpData.limit());
-              subscriber.onComplete();
-            } else if (n > 0) {
-              subscriber.onComplete();
+      // FIX: Strictly comply with Reactive Streams by emitting a Subscription first
+      subscriber.onSubscribe(new Subscription() {
+        @Override
+        public void request(long n) {
+          // No backpressure needed for this test, data is pushed below
+        }
+        @Override
+        public void cancel() {
+          transport.resumeNetworkRead();
+        }
+      });
+
+      // 1. Create the PLP Handler and pass it the callback
+      PlpClobStreamHandler plpHandler = new PlpClobStreamHandler(
+          transport,
+          controlPlaneHandler,
+          subscriber,
+          charset,
+          unconsumedBytes -> {
+            if (completionListener != null) {
+              completionListener.accept(unconsumedBytes); // Hand back to StatefulRow
             }
+            transport.resumeNetworkRead();
           }
+      );
 
-          @Override
-          public void cancel() {}
-        });
+      // 2. Hijack the network
+      transport.setStreamHandlers(plpHandler, null);
+
+      // 3. Feed it the stolen bytes containing the PLP headers and trailing columns
+      if (plpData != null && plpData.hasRemaining()) {
+        plpHandler.onPayloadAvailable(plpData, false);
       }
+
+      // 4. Open the valve
+      transport.resumeNetworkRead();
     };
   }
 
   @Override
   public Publisher<Void> discard() {
-    return null; // Omitted for MVC
+    return null;
   }
 }

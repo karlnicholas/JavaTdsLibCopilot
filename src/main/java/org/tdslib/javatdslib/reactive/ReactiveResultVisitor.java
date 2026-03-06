@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.r2dbc.spi.Row;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.CollationUtils;
@@ -129,12 +131,15 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
     } else if (token instanceof RawRowToken) {
       RawRowToken rawRow = (RawRowToken) token;
 
-      // FIX: Expect a List of Objects, not just byte arrays
-      List<Object> columnData = parseRowBytes(rawRow.getPayload(), currentMetaData);
+      // LAZY EMISSION: We do not loop through the columns here anymore!
+      // We wrap the buffer in a StatefulRow and emit it immediately.
+      StatefulRow row = new StatefulRow(rawRow.getPayload(), currentMetaData, transport, activeDecoder, context);
 
-      // Note: You will need to ensure SegmentTranslator.createRowSegment
-      // is updated to accept List<Object> instead of List<byte[]>
-      emit(SegmentTranslator.createRowSegment(columnData, currentMetaData, context));
+      // Emit an anonymous RowSegment
+      emit(new Result.RowSegment() {
+        @Override public Row row() { return row; }
+      });
+
     } else if (token instanceof DoneToken) {
       DoneToken done = (DoneToken) token;
       if (!this.returnValues.isEmpty()) {
@@ -145,6 +150,7 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
       }
 
       if (!done.getStatus().hasMoreResults() && !this.hasError) {
+        System.out.println(">>> VISITOR: DONE Token parsed successfully! Triggering publisher complete()!");
         complete();
       }
 
@@ -163,33 +169,5 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
         this.hasError = true;
       }
     }
-  }
-
-  // Update the parseRowBytes method:
-  private List<Object> parseRowBytes(ByteBuffer payload, ColMetaDataToken metaData) {
-    List<Object> rowData = new ArrayList<>();
-    if (metaData != null) {
-      for (ColumnMeta col : metaData.getColumns()) {
-        TdsType type = TdsType.valueOf(col.getDataType());
-
-        // --- Dynamically resolve the Charset ---
-        Charset charset = StandardCharsets.UTF_16LE; // Default for NVARCHAR and XML
-        if (type == TdsType.BIGVARCHR || type == TdsType.VARCHAR || type == TdsType.TEXT) {
-          byte[] collation = col.getTypeInfo() != null ? col.getTypeInfo().getCollation() : null;
-          charset =
-              collation != null
-                  ? CollationUtils.getCharsetFromCollation(collation)
-                      .orElse(context.getVarcharCharset())
-                  : context.getVarcharCharset();
-        }
-
-        // Pass the charset down to DataParser
-        Object data =
-            DataParser.getDataBytes(
-                payload, type, col.getMaxLength(), transport, activeDecoder, charset);
-        rowData.add(data);
-      }
-    }
-    return rowData;
   }
 }
