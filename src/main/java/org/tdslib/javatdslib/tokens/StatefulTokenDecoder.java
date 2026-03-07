@@ -84,7 +84,18 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       accumulator.flip();
 
       while (accumulator.hasRemaining()) {
-        // ... (expectingNewToken and ROW logic) ...
+        if (expectingNewToken) {
+          currentTokenType = accumulator.get();
+          expectingNewToken = false;
+        }
+
+        if (currentTokenType == TokenType.ROW.getValue()) {
+          if (!processRowToken(accumulator, isEom)) {
+            break;
+          }
+          expectingNewToken = true;
+          continue;
+        }
 
         accumulator.mark();
         TokenParser parser = registry.getParser(currentTokenType);
