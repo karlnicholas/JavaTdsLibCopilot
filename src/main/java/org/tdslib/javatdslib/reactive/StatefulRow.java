@@ -79,14 +79,18 @@ public class StatefulRow implements Row {
 
       cursorIndex++;
 
-      // --- NEW FIX: THE ESCAPE HATCH ---
-      // If we just parsed the very last column, hand the trailing bytes back to the main decoder loop!
+      // --- GUARDED ESCAPE HATCH ---
       if (cursorIndex == metaData.getColumns().size()) {
         if (payload != null && payload.hasRemaining()) {
-          ByteBuffer trailingBytes = payload.slice();
-          payload.position(payload.limit()); // Consume our buffer
-          System.out.println(">>> STATEFUL ROW: Pushing " + trailingBytes.remaining() + " trapped bytes back to the Token Decoder.");
-          decoder.onPayloadAvailable(trailingBytes, true);
+          try {
+            ByteBuffer trailingBytes = payload.slice();
+            payload.position(payload.limit());
+            decoder.onPayloadAvailable(trailingBytes, true);
+          } catch (Exception e) {
+            // Propagate up so the user's Row.get() mapping function fails,
+            // which safely cascades into the Reactive Subscriber's onError.
+            throw new IllegalStateException("Failed to parse trailing bytes after row", e);
+          }
         }
       }
     }

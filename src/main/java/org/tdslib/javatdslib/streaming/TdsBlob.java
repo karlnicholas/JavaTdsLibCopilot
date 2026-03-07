@@ -24,26 +24,22 @@ public class TdsBlob implements Blob {
     this.completionListener = listener;
   }
 
+  // Inside TdsBlob.java
   @Override
   public Publisher<ByteBuffer> stream() {
     return subscriber -> {
 
-      // FIX: Strictly comply with Reactive Streams by emitting a Subscription first
       subscriber.onSubscribe(new Subscription() {
-        @Override
-        public void request(long n) {
-          // No backpressure needed for this test, data is pushed below
-        }
-        @Override
-        public void cancel() {
-          transport.resumeNetworkRead();
-        }
+        @Override public void request(long n) {}
+        @Override public void cancel() { transport.resumeNetworkRead(); }
       });
 
-      PlpBlobStreamHandler plpHandler = new PlpBlobStreamHandler(
+      // USE THE UNIFIED HANDLER
+      PlpStreamHandler<ByteBuffer> plpHandler = new PlpStreamHandler<>(
           transport,
           controlPlaneHandler,
           subscriber,
+          ByteBuffer::wrap, // <--- Transforms byte[] to ByteBuffer
           unconsumedBytes -> {
             if (completionListener != null) {
               completionListener.accept(unconsumedBytes);

@@ -83,27 +83,17 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       accumulator.put(chunk);
       accumulator.flip();
 
-      // 3. Parse tokens (Your existing logic)
       while (accumulator.hasRemaining()) {
-        if (expectingNewToken) {
-          currentTokenType = accumulator.get();
-          expectingNewToken = false;
-        }
-
-        if (currentTokenType == TokenType.ROW.getValue()) {
-          if (!processRowToken(accumulator, isEom)) {
-            break;
-          }
-          expectingNewToken = true;
-          continue;
-        }
+        // ... (expectingNewToken and ROW logic) ...
 
         accumulator.mark();
         TokenParser parser = registry.getParser(currentTokenType);
 
         if (parser == null) {
-          expectingNewToken = true;
-          continue;
+          // Protocol Violation: Trigger the out-of-band error channel
+          String msg = String.format("Protocol Violation: Unknown TDS token type: 0x%02X", currentTokenType);
+          visitor.onError(new IllegalStateException(msg));
+          return;
         }
 
         try {
@@ -113,11 +103,14 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
         } catch (java.nio.BufferUnderflowException e) {
           accumulator.reset();
           break;
+        } catch (Exception e) {
+          // Internal Parsing Crash: Trigger the out-of-band error channel
+          logger.error("Error parsing token type 0x{:02X}", currentTokenType, e);
+          visitor.onError(e);
+          return;
         }
       }
-      // 4. Compact
       accumulator.compact();
-
     } finally {
       isParsing = false;
       // 5. If re-entrant data arrived during the loop, safely process it now

@@ -170,4 +170,10 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
       }
     }
   }
+
+  @Override
+  public void onError(Throwable t) {
+    this.hasError = true;
+    emitStreamError(t); // Terminates the Result stream immediately
+  }
 }

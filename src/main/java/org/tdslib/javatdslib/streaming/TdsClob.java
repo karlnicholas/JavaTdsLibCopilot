@@ -32,45 +32,36 @@ public class TdsClob implements Clob {
     this.completionListener = listener;
   }
 
+  // Inside TdsClob.java
   @Override
   public Publisher<CharSequence> stream() {
     return subscriber -> {
 
-      // FIX: Strictly comply with Reactive Streams by emitting a Subscription first
       subscriber.onSubscribe(new Subscription() {
-        @Override
-        public void request(long n) {
-          // No backpressure needed for this test, data is pushed below
-        }
-        @Override
-        public void cancel() {
-          transport.resumeNetworkRead();
-        }
+        @Override public void request(long n) {}
+        @Override public void cancel() { transport.resumeNetworkRead(); }
       });
 
-      // 1. Create the PLP Handler and pass it the callback
-      PlpClobStreamHandler plpHandler = new PlpClobStreamHandler(
+      // USE THE UNIFIED HANDLER
+      PlpStreamHandler<CharSequence> plpHandler = new PlpStreamHandler<>(
           transport,
           controlPlaneHandler,
           subscriber,
-          charset,
+          bytes -> new String(bytes, charset), // <--- Transforms byte[] to String using the charset
           unconsumedBytes -> {
             if (completionListener != null) {
-              completionListener.accept(unconsumedBytes); // Hand back to StatefulRow
+              completionListener.accept(unconsumedBytes);
             }
             transport.resumeNetworkRead();
           }
       );
 
-      // 2. Hijack the network
       transport.setStreamHandlers(plpHandler, null);
 
-      // 3. Feed it the stolen bytes containing the PLP headers and trailing columns
       if (plpData != null && plpData.hasRemaining()) {
         plpHandler.onPayloadAvailable(plpData, false);
       }
 
-      // 4. Open the valve
       transport.resumeNetworkRead();
     };
   }
