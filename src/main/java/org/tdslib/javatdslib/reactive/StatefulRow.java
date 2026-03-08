@@ -44,6 +44,9 @@ public class StatefulRow implements Row {
       this.payload = unconsumedBytes;
     }
     this.lobActive = false;
+
+    // NEW: If this was the last column in the row, flush the DONE token!
+    triggerEscapeHatchIfComplete();
   }
 
   @Override
@@ -69,6 +72,7 @@ public class StatefulRow implements Row {
       Object data = DataParser.getDataBytes(payload, tdsType, col.getMaxLength(), transport, decoder, charset);
       rowCache[cursorIndex] = data;
 
+      // ... (existing LOB instanceof checks)
       if (data instanceof org.tdslib.javatdslib.streaming.TdsBlob) {
         ((org.tdslib.javatdslib.streaming.TdsBlob) data).setCompletionListener(this::resumeRowParsing);
         lobActive = true;
@@ -79,20 +83,8 @@ public class StatefulRow implements Row {
 
       cursorIndex++;
 
-      // --- GUARDED ESCAPE HATCH ---
-      if (cursorIndex == metaData.getColumns().size()) {
-        if (payload != null && payload.hasRemaining()) {
-          try {
-            ByteBuffer trailingBytes = payload.slice();
-            payload.position(payload.limit());
-            decoder.onPayloadAvailable(trailingBytes, true);
-          } catch (Exception e) {
-            // Propagate up so the user's Row.get() mapping function fails,
-            // which safely cascades into the Reactive Subscriber's onError.
-            throw new IllegalStateException("Failed to parse trailing bytes after row", e);
-          }
-        }
-      }
+      // REPLACE the old guarded escape hatch block with this:
+      triggerEscapeHatchIfComplete();
     }
 
     return decodeValue(rowCache[index], index, type);
@@ -131,5 +123,19 @@ public class StatefulRow implements Row {
     }
 
     return DecoderRegistry.DEFAULT.decode((byte[]) rawData, tdsType, type, colMeta.getScale(), charset);
+  }
+  private void triggerEscapeHatchIfComplete() {
+    // Only flush bytes to the decoder if we have parsed all columns AND no LOBs are actively streaming
+    if (cursorIndex == metaData.getColumns().size() && !lobActive) {
+      if (payload != null && payload.hasRemaining()) {
+        try {
+          ByteBuffer trailingBytes = payload.slice();
+          payload.position(payload.limit());
+          decoder.onPayloadAvailable(trailingBytes, true);
+        } catch (Exception e) {
+          throw new IllegalStateException("Failed to parse trailing bytes after row", e);
+        }
+      }
+    }
   }
 }
