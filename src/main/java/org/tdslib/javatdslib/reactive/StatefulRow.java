@@ -35,9 +35,10 @@ public class StatefulRow implements Row {
   private final StatefulTokenDecoder decoder;
   private final ConnectionContext context;
 
-  private int cursorIndex = 0;
+  // Inside StatefulRow.java (Line 31-33)
+  private volatile int cursorIndex = 0; // Add volatile
   private final Object[] rowCache;
-  private boolean lobActive = false;
+  private volatile boolean lobActive = false; // Add volatile
   private boolean isDraining = false;
 
   public StatefulRow(ByteBuffer payload, ColMetaDataToken metaData, TdsTransport transport, StatefulTokenDecoder decoder, ConnectionContext context) {
