@@ -2,16 +2,13 @@ package org.tdslib.javatdslib.tokens;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-/**
- * A stateful decoder that processes raw byte chunks from the network, handles TCP fragmentation,
- * and emits complete Tokens to the visitor chain.
- */
 public class StatefulTokenDecoder implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(StatefulTokenDecoder.class);
 
@@ -20,25 +17,15 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
   private final TokenVisitor visitor;
   private final TdsTransport transport;
 
-  // FIX: Force LITTLE_ENDIAN for MS-TDS payload parsing
   private ByteBuffer accumulator = ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
 
-  // State tracking
   private boolean expectingNewToken = true;
   private byte currentTokenType = 0;
 
-  // Add these state variables to the top of StatefulTokenDecoder
-  private boolean isParsing = false;
+  // FIX: Make thread-safe since the Mapper Worker thread triggers the re-entrant calls
+  private final AtomicBoolean isParsing = new AtomicBoolean(false);
   private ByteBuffer pendingReentrantBytes = null;
 
-  /**
-   * Constructs a new StatefulTokenDecoder.
-   *
-   * @param registry The registry of token parsers.
-   * @param context The connection context.
-   * @param visitor The visitor to receive parsed tokens.
-   * @param transport The transport layer for reading data.
-   */
   public StatefulTokenDecoder(
       TokenParserRegistry registry,
       ConnectionContext context,
@@ -52,15 +39,14 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
 
   @Override
   public void onPayloadAvailable(ByteBuffer chunk, boolean isEom) {
-    // 1. Intercept re-entrant calls to protect the accumulator state
-    if (isParsing) {
+    logger.trace("[StatefulTokenDecoder] Received chunk of {} bytes. isEom: {}, isParsing: {}", chunk.remaining(), isEom, isParsing.get());
+
+    if (!isParsing.compareAndSet(false, true)) {
+      logger.trace("[StatefulTokenDecoder] Re-entrant call detected! Saving {} bytes.", chunk.remaining());
       if (pendingReentrantBytes == null) {
-        pendingReentrantBytes =
-            ByteBuffer.allocate(chunk.remaining()).order(ByteOrder.LITTLE_ENDIAN);
+        pendingReentrantBytes = ByteBuffer.allocate(chunk.remaining()).order(ByteOrder.LITTLE_ENDIAN);
       } else if (pendingReentrantBytes.remaining() < chunk.remaining()) {
-        ByteBuffer expanded =
-            ByteBuffer.allocate(pendingReentrantBytes.capacity() + chunk.remaining() + 1024)
-                .order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer expanded = ByteBuffer.allocate(pendingReentrantBytes.capacity() + chunk.remaining() + 1024).order(ByteOrder.LITTLE_ENDIAN);
         pendingReentrantBytes.flip();
         expanded.put(pendingReentrantBytes);
         pendingReentrantBytes = expanded;
@@ -69,13 +55,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       return;
     }
 
-    isParsing = true;
     try {
-      // 2. Add incoming chunk to our accumulator (Your existing logic)
       if (accumulator.remaining() < chunk.remaining()) {
-        ByteBuffer newAcc =
-            ByteBuffer.allocate(accumulator.capacity() + chunk.remaining() + 4096)
-                .order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer newAcc = ByteBuffer.allocate(accumulator.capacity() + chunk.remaining() + 4096).order(ByteOrder.LITTLE_ENDIAN);
         accumulator.flip();
         newAcc.put(accumulator);
         accumulator = newAcc;
@@ -90,18 +72,29 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
         }
 
         if (currentTokenType == TokenType.ROW.getValue()) {
-          if (!processRowToken(accumulator, isEom)) {
+          logger.trace("[StatefulTokenDecoder] Handing over to processRowToken...");
+
+          // FIX: Slice the exact remaining payload and force Little Endian
+          ByteBuffer rowPayload = accumulator.slice().order(ByteOrder.LITTLE_ENDIAN);
+
+          if (!processRowToken(rowPayload, isEom)) {
+            logger.trace("[StatefulTokenDecoder] processRowToken needed more bytes. Breaking loop.");
             break;
           }
+
+          logger.trace("[StatefulTokenDecoder] ROW token emitted. Protocol-Driven TCP Backpressure invoked.");
+          transport.suspendNetworkRead();
           expectingNewToken = true;
-          continue;
+
+          // FIX: Transfer ownership. Advance our cursor to the end so compact() clears the array.
+          accumulator.position(accumulator.limit());
+          break;
         }
 
         accumulator.mark();
         TokenParser parser = registry.getParser(currentTokenType);
 
         if (parser == null) {
-          // Protocol Violation: Trigger the out-of-band error channel
           String msg = String.format("Protocol Violation: Unknown TDS token type: 0x%02X", currentTokenType);
           visitor.onError(new IllegalStateException(msg));
           return;
@@ -115,17 +108,17 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
           accumulator.reset();
           break;
         } catch (Exception e) {
-          // Internal Parsing Crash: Trigger the out-of-band error channel
           logger.error("Error parsing token type 0x{:02X}", currentTokenType, e);
           visitor.onError(e);
           return;
         }
       }
       accumulator.compact();
+      logger.trace("[StatefulTokenDecoder] Loop finished. Accumulator compacted. Remaining bytes: {}", accumulator.position());
     } finally {
-      isParsing = false;
-      // 5. If re-entrant data arrived during the loop, safely process it now
+      isParsing.set(false);
       if (pendingReentrantBytes != null) {
+        logger.trace("[StatefulTokenDecoder] Processing {} pending re-entrant bytes after main loop.", pendingReentrantBytes.position());
         pendingReentrantBytes.flip();
         ByteBuffer toProcess = pendingReentrantBytes;
         pendingReentrantBytes = null;
@@ -142,7 +135,6 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       visitor.onToken(token);
       return true;
     } catch (java.nio.BufferUnderflowException e) {
-      // TRACING UPDATE: Expose the stack trace and buffer metrics
       logger.warn("ROW parser underflowed! Buffer pos: {}, limit: {}, remaining bytes: {}, EOM is {}",
           buffer.position(), buffer.limit(), buffer.remaining(), isEom, e);
       buffer.reset();

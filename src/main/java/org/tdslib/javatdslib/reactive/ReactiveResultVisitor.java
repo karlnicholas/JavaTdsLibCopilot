@@ -1,42 +1,31 @@
 package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.Result;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+import io.r2dbc.spi.Row;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.r2dbc.spi.Row;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
 import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.protocol.CollationUtils;
-import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
-import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.tokens.models.RawRowToken;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
-import org.tdslib.javatdslib.tokens.parsers.DataParser;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-/**
- * A reactive visitor that processes TDS tokens and translates them into R2DBC {@link
- * Result.Segment}s. This class acts as a bridge between the low-level TDS protocol and the reactive
- * R2DBC API, emitting row data, update counts, and other results as they are received from the
- * database.
- */
 public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Segment>
     implements TokenVisitor {
-
+  private static final Logger logger = LoggerFactory.getLogger(ReactiveResultVisitor.class);
   private final TdsTransport transport;
   private final ConnectionContext context;
   private final TdsMessage queryTdsMessage;
@@ -44,21 +33,12 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   private TokenVisitor visitorChain;
   private final AtomicBoolean isQuerySent = new AtomicBoolean(false);
 
-  // --- Stateful Pipeline Variables ---
   private ColMetaDataToken currentMetaData;
   private final List<ReturnValueToken> returnValues = new ArrayList<>();
   private boolean hasError = false;
 
-  // NEW: Keep a reference to the active decoder
   private StatefulTokenDecoder activeDecoder;
 
-  /**
-   * Constructs a new ReactiveResultVisitor.
-   *
-   * @param transport The TDS transport layer for sending and receiving messages.
-   * @param context The connection context, containing session-specific information.
-   * @param queryTdsMessage The initial TDS query message to be sent.
-   */
   public ReactiveResultVisitor(
       TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage) {
     this.transport = transport;
@@ -66,39 +46,44 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
     this.queryTdsMessage = queryTdsMessage;
   }
 
-  /**
-   * Sets an optional next visitor in the chain to process tokens. If set, tokens will be forwarded
-   * to this visitor instead of being processed by this class.
-   *
-   * @param visitorChain The next token visitor in the processing chain.
-   */
   public void setVisitorChain(TokenVisitor visitorChain) {
     this.visitorChain = visitorChain;
   }
 
-  /**
-   * Emits an error to the downstream subscriber.
-   *
-   * @param t The throwable to emit.
-   */
   public void emitStreamError(Throwable t) {
     super.error(t);
+  }
+
+  @Override
+  protected void onSuspend() {
+    logger.trace("[ReactiveResultVisitor] onSuspend triggered by backpressure. Telling Transport to drop OP_READ.");
+    if (transport != null) {
+      transport.suspendNetworkRead();
+    }
+  }
+
+  @Override
+  protected void onResume() {
+    logger.trace("[ReactiveResultVisitor] onResume triggered by demand. Telling Transport to restore OP_READ.");
+    if (transport != null) {
+      transport.resumeNetworkRead();
+    }
   }
 
   @Override
   protected void onRequest(long n) {
     if (isQuerySent.compareAndSet(false, true)) {
       try {
+        logger.trace("[ReactiveResultVisitor] Sending initial query to server.");
         TokenVisitor pipeline = visitorChain != null ? visitorChain : this;
 
-        // NEW: Save the instance to the class field
         this.activeDecoder =
             new StatefulTokenDecoder(
                 TokenParserRegistry.DEFAULT,
                 context,
                 pipeline,
-                transport // (Assumes StatefulTokenDecoder was updated to accept transport)
-                );
+                transport
+            );
 
         transport.setStreamHandlers(this.activeDecoder, this::errorHandler);
         transport.sendQueryMessageAsync(queryTdsMessage);
@@ -121,21 +106,18 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
 
   @Override
   public void onToken(Token token) {
-    if (isCancelled.get()) {
-      return;
-    }
+    if (isCancelled.get()) return;
 
     if (token instanceof ColMetaDataToken) {
+      logger.trace("[ReactiveResultVisitor] Received ColMetaDataToken.");
       this.currentMetaData = (ColMetaDataToken) token;
 
     } else if (token instanceof RawRowToken) {
+      logger.trace("[ReactiveResultVisitor] Received RawRowToken. Creating StatefulRow and Emitting.");
       RawRowToken rawRow = (RawRowToken) token;
 
-      // LAZY EMISSION: We do not loop through the columns here anymore!
-      // We wrap the buffer in a StatefulRow and emit it immediately.
       StatefulRow row = new StatefulRow(rawRow.getPayload(), currentMetaData, transport, activeDecoder, context);
 
-      // Emit an anonymous RowSegment
       emit(new Result.RowSegment() {
         @Override public Row row() { return row; }
       });
@@ -174,6 +156,6 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   @Override
   public void onError(Throwable t) {
     this.hasError = true;
-    emitStreamError(t); // Terminates the Result stream immediately
+    emitStreamError(t);
   }
 }

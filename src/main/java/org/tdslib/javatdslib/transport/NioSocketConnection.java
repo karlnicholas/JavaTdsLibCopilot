@@ -160,7 +160,7 @@ public class NioSocketConnection implements NetworkConnection {
       return;
     }
 
-    logger.trace("NIO: Read {} bytes from socket", read); // ADD THIS
+    logger.trace("[NioSocketConnection] NIO: Read {} bytes from socket. Buffer capacity: {}", read, readBuffer.capacity());
 
     readBuffer.flip();
     try {
@@ -172,6 +172,7 @@ public class NioSocketConnection implements NetworkConnection {
     } finally {
       // Any unconsumed bytes (e.g., partial headers or suspended streams) are preserved
       readBuffer.compact();
+      logger.trace("[NioSocketConnection] Buffer compacted. Position: {}", readBuffer.position());
     }
   }
 
@@ -207,6 +208,7 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
+      logger.trace("[NioSocketConnection] suspendRead() invoked. Removing OP_READ from selector.");
       key.interestOpsAnd(~SelectionKey.OP_READ);
       selector.wakeup(); // Force selector to recognize the change immediately
     }
@@ -219,6 +221,7 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
+      logger.trace("[NioSocketConnection] resumeRead() invoked. Adding OP_READ to selector.");
       key.interestOpsOr(SelectionKey.OP_READ);
       selector.wakeup();
     }

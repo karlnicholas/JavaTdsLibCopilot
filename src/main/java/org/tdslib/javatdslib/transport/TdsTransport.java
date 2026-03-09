@@ -228,12 +228,25 @@ public class TdsTransport implements AutoCloseable {
 
   /** Suspends reading from the network. */
   public void suspendNetworkRead() {
+    logger.trace("[TdsTransport] Propagating suspendNetworkRead() to NioSocketConnection.");
     networkConnection.suspendRead();
   }
 
   /** Resumes reading from the network. */
   public void resumeNetworkRead() {
+    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
     networkConnection.resumeRead();
+  }
+
+  /** * Dynamically hot-swaps the active receiver of network bytes.
+   * Used to route traffic directly to LOB streams bypassing the token parser.
+   */
+  public void switchStreamHandler(org.tdslib.javatdslib.transport.TdsStreamHandler newHandler) {
+    if (newHandler != null) {
+      org.slf4j.LoggerFactory.getLogger(TdsTransport.class)
+          .trace("[TdsTransport] Dynamically switching active stream handler to: {}", newHandler.getClass().getSimpleName());
+      this.currentStreamHandler = newHandler;
+    }
   }
 
   /**

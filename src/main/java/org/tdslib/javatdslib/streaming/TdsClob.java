@@ -32,42 +32,83 @@ public class TdsClob implements Clob {
     this.completionListener = listener;
   }
 
-  // Inside TdsClob.java
   @Override
   public Publisher<CharSequence> stream() {
     return subscriber -> {
+      boolean[] completed = new boolean[1];
 
-      subscriber.onSubscribe(new Subscription() {
-        @Override public void request(long n) {}
-        @Override public void cancel() { transport.resumeNetworkRead(); }
-      });
-
-      // USE THE UNIFIED HANDLER
       PlpStreamHandler<CharSequence> plpHandler = new PlpStreamHandler<>(
           transport,
           controlPlaneHandler,
           subscriber,
-          bytes -> new String(bytes, charset), // <--- Transforms byte[] to String using the charset
+          bytes -> new String(bytes, charset),
           unconsumedBytes -> {
+            completed[0] = true;
             if (completionListener != null) {
               completionListener.accept(unconsumedBytes);
             }
-            transport.resumeNetworkRead();
           }
       );
 
-      transport.setStreamHandlers(plpHandler, null);
+      transport.switchStreamHandler(plpHandler);
 
+      subscriber.onSubscribe(new Subscription() {
+        @Override public void request(long n) {}
+        @Override public void cancel() {
+          transport.switchStreamHandler(controlPlaneHandler);
+          transport.resumeNetworkRead();
+        }
+      });
+
+      // Synchronously process memory BEFORE evaluating starvation
       if (plpData != null && plpData.hasRemaining()) {
         plpHandler.onPayloadAvailable(plpData, false);
       }
 
-      transport.resumeNetworkRead();
+      // ONLY WAKE NETWORK IF LOB IS STARVING
+      if (!completed[0]) {
+        transport.resumeNetworkRead();
+      }
     };
   }
 
   @Override
   public Publisher<Void> discard() {
-    return null;
+    return subscriber -> {
+      boolean[] completed = new boolean[1];
+
+      PlpStreamHandler<CharSequence> plpHandler = new PlpStreamHandler<>(
+          transport,
+          controlPlaneHandler,
+          new org.reactivestreams.Subscriber<CharSequence>() {
+            @Override public void onSubscribe(Subscription s) {}
+            @Override public void onNext(CharSequence charSequence) {}
+            @Override public void onError(Throwable t) { subscriber.onError(t); }
+            @Override public void onComplete() { subscriber.onComplete(); }
+          },
+          bytes -> "",
+          unconsumedBytes -> {
+            completed[0] = true;
+            if (completionListener != null) {
+              completionListener.accept(unconsumedBytes);
+            }
+          }
+      );
+
+      transport.switchStreamHandler(plpHandler);
+
+      subscriber.onSubscribe(new Subscription() {
+        @Override public void request(long n) {}
+        @Override public void cancel() {}
+      });
+
+      if (plpData != null && plpData.hasRemaining()) {
+        plpHandler.onPayloadAvailable(plpData, false);
+      }
+
+      if (!completed[0]) {
+        transport.resumeNetworkRead();
+      }
+    };
   }
 }

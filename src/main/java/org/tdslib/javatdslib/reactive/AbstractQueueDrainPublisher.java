@@ -8,12 +8,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * A reusable Reactive Streams Publisher that manages backpressure using an unbounded concurrent
- * queue and a standard drain loop.
- */
 public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Subscription {
+  private static final Logger logger = LoggerFactory.getLogger(AbstractQueueDrainPublisher.class);
 
   protected Subscriber<? super T> subscriber;
   private final Queue<T> buffer = new ConcurrentLinkedQueue<>();
@@ -26,6 +25,7 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
 
   @Override
   public void subscribe(Subscriber<? super T> subscriber) {
+    logger.trace("[AbstractQueueDrain] Downstream subscribed: {}", subscriber.getClass().getSimpleName());
     this.subscriber = subscriber;
     subscriber.onSubscribe(this);
   }
@@ -37,7 +37,6 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
       return;
     }
 
-    // Add demand safely avoiding overflow
     long current;
     long next;
     do {
@@ -48,66 +47,66 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
       }
     } while (!demand.compareAndSet(current, next));
 
-    // Optional hook for subclasses to trigger work when demand arrives
-    onRequest(n);
+    logger.trace("[AbstractQueueDrain] Downstream requested {}. Demand went from {} to {}", n, current, next);
 
+    if (current == 0 && n > 0) {
+      logger.trace("[AbstractQueueDrain] Demand was 0. Triggering onResume() to wake up network layer.");
+      onResume();
+    }
+
+    onRequest(n);
     drain();
   }
 
   @Override
   public void cancel() {
+    logger.trace("[AbstractQueueDrain] Cancelled by downstream.");
     if (isCancelled.compareAndSet(false, true)) {
       buffer.clear();
-      onCancel(); // Hook for subclasses to cancel upstream work
+      onCancel();
     }
   }
 
-  /** Called to push a new item into the queue and trigger a drain. */
   protected void emit(T item) {
     if (isCancelled.get() || upstreamDone.get()) {
+      logger.trace("[AbstractQueueDrain] Ignoring emit() because stream is cancelled or done.");
       return;
     }
+    logger.trace("[AbstractQueueDrain] Emitting item to internal buffer queue.");
     buffer.offer(item);
     drain();
   }
 
-  /** Called to signal that no more items will be emitted. */
   protected void complete() {
+    logger.trace("[AbstractQueueDrain] Upstream complete signal received.");
     if (upstreamDone.compareAndSet(false, true)) {
       drain();
     }
   }
 
-  /** Called to signal a terminal error. */
   protected void error(Throwable t) {
+    logger.trace("[AbstractQueueDrain] Upstream error signal received: {}", t.getMessage());
     if (upstreamDone.compareAndSet(false, true)) {
       this.terminalError = t;
       drain();
     }
   }
 
-  /**
-   * Subclasses can override this to initiate network requests on the first downstream demand.
-   */
   protected void onRequest(long n) {}
-
-  /**
-   * Subclasses can override this to clean up network resources when the downstream cancels.
-   */
   protected void onCancel() {}
+  protected void onResume() {}
+  protected void onSuspend() {}
 
   private void drain() {
-    if (subscriber == null) {
-      return;
-    }
-    if (wip.getAndIncrement() != 0) {
-      return;
-    }
+    if (subscriber == null) return;
+    if (wip.getAndIncrement() != 0) return;
 
     int missed = 1;
     do {
       long requested = demand.get();
       long emitted = 0;
+
+      logger.trace("[AbstractQueueDrain] Drain loop started. Requested: {}, Queue size: {}", requested, buffer.size());
 
       while (emitted != requested) {
         if (isCancelled.get()) {
@@ -119,25 +118,19 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
         T item = buffer.poll();
         boolean empty = (item == null);
 
-        // Check for terminal states
         if (done && empty) {
-          if (terminalError != null) {
-            subscriber.onError(terminalError);
-          } else {
-            subscriber.onComplete();
-          }
+          if (terminalError != null) subscriber.onError(terminalError);
+          else subscriber.onComplete();
           return;
         }
 
-        if (empty) {
-          break;
-        }
+        if (empty) break;
 
+        logger.trace("[AbstractQueueDrain] Pushing item to downstream subscriber.onNext().");
         subscriber.onNext(item);
         emitted++;
       }
 
-      // Check terminal states when demand is fully met
       if (emitted == requested) {
         if (isCancelled.get()) {
           buffer.clear();
@@ -145,17 +138,20 @@ public abstract class AbstractQueueDrainPublisher<T> implements Publisher<T>, Su
         }
         boolean done = upstreamDone.get();
         if (done && buffer.isEmpty()) {
-          if (terminalError != null) {
-            subscriber.onError(terminalError);
-          } else {
-            subscriber.onComplete();
-          }
+          if (terminalError != null) subscriber.onError(terminalError);
+          else subscriber.onComplete();
           return;
         }
       }
 
       if (emitted != 0 && requested != Long.MAX_VALUE) {
-        demand.addAndGet(-emitted);
+        long remaining = demand.addAndGet(-emitted);
+        logger.trace("[AbstractQueueDrain] Drain loop emitted {} items. Remaining demand: {}", emitted, remaining);
+
+        if (remaining == 0 && !upstreamDone.get()) {
+          logger.trace("[AbstractQueueDrain] Demand exhausted (0). Triggering onSuspend() to halt network layer.");
+          onSuspend();
+        }
       }
 
       missed = wip.addAndGet(-missed);

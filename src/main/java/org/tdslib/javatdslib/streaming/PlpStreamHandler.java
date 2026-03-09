@@ -4,15 +4,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.function.Function;
 import org.reactivestreams.Subscriber;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-/**
- * A generic stream handler for processing Partially Length-Prefixed (PLP) data.
- * This handles the TDS chunking state machine and delegates the data transformation
- * (e.g., to String or ByteBuffer) to the provided transformer function.
- */
 public class PlpStreamHandler<T> implements TdsStreamHandler {
+  private static final Logger logger = LoggerFactory.getLogger(PlpStreamHandler.class);
   private final TdsTransport transport;
   private final TdsStreamHandler controlPlaneHandler;
   private final Subscriber<? super T> subscriber;
@@ -21,7 +19,6 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
 
   private int pendingChunkBytes = 0;
   private boolean expectingChunkLength = true;
-  private final ByteBuffer lengthBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
 
   public PlpStreamHandler(
       TdsTransport transport,
@@ -37,32 +34,37 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
   }
 
   @Override
-  public void onPayloadAvailable(ByteBuffer payload, boolean isEom) {
+  public synchronized void onPayloadAvailable(ByteBuffer payload, boolean isEom) {
     try {
       while (payload.hasRemaining()) {
         if (expectingChunkLength) {
-          while (payload.hasRemaining() && lengthBuffer.hasRemaining()) {
-            lengthBuffer.put(payload.get());
-          }
-          if (lengthBuffer.hasRemaining()) return;
+          byte[] lenBytes = new byte[4];
+          payload.get(lenBytes);
+          pendingChunkBytes = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
 
-          lengthBuffer.flip();
-          pendingChunkBytes = lengthBuffer.getInt();
-          lengthBuffer.clear();
-
-          // Basic Protocol Validation to prevent client hangs
           if (pendingChunkBytes < 0) {
             throw new IllegalStateException("Invalid PLP chunk length: " + pendingChunkBytes);
           }
 
           if (pendingChunkBytes == 0) { // PLP Terminator
-            subscriber.onComplete();
-            transport.setStreamHandlers(controlPlaneHandler, null);
+            logger.trace("[PlpStreamHandler] Terminator reached. Releasing router control before signaling downstream.");
+
+            // 1. CLEANUP INTERNAL STATE FIRST
             if (onCompleteCallback != null) {
-              onCompleteCallback.accept(payload.slice());
-            } else if (payload.hasRemaining()) {
-              controlPlaneHandler.onPayloadAvailable(payload, isEom);
+              ByteBuffer remainingBytes = payload.slice();
+
+              // CRITICAL FIX: Advance the parent buffer's position to its limit.
+              // This tells the NioSocketConnection that we have completely taken ownership
+              // of the remaining packet bytes, preventing them from being double-fed
+              // on the next Event Loop cycle.
+              payload.position(payload.limit());
+
+              onCompleteCallback.accept(remainingBytes);
             }
+
+            // 2. NOW SIGNAL THE CLIENT
+            subscriber.onComplete();
+
             return;
           }
           expectingChunkLength = false;
@@ -74,7 +76,6 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
           payload.get(chunkData);
           pendingChunkBytes -= bytesToRead;
 
-          // Transform raw bytes to ByteBuffer or CharSequence and emit
           subscriber.onNext(dataTransformer.apply(chunkData));
 
           if (pendingChunkBytes == 0) {
@@ -83,11 +84,10 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
         }
       }
     } catch (Exception e) {
-      // Signal error to the LOB consumer
+      logger.error("[PlpStreamHandler] Fatal error during LOB parsing", e);
+      // Ensure router is safely reverted on error
+      transport.switchStreamHandler(controlPlaneHandler);
       subscriber.onError(e);
-      // Restore the control plane so main decoder can attempt recovery
-      transport.setStreamHandlers(controlPlaneHandler, null);
-      // Open the network valve so the socket doesn't permanently hang
       transport.resumeNetworkRead();
     }
   }
