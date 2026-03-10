@@ -192,13 +192,47 @@ public class StatefulRow implements Row {
     return DecoderRegistry.DEFAULT.decode((byte[]) rawData, tdsType, type, colMeta.getScale(), charset);
   }
 
+//  private void triggerEscapeHatchIfComplete() {
+//    if (cursorIndex == metaData.getColumns().size() && !lobActive) {
+//      if (payload != null && payload.hasRemaining()) {
+//        logger.trace("[StatefulRow] Escaping {} trailing bytes back to StatefulTokenDecoder.", payload.remaining());
+//        try {
+//          ByteBuffer trailingBytes = payload.slice().order(ByteOrder.LITTLE_ENDIAN);
+//          payload.position(payload.limit());
+//          decoder.onPayloadAvailable(trailingBytes, true);
+//        } catch (Exception e) {
+//          throw new IllegalStateException("Failed to parse trailing bytes after row", e);
+//        }
+//      }
+//      logger.trace("[StatefulRow] Row fully parsed. Turning EventLoop back on.");
+//      transport.resumeNetworkRead();
+//    }
+//  }
+
   private void triggerEscapeHatchIfComplete() {
     if (cursorIndex == metaData.getColumns().size() && !lobActive) {
       if (payload != null && payload.hasRemaining()) {
-        logger.trace("[StatefulRow] Escaping {} trailing bytes back to StatefulTokenDecoder.", payload.remaining());
+
+        // --- VERIFICATION LOG START ---
+        byte firstTrailingByte = payload.get(payload.position());
+        logger.trace("[StatefulRow] Escaping {} trailing bytes. First byte: 0x{}",
+            payload.remaining(),
+            Integer.toHexString(firstTrailingByte & 0xFF).toUpperCase());
+
+        if ((firstTrailingByte & 0xFF) == 0xD1) { // 0xD1 is TokenType.ROW
+          logger.warn("[StatefulRow] CRITICAL: Escape Hatch is about to 'steal' the next ROW token! " +
+              "This will cause protocol desynchronization.");
+        }
+        // --- VERIFICATION LOG END ---
+
         try {
           ByteBuffer trailingBytes = payload.slice().order(ByteOrder.LITTLE_ENDIAN);
           payload.position(payload.limit());
+
+          // ARCHITECTURAL NOTE: In multi-row scenarios, calling onPayloadAvailable here
+          // triggers a recursive parse on the EventLoop thread. If this trailing data
+          // contains the NEXT row, it will be emitted to the worker queue before the
+          // current worker has even finished, leading to buffer misalignment.
           decoder.onPayloadAvailable(trailingBytes, true);
         } catch (Exception e) {
           throw new IllegalStateException("Failed to parse trailing bytes after row", e);
