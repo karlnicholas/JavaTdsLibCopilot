@@ -12,12 +12,11 @@ import org.tdslib.javatdslib.internal.TdsUpdateCount;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Consumes a flat stream of Result.Segment and splits it into a stream of Result objects.
+ * Consumes a flat stream of Result.Segment and sequences it into discrete Result objects.
  * A new Result is emitted for each new statement execution, typically bounded by a TdsUpdateCount.
  */
-public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
-    implements Subscriber<Result.Segment> {
-  private static final Logger logger = LoggerFactory.getLogger(BatchResultSplitter.class);
+public class TdsResultBatchSequencer extends SerializedQueueDrainer<Result> implements Subscriber<Result.Segment> {
+  private static final Logger logger = LoggerFactory.getLogger(TdsResultBatchSequencer.class);
 
   private final Publisher<Result.Segment> source;
   private Subscription upstreamSubscription;
@@ -25,23 +24,15 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
   // Holds the currently active Result that is accepting segments
   private final AtomicReference<SegmentProcessor> currentResultProcessor = new AtomicReference<>();
 
-  /**
-   * Creates a new BatchResultSplitter.
-   *
-   * @param source the upstream publisher of Result.Segment
-   */
-  public BatchResultSplitter(Publisher<Result.Segment> source) {
+  public TdsResultBatchSequencer(Publisher<Result.Segment> source) {
     this.source = source;
   }
 
   @Override
   protected void onRequest(long n) {
-    // Triggered when the downstream subscriber requests the next Result object.
     if (upstreamSubscription == null) {
       source.subscribe(this);
     } else {
-      // If we are between results, request 1 segment from upstream
-      // to trigger the creation of the next Result.
       if (currentResultProcessor.get() == null) {
         upstreamSubscription.request(1);
       }
@@ -55,22 +46,19 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
     }
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
-      current.cancel(); // Cancel the inner publisher
+      current.cancel();
     }
   }
 
   @Override
   public void onSubscribe(Subscription s) {
     this.upstreamSubscription = s;
-    // Kickstart the flow by requesting the very first segment, which will create the first Result
     s.request(1);
   }
 
   @Override
   public void onNext(Result.Segment segment) {
-    if (isCancelled.get()) {
-      return;
-    }
+    if (isCancelled()) return;
 
     SegmentProcessor processor = currentResultProcessor.get();
 
@@ -79,11 +67,10 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
       processor = new SegmentProcessor();
       currentResultProcessor.set(processor);
 
-      // Emit the new Result to the outer Result subscriber using the base class method
-      emit(new TdsResult(processor));
+      // Pass the processor directly to TdsResult (since it IS a SerializedQueueDrainer)
+      offer(new TdsResult(processor));
     }
 
-    // Push the segment to the inner Result's subscriber
     processor.pushNext(segment);
 
     // Determine if this segment marks the end of the current Result
@@ -95,45 +82,38 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
 
   @Override
   public void onError(Throwable t) {
-    if (isCancelled.get()) {
-      return;
-    }
+    if (isCancelled()) return;
+
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
       current.pushError(t);
     }
-    error(t); // Fail outer publisher
+    error(t);
   }
 
   @Override
   public void onComplete() {
-    if (isCancelled.get()) {
-      return;
-    }
+    if (isCancelled()) return;
+
     SegmentProcessor current = currentResultProcessor.getAndSet(null);
     if (current != null) {
       current.pushComplete();
     }
-    complete(); // Complete outer publisher
+    complete();
   }
 
-  /**
-   * Determines if the segment indicates the end of a result set.
-   */
   private boolean isBoundarySegment(Result.Segment segment) {
     return segment instanceof TdsUpdateCount || segment instanceof Result.OutSegment;
   }
 
   /**
-   * Inner publisher that routes segments to the specific Result's subscriber.
-   * Extends the base class to handle downstream segment demand securely.
+   * Inner processor that routes segments to the specific Result's drainer.
+   * Leverages inheritance from the base drainer to handle downstream segment demand securely.
    */
-  public class SegmentProcessor extends AbstractQueueDrainPublisher<Result.Segment> {
+  public class SegmentProcessor extends SerializedQueueDrainer<Result.Segment> {
 
     @Override
     protected void onRequest(long n) {
-      // When the downstream subscriber for *this specific Result* requests segments,
-      // we pass that demand upstream to the original network stream.
       if (upstreamSubscription != null) {
         upstreamSubscription.request(n);
       }
@@ -141,13 +121,11 @@ public class BatchResultSplitter extends AbstractQueueDrainPublisher<Result>
 
     @Override
     protected void onCancel() {
-      // If the downstream subscriber cancels this specific Result,
-      // we detach it, but we do not cancel the whole network stream.
-      BatchResultSplitter.this.currentResultProcessor.compareAndSet(this, null);
+      TdsResultBatchSequencer.this.currentResultProcessor.compareAndSet(this, null);
     }
 
     void pushNext(Result.Segment segment) {
-      emit(segment);
+      offer(segment);
     }
 
     void pushError(Throwable t) {

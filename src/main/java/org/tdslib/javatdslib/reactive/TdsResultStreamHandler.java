@@ -2,10 +2,6 @@ package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
@@ -23,9 +19,12 @@ import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
-public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Segment>
-    implements TokenVisitor {
-  private static final Logger logger = LoggerFactory.getLogger(ReactiveResultVisitor.class);
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class TdsResultStreamHandler extends SerializedQueueDrainer<Result.Segment> implements TokenVisitor {
+  private static final Logger logger = LoggerFactory.getLogger(TdsResultStreamHandler.class);
   private final TdsTransport transport;
   private final ConnectionContext context;
   private final TdsMessage queryTdsMessage;
@@ -39,7 +38,7 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
 
   private StatefulTokenDecoder activeDecoder;
 
-  public ReactiveResultVisitor(
+  public TdsResultStreamHandler(
       TdsTransport transport, ConnectionContext context, TdsMessage queryTdsMessage) {
     this.transport = transport;
     this.context = context;
@@ -50,21 +49,17 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
     this.visitorChain = visitorChain;
   }
 
-  public void emitStreamError(Throwable t) {
-    super.error(t);
-  }
-
   @Override
-  protected void onSuspend() {
-    logger.trace("[ReactiveResultVisitor] onSuspend triggered by backpressure. Telling Transport to drop OP_READ.");
+  protected void onSourceOverrun() {
+    logger.trace("[TdsResultStreamHandler] onSourceOverrun triggered by backpressure. Telling Transport to drop OP_READ.");
     if (transport != null) {
       transport.suspendNetworkRead();
     }
   }
 
   @Override
-  protected void onResume() {
-    logger.trace("[ReactiveResultVisitor] onResume triggered by demand. Telling Transport to restore OP_READ.");
+  protected void onSourceStarved() {
+    logger.trace("[TdsResultStreamHandler] onSourceStarved triggered by demand. Telling Transport to restore OP_READ.");
     if (transport != null) {
       transport.resumeNetworkRead();
     }
@@ -74,18 +69,18 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   protected void onRequest(long n) {
     if (isQuerySent.compareAndSet(false, true)) {
       try {
-        logger.trace("[ReactiveResultVisitor] Sending initial query to server.");
+        logger.trace("[TdsResultStreamHandler] Sending initial query to server.");
         TokenVisitor pipeline = visitorChain != null ? visitorChain : this;
 
-        this.activeDecoder =
-            new StatefulTokenDecoder(
-                TokenParserRegistry.DEFAULT,
-                context,
-                pipeline,
-                transport
-            );
+        activeDecoder = new StatefulTokenDecoder(
+            TokenParserRegistry.DEFAULT,
+            context,
+            transport,
+            null,
+            null
+        );
 
-        transport.setStreamHandlers(this.activeDecoder, this::errorHandler);
+        transport.setStreamHandlers(activeDecoder, this::errorHandler);
         transport.sendQueryMessageAsync(queryTdsMessage);
       } catch (Exception e) {
         error(e);
@@ -95,44 +90,46 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
 
   @Override
   protected void onCancel() {
-    transport.cancelCurrent();
+    if (transport != null) {
+      transport.cancelCurrent();
+    }
   }
 
   private void errorHandler(Throwable t) {
-    if (!isCancelled.get()) {
+    if (!isCancelled()) {
       error(t);
     }
   }
 
   @Override
   public void onToken(Token token) {
-    if (isCancelled.get()) return;
+    if (isCancelled()) return;
 
     if (token instanceof ColMetaDataToken) {
-      logger.trace("[ReactiveResultVisitor] Received ColMetaDataToken.");
+      logger.trace("[TdsResultStreamHandler] Received ColMetaDataToken.");
       this.currentMetaData = (ColMetaDataToken) token;
 
     } else if (token instanceof RawRowToken) {
-      logger.trace("[ReactiveResultVisitor] Received RawRowToken. Creating StatefulRow and Emitting.");
+      logger.trace("[TdsResultStreamHandler] Received RawRowToken. Creating StatefulRow and Emitting.");
       RawRowToken rawRow = (RawRowToken) token;
 
       StatefulRow row = new StatefulRow(rawRow.getPayload(), currentMetaData, transport, activeDecoder, context);
 
-      emit(new Result.RowSegment() {
+      offer(new Result.RowSegment() {
         @Override public Row row() { return row; }
       });
 
     } else if (token instanceof DoneToken) {
       DoneToken done = (DoneToken) token;
       if (!this.returnValues.isEmpty()) {
-        emit(SegmentTranslator.createOutSegment(this.returnValues, context));
+        offer(SegmentTranslator.createOutSegment(this.returnValues, context));
         this.returnValues.clear();
       } else if (done.getStatus().hasCount()) {
-        emit(new TdsUpdateCount(done.getCount()));
+        offer(new TdsUpdateCount(done.getCount()));
       }
 
       if (!done.getStatus().hasMoreResults() && !this.hasError) {
-        System.out.println(">>> VISITOR: DONE Token parsed successfully! Triggering publisher complete()!");
+        logger.trace(">>> VISITOR: DONE Token parsed successfully! Triggering complete()!");
         complete();
       }
 
@@ -156,6 +153,6 @@ public class ReactiveResultVisitor extends AbstractQueueDrainPublisher<Result.Se
   @Override
   public void onError(Throwable t) {
     this.hasError = true;
-    emitStreamError(t);
+    error(t);
   }
 }

@@ -8,7 +8,7 @@ import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
+import org.tdslib.javatdslib.reactive.TdsResultStreamHandler;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 
@@ -81,7 +81,7 @@ public class TdsBatch implements Batch {
                   // FIX: Removed TokenDispatcher, just pass transport, context, and message
                   subscriber.onNext(
                       new TdsResult(
-                          new ReactiveResultVisitor(transport, context, message)));
+                          new TdsResultStreamHandler(transport, context, message)));
                   subscriber.onComplete();
                 } catch (Exception e) {
                   subscriber.onError(e);

@@ -96,4 +96,22 @@ public enum TokenType {
       }
     }
   }
+// ... existing enum definitions ...
+
+  /**
+   * Returns the exact byte length of the token's payload if it is strictly fixed,
+   * or -1 if the token has a variable length.
+   */
+  public int getFixedPayloadLength() {
+    switch (this) {
+      case DONE:
+      case DONE_PROC:
+      case DONE_IN_PROC:
+        return 12; // 2 bytes status + 2 bytes curCmd + 8 bytes rowCount
+      case RETURN_STATUS:
+        return 4;  // 4 byte integer status
+      default:
+        return -1; // Variable length (Requires reading length prefix or metadata)
+    }
+  }
 }

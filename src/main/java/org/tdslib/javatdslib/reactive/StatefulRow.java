@@ -52,12 +52,12 @@ public class StatefulRow implements Row {
 
   public void drain() {
     if (lobActive) {
-      logger.warn("[StatefulRow] Cannot synchronously drain row. A user LOB stream was abandoned while active.");
+      logger.warn("Cannot synchronously drain row. A user LOB stream was abandoned while active.");
       return;
     }
 
     isDraining = true;
-    logger.trace("[StatefulRow] Auto-Drain initiated. Fast-forwarding cursor from index {}", cursorIndex);
+    logger.trace("Auto-Drain initiated. Fast-forwarding cursor from index {}", cursorIndex);
 
     while (cursorIndex < metaData.getColumns().size()) {
       ColumnMeta col = metaData.getColumns().get(cursorIndex);
@@ -90,7 +90,7 @@ public class StatefulRow implements Row {
   }
 
   public void resumeRowParsing(ByteBuffer unconsumedBytes) {
-    logger.trace("[StatefulRow] LOB finished. Switching stream handler back to StatefulTokenDecoder.");
+    logger.trace("LOB finished. Switching stream handler back to StatefulTokenDecoder.");
     transport.switchStreamHandler(decoder);
 
     if (unconsumedBytes != null && unconsumedBytes.hasRemaining()) {
@@ -99,7 +99,7 @@ public class StatefulRow implements Row {
     this.lobActive = false;
 
     if (isDraining) {
-      logger.trace("[StatefulRow] LOB discard complete. Resuming Auto-Drain loop.");
+      logger.trace("LOB discard complete. Resuming Auto-Drain loop.");
       drain();
     } else {
       triggerEscapeHatchIfComplete();
@@ -118,7 +118,7 @@ public class StatefulRow implements Row {
 
     while (cursorIndex <= index) {
       ColumnMeta col = metaData.getColumns().get(cursorIndex);
-      logger.trace("[StatefulRow] Decoding column {} ({})", cursorIndex, col.getName());
+      logger.trace("Decoding column {} ({})", cursorIndex, col.getName());
       TdsType tdsType = TdsType.valueOf(col.getDataType());
 
       Charset charset = java.nio.charset.StandardCharsets.UTF_16LE;
@@ -130,7 +130,7 @@ public class StatefulRow implements Row {
       Object data = DataParser.getDataBytes(payload, tdsType, col.getMaxLength(), transport, decoder, charset);
 
       if (data instanceof TdsBlob tdsBlob) {
-        logger.trace("[StatefulRow] Column {} is a BLOB. Wrapping with proxy hook.", cursorIndex);
+        logger.trace("Column {} is a BLOB. Wrapping with proxy hook.", cursorIndex);
         tdsBlob.setCompletionListener(this::resumeRowParsing);
         lobActive = true;
         rowCache[cursorIndex] = new io.r2dbc.spi.Blob() {
@@ -138,7 +138,7 @@ public class StatefulRow implements Row {
           @Override public Publisher<Void> discard() { return createDiscardPublisher(tdsBlob::discard); }
         };
       } else if (data instanceof TdsClob tdsClob) {
-        logger.trace("[StatefulRow] Column {} is a CLOB. Wrapping with proxy hook.", cursorIndex);
+        logger.trace("Column {} is a CLOB. Wrapping with proxy hook.", cursorIndex);
         tdsClob.setCompletionListener(this::resumeRowParsing);
         lobActive = true;
         rowCache[cursorIndex] = new io.r2dbc.spi.Clob() {
@@ -146,7 +146,7 @@ public class StatefulRow implements Row {
           @Override public Publisher<Void> discard() { return createDiscardPublisher(tdsClob::discard); }
         };
       } else {
-        logger.trace("[StatefulRow] Column {} cached as standard value.", cursorIndex);
+        logger.trace("Column {} cached as standard value.", cursorIndex);
         rowCache[cursorIndex] = data;
       }
 
@@ -192,54 +192,36 @@ public class StatefulRow implements Row {
     return DecoderRegistry.DEFAULT.decode((byte[]) rawData, tdsType, type, colMeta.getScale(), charset);
   }
 
-//  private void triggerEscapeHatchIfComplete() {
-//    if (cursorIndex == metaData.getColumns().size() && !lobActive) {
-//      if (payload != null && payload.hasRemaining()) {
-//        logger.trace("[StatefulRow] Escaping {} trailing bytes back to StatefulTokenDecoder.", payload.remaining());
-//        try {
-//          ByteBuffer trailingBytes = payload.slice().order(ByteOrder.LITTLE_ENDIAN);
-//          payload.position(payload.limit());
-//          decoder.onPayloadAvailable(trailingBytes, true);
-//        } catch (Exception e) {
-//          throw new IllegalStateException("Failed to parse trailing bytes after row", e);
-//        }
-//      }
-//      logger.trace("[StatefulRow] Row fully parsed. Turning EventLoop back on.");
-//      transport.resumeNetworkRead();
-//    }
-//  }
-
   private void triggerEscapeHatchIfComplete() {
     if (cursorIndex == metaData.getColumns().size() && !lobActive) {
       if (payload != null && payload.hasRemaining()) {
 
-        // --- VERIFICATION LOG START ---
+        // --- VERIFICATION LOG ---
         byte firstTrailingByte = payload.get(payload.position());
-        logger.trace("[StatefulRow] Escaping {} trailing bytes. First byte: 0x{}",
+        logger.trace("Escaping {} trailing bytes. First byte: 0x{}",
             payload.remaining(),
             Integer.toHexString(firstTrailingByte & 0xFF).toUpperCase());
 
-        if ((firstTrailingByte & 0xFF) == 0xD1) { // 0xD1 is TokenType.ROW
-          logger.warn("[StatefulRow] CRITICAL: Escape Hatch is about to 'steal' the next ROW token! " +
-              "This will cause protocol desynchronization.");
-        }
-        // --- VERIFICATION LOG END ---
+        ByteBuffer trailingBytes = payload.slice().order(ByteOrder.LITTLE_ENDIAN);
+        payload.position(payload.limit());
 
+        // --- ARCHITECTURAL FIX: Order of Operations ---
+        // 1. Resume the network FIRST so the socket is open.
+        transport.resumeNetworkRead();
+
+        // 2. Feed trailing bytes to the decoder.
+        // If these bytes contain the NEXT ROW token, the decoder will parse it
+        // and instantly call suspendNetworkRead(). Because suspension happens LAST,
+        // it safely locks the EventLoop, preventing overruns.
         try {
-          ByteBuffer trailingBytes = payload.slice().order(ByteOrder.LITTLE_ENDIAN);
-          payload.position(payload.limit());
-
-          // ARCHITECTURAL NOTE: In multi-row scenarios, calling onPayloadAvailable here
-          // triggers a recursive parse on the EventLoop thread. If this trailing data
-          // contains the NEXT row, it will be emitted to the worker queue before the
-          // current worker has even finished, leading to buffer misalignment.
           decoder.onPayloadAvailable(trailingBytes, true);
         } catch (Exception e) {
           throw new IllegalStateException("Failed to parse trailing bytes after row", e);
         }
+      } else {
+        logger.trace("Row fully parsed. No trailing bytes.");
+        transport.resumeNetworkRead();
       }
-      logger.trace("[StatefulRow] Row fully parsed. Turning EventLoop back on.");
-      transport.resumeNetworkRead();
     }
   }
 
@@ -250,7 +232,7 @@ public class StatefulRow implements Row {
         subscriber.onSubscribe(new Subscription() {
           @Override
           public void request(long n) {
-            logger.trace("[StatefulRow:LOB-Wrapper] Client requested {}. Propagating to LOB without unconditional network wakeup.", n);
+            logger.trace("Client requested {}. Propagating to LOB without unconditional network wakeup.", n);
             s.request(n);
           }
           @Override
@@ -273,7 +255,7 @@ public class StatefulRow implements Row {
         if (n > 0 && !executed) {
           executed = true;
           try {
-            logger.trace("[StatefulRow:LOB-Discard] Client manually discarding LOB.");
+            logger.trace("Client manually discarding LOB.");
             discardAction.run();
             subscriber.onComplete();
           } catch (Exception e) {

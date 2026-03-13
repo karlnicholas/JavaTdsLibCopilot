@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
@@ -22,10 +21,11 @@ import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
-import org.tdslib.javatdslib.reactive.BatchResultSplitter;
+import org.tdslib.javatdslib.reactive.DataSink;
 import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
 import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
-import org.tdslib.javatdslib.reactive.ReactiveResultVisitor;
+import org.tdslib.javatdslib.reactive.TdsResultBatchSequencer;
+import org.tdslib.javatdslib.reactive.TdsResultStreamHandler;
 import org.tdslib.javatdslib.tokens.visitors.CompositeTokenVisitor;
 import org.tdslib.javatdslib.tokens.visitors.EnvChangeVisitor;
 import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
@@ -132,71 +132,88 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    return new Publisher<Result>() {
-      @Override
-      public void subscribe(Subscriber<? super Result> subscriber) {
-        try {
-          TdsMessage message;
-          if (isSimpleBatch) {
-            message = createSqlBatchMessage(query);
-          } else {
-            message = createRpcMessage(query, executions);
-          }
-
-          ReactiveResultVisitor segmentVisitor =
-              new ReactiveResultVisitor(transport, context, message); // Updated
-
-          CompositeTokenVisitor pipeline =
-              new CompositeTokenVisitor(
-                  new EnvChangeVisitor(context),
-                  new MessageVisitor(segmentVisitor::emitStreamError),
-                  segmentVisitor);
-
-          segmentVisitor.setVisitorChain(pipeline);
-
-          BatchResultSplitter resultPublisher = new BatchResultSplitter(segmentVisitor);
-
-          // --- THE FIX: Intercept and Translate the Error ---
-          resultPublisher.subscribe(
-              new Subscriber<Result>() {
-                @Override
-                public void onSubscribe(Subscription s) {
-                  subscriber.onSubscribe(s);
-                }
-
-                @Override
-                public void onNext(Result result) {
-                  subscriber.onNext(result);
-                }
-
-                @Override
-                public void onError(Throwable t) {
-                  // Translate internal TDS errors to R2DBC SPI errors at the boundary
-                  if (t instanceof TdsServerErrorException tdsError) {
-                    subscriber.onError(R2dbcErrorTranslator.translateException(tdsError));
-                  } else {
-                    subscriber.onError(t); // Pass through non-database errors (like IOExceptions)
-                  }
-                }
-
-                @Override
-                public void onComplete() {
-                  subscriber.onComplete();
-                }
-              });
-          // ------------------------------------------------
-
-        } catch (Exception e) {
-          subscriber.onSubscribe(
-              new Subscription() {
-                @Override
-                public void request(long n) {}
-
-                @Override
-                public void cancel() {}
-              });
-          subscriber.onError(e);
+    return subscriber -> {
+      try {
+        TdsMessage message;
+        if (isSimpleBatch) {
+          message = createSqlBatchMessage(query);
+        } else {
+          message = createRpcMessage(query, executions);
         }
+
+        TdsResultStreamHandler segmentVisitor =
+            new TdsResultStreamHandler(transport, context, message);
+
+        CompositeTokenVisitor pipeline =
+            new CompositeTokenVisitor(
+                new EnvChangeVisitor(context),
+                new MessageVisitor(segmentVisitor::onError),
+                segmentVisitor);
+
+        segmentVisitor.setVisitorChain(pipeline);
+
+        // --- ADAPTER 1: Bridge the pure-Java stream handler to the reactive batch sequencer
+        Publisher<Result.Segment> segmentPublisher = s -> {
+          segmentVisitor.setSink(new DataSink<Result.Segment>() {
+            @Override public void pushNext(Result.Segment item) { s.onNext(item); }
+            @Override public void pushComplete() { s.onComplete(); }
+            @Override public void pushError(Throwable t) { s.onError(t); }
+          });
+          s.onSubscribe(new Subscription() {
+            @Override public void request(long n) { segmentVisitor.increaseDemand(n); }
+            @Override public void cancel() { segmentVisitor.cancel(); }
+          });
+        };
+
+        TdsResultBatchSequencer resultSequencer = new TdsResultBatchSequencer(segmentPublisher);
+
+        // --- ADAPTER 2: Bridge the pure-Java batch sequencer to the user's R2DBC Subscriber
+        resultSequencer.setSink(
+            new DataSink<Result>() {
+              @Override
+              public void pushNext(Result result) {
+                subscriber.onNext(result);
+              }
+
+              @Override
+              public void pushComplete() {
+                subscriber.onComplete();
+              }
+
+              @Override
+              public void pushError(Throwable t) {
+                // Translate internal TDS errors to R2DBC SPI errors at the boundary
+                if (t instanceof TdsServerErrorException tdsError) {
+                  subscriber.onError(R2dbcErrorTranslator.translateException(tdsError));
+                } else {
+                  subscriber.onError(t); // Pass through non-database errors
+                }
+              }
+            });
+
+        subscriber.onSubscribe(
+            new Subscription() {
+              @Override
+              public void request(long n) {
+                resultSequencer.increaseDemand(n);
+              }
+
+              @Override
+              public void cancel() {
+                resultSequencer.cancel();
+              }
+            });
+
+      } catch (Exception e) {
+        subscriber.onSubscribe(
+            new Subscription() {
+              @Override
+              public void request(long n) {}
+
+              @Override
+              public void cancel() {}
+            });
+        subscriber.onError(e);
       }
     };
   }
@@ -231,7 +248,7 @@ public class TdsStatement implements Statement {
   private TdsType resolveTdsType(Parameter p) {
     Type t = p.getType();
     if (t instanceof R2dbcType rdbcType) {
-      return R2dbcTypeMapper.toTdsType(rdbcType); // Use the new Mapper
+      return R2dbcTypeMapper.toTdsType(rdbcType);
     }
     if (t instanceof Type.InferredType inferredType) {
       return TdsType.inferFromJavaType(inferredType.getJavaType());

@@ -202,7 +202,7 @@ public class TdsTransport implements AutoCloseable {
     networkConnection.enterAsyncMode(context.getCurrentPacketSize());
 
     // FIX: Create a dynamic router lambda.
-    // This allows the TdsChunkDecoder to always route bytes to the active query's decoder.
+    // This allows the TdsPacketFramer to always route bytes to the active query's decoder.
     TdsStreamHandler dynamicRouter =
         (payload, isEom) -> {
           if (currentStreamHandler != null) {
@@ -213,7 +213,7 @@ public class TdsTransport implements AutoCloseable {
         };
 
     // Instantiate the decoder with the dynamic router
-    TdsChunkDecoder decoder = new TdsChunkDecoder(dynamicRouter);
+    TdsPacketFramer decoder = new TdsPacketFramer(dynamicRouter);
 
     networkConnection.setHandlers(
         buffer -> decoder.decode(buffer),

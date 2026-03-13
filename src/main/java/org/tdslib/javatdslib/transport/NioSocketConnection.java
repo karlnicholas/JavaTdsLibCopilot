@@ -165,7 +165,7 @@ public class NioSocketConnection implements NetworkConnection {
     readBuffer.flip();
     try {
       if (onDataAvailable != null) {
-        // The downstream consumer (TdsChunkDecoder) will advance the buffer's position
+        // The downstream consumer (TdsPacketFramer) will advance the buffer's position
         // exactly by the number of bytes it consumes.
         onDataAvailable.accept(readBuffer);
       }

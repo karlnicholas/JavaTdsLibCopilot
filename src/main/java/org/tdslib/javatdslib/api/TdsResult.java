@@ -18,6 +18,8 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.reactive.DataSink;
+import org.tdslib.javatdslib.reactive.SerializedQueueDrainer;
 import org.tdslib.javatdslib.reactive.StatefulRow;
 
 /**
@@ -28,8 +30,35 @@ public class TdsResult implements Result {
   private static final Logger logger = LoggerFactory.getLogger(TdsResult.class);
   private final Publisher<Result.Segment> source;
 
-  public TdsResult(Publisher<Result.Segment> source) {
-    this.source = source;
+  /**
+   * Primary constructor used by the networking layer (e.g., TdsResultBatchSequencer).
+   * Bridges the mechanical SerializedQueueDrainer into a standard Reactive Streams Publisher.
+   *
+   * @param drainer The mechanical queue drainer managing backpressure and thread handoff.
+   */
+  public TdsResult(SerializedQueueDrainer<Result.Segment> drainer) {
+    this.source = subscriber -> {
+      // 1. Bind the mechanical pushes from the networking thread to the reactive subscriber
+      drainer.setSink(new DataSink<Result.Segment>() {
+        @Override public void pushNext(Result.Segment item) { subscriber.onNext(item); }
+        @Override public void pushComplete() { subscriber.onComplete(); }
+        @Override public void pushError(Throwable t) { subscriber.onError(t); }
+      });
+
+      // 2. Bind the reactive demand/cancellation from the worker thread back to the drainer
+      subscriber.onSubscribe(new Subscription() {
+        @Override public void request(long n) { drainer.increaseDemand(n); }
+        @Override public void cancel() { drainer.cancel(); }
+      });
+    };
+  }
+
+  /**
+   * Internal constructor used by operators like filter() to chain publishers
+   * without needing a raw network drainer.
+   */
+  private TdsResult(Publisher<Result.Segment> chainedSource) {
+    this.source = chainedSource;
   }
 
   @Override
@@ -53,8 +82,7 @@ public class TdsResult implements Result {
 
               @Override
               public void onNext(Result.Segment segment) {
-                // PATH 4: Hidden Requirement. If the user only wants update counts,
-                // we MUST actively drain any RowSegments that arrive, otherwise the network hangs forever.
+                // Actively drain any RowSegments that arrive, otherwise the network hangs forever.
                 if (segment instanceof Result.RowSegment) {
                   Row row = ((Result.RowSegment) segment).row();
                   if (row instanceof StatefulRow) {
@@ -144,14 +172,11 @@ public class TdsResult implements Result {
                         upstream.cancel();
                         worker.shutdown();
                       } finally {
-                        // PATH 1: Synchronous Hook. The lambda is finished.
-                        // Drain unread columns to clear the wire and resume the EventLoop.
                         if (row instanceof StatefulRow) {
                           ((StatefulRow) row).drain();
                         }
                       }
 
-                      // ONLY fetch the next token after the previous one is fully drained off the wire.
                       if (success) {
                         long currentDemand = demand.get();
                         if (currentDemand != Long.MAX_VALUE) currentDemand = demand.decrementAndGet();
@@ -238,15 +263,12 @@ public class TdsResult implements Result {
                         }
 
                         if (passed) {
-                          // Hand ownership of the segment downstream. Do NOT drain it here.
                           subscriber.onNext(segment);
 
                           long currentDemand = demand.get();
                           if (currentDemand != Long.MAX_VALUE) currentDemand = demand.decrementAndGet();
                           if (currentDemand > 0) upstream.request(1);
                         } else {
-                          // PATH 3: Dropped Hook. The user discarded the segment.
-                          // Drain it instantly and automatically fetch the next one.
                           drainIfRow(segment);
                           upstream.request(1);
                         }
@@ -438,10 +460,7 @@ public class TdsResult implements Result {
 
       @Override
       public void onComplete() {
-        // PATH 2: Deferred Hook. The async inner stream terminated.
-        // We can safely drain the remaining unread columns now without corrupting the user's data.
         drainIfRow(parentSegment);
-
         activeInner.set(null);
         if (upstreamDone) {
           downstream.onComplete();

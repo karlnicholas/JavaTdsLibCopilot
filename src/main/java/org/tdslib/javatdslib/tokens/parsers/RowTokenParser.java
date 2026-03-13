@@ -19,7 +19,8 @@ public class RowTokenParser implements TokenParser {
 
   @Override
   public Token parse(
-      final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
+      final ByteBuffer payload, final byte tokenType, final ConnectionContext context
+  ) {
     if (tokenType != (byte) 0xD1) {
       throw new IllegalArgumentException(
           "Expected ROW (0xD1), got 0x" + Integer.toHexString(tokenType & 0xFF));
