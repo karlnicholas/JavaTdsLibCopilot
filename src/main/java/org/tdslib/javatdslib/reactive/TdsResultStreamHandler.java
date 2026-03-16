@@ -14,7 +14,6 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
-import org.tdslib.javatdslib.tokens.models.RawRowToken;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
@@ -75,7 +74,6 @@ public class TdsResultStreamHandler extends SerializedQueueDrainer<Result.Segmen
         activeDecoder = new StatefulTokenDecoder(
             TokenParserRegistry.DEFAULT,
             context,
-            transport,
             null,
             null
         );
@@ -109,15 +107,15 @@ public class TdsResultStreamHandler extends SerializedQueueDrainer<Result.Segmen
       logger.trace("[TdsResultStreamHandler] Received ColMetaDataToken.");
       this.currentMetaData = (ColMetaDataToken) token;
 
-    } else if (token instanceof RawRowToken) {
-      logger.trace("[TdsResultStreamHandler] Received RawRowToken. Creating StatefulRow and Emitting.");
-      RawRowToken rawRow = (RawRowToken) token;
-
-      StatefulRow row = new StatefulRow(rawRow.getPayload(), currentMetaData, transport, activeDecoder, context);
-
-      offer(new Result.RowSegment() {
-        @Override public Row row() { return row; }
-      });
+//    } else if (token instanceof RawRowToken) {
+//      logger.trace("[TdsResultStreamHandler] Received RawRowToken. Creating StatefulRow and Emitting.");
+//      RawRowToken rawRow = (RawRowToken) token;
+//
+//      StatefulRow row = new StatefulRow(rawRow.getPayload(), currentMetaData, transport, activeDecoder, context);
+//
+//      offer(new Result.RowSegment() {
+//        @Override public Row row() { return row; }
+//      });
 
     } else if (token instanceof DoneToken) {
       DoneToken done = (DoneToken) token;

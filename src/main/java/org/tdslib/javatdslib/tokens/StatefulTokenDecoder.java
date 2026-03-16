@@ -8,104 +8,112 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.TdsParameter;
+import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.models.ColumnMeta;
+import org.tdslib.javatdslib.tokens.models.RowToken;
+import org.tdslib.javatdslib.tokens.parsers.ColumnLengthResolver;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
-import org.tdslib.javatdslib.transport.TdsTransport;
 
 public class StatefulTokenDecoder implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(StatefulTokenDecoder.class);
 
   private final TokenParserRegistry registry;
   private final ConnectionContext context;
-  private final TdsTransport transport;
   private final TdsDecoderSink sink;
   private final List<List<TdsParameter>> executions;
 
-  // Inline Accumulator
   private ByteBuffer accumulator;
-
-  // Parsing State
   private ColMetaDataToken currentMetaData;
   private boolean expectingNewToken = true;
   private byte currentTokenType = 0;
 
-  // Row Parsing State
   private int currentRowColIndex = -1;
   private long pendingPlpChunkBytes = 0;
   private boolean expectingPlpChunkLength = false;
+  // Flag to track if we've read the 8-byte PLP total length header yet
+  private boolean expectingPlpTotalLengthHeader = false;
 
   public StatefulTokenDecoder(
       TokenParserRegistry registry,
       ConnectionContext context,
-      TdsTransport transport,
       TdsDecoderSink sink,
       List<List<TdsParameter>> executions) {
     this.registry = registry;
     this.context = context;
-    this.transport = transport;
     this.sink = sink;
     this.executions = executions;
-    accumulator = ByteBuffer.allocate(context.getCurrentPacketSize() * 2).order(ByteOrder.LITTLE_ENDIAN);
+    accumulator = ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
   }
 
   @Override
   public synchronized void onPayloadAvailable(ByteBuffer chunk, boolean isEom) {
     try {
-      // 1. Concatenate new data
       ensureCapacity(chunk.remaining());
       accumulator.put(chunk);
       accumulator.flip();
 
-      // 2. Parse as much as possible
       while (accumulator.hasRemaining()) {
-        accumulator.mark(); // Mark start of current token/column attempt
-
         if (currentRowColIndex >= 0) {
-          // We are in the middle of parsing a ROW
+          // 1. We are already inside a ROW.
+          // parseRowColumns() manages its own state and standard column mark/resets.
           if (!parseRowColumns()) {
-            accumulator.reset(); // Not enough bytes, wait for next payload
-            break;
+            break; // Safely yield. Do NOT reset the accumulator.
           }
         } else {
-          // We are expecting a new TDS Token
+          // 2. We are expecting a new protocol Token
+          accumulator.mark();
+
           if (expectingNewToken) {
             currentTokenType = accumulator.get();
             expectingNewToken = false;
           }
 
           if (currentTokenType == TokenType.ROW.getValue()) {
-            // Enter Row Parsing Mode
             if (currentMetaData == null) {
               throw new IllegalStateException("Received ROW token before ColMetaData.");
             }
-            currentRowColIndex = 0; // Start at first column
+
+            // Enter Row Parsing Mode
+            currentRowColIndex = 0;
+            expectingPlpTotalLengthHeader = true;
+
+            // EMIT THE ROW START SIGNAL TO THE SINK
+            sink.onToken(new RowToken(currentMetaData));
+
             if (!parseRowColumns()) {
-              accumulator.reset();
+              // Yield to wait for more data.
+              // CRITICAL: We do NOT reset the accumulator here. The 0xD1 byte
+              // and any parsed PLP chunks are permanently consumed.
               break;
             }
           } else {
-            // Standard Token Parsing
-            TokenParser parser = registry.getParser(currentTokenType);
-            if (parser == null) {
-              throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
+            // 3. Standard Token Parsing (Done, Info, Error, MetaData, etc.)
+            try {
+              TokenParser parser = registry.getParser(currentTokenType);
+              if (parser == null) {
+                throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
+              }
+
+              Token token = parser.parse(accumulator, currentTokenType, context);
+
+              if (token instanceof ColMetaDataToken meta) {
+                this.currentMetaData = meta;
+              }
+
+              sink.onToken(token);
+              expectingNewToken = true;
+            } catch (BufferUnderflowException e) {
+              // Standard token didn't have enough bytes to finish parsing.
+              // Rewind to the mark (the token type byte) and wait for next packet.
+              accumulator.reset();
+              break;
             }
-
-            Token token = parser.parse(accumulator, currentTokenType, context);
-
-            if (token instanceof ColMetaDataToken meta) {
-              this.currentMetaData = meta; // Capture dynamically
-            }
-
-            sink.onToken(token);
-            expectingNewToken = true;
           }
         }
       }
-      accumulator.compact(); // Preserve unread bytes for next call
-    } catch (BufferUnderflowException e) {
-      // Safe fallback if a standard token parser underflows
-      accumulator.reset();
+      // Preserve unread bytes for next packet
       accumulator.compact();
     } catch (Exception e) {
       logger.error("Fatal error during token decoding", e);
@@ -113,31 +121,39 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
     }
   }
 
-  /**
-   * Attempts to parse columns for the current row.
-   * Returns true if finished with the row or column, false if waiting for more bytes.
-   */
   private boolean parseRowColumns() {
     int columnCount = currentMetaData.getColumns().size();
 
     while (currentRowColIndex < columnCount) {
-      accumulator.mark(); // Mark per column to avoid re-reading massive PLP data
+      ColumnMeta colMeta = currentMetaData.getColumns().get(currentRowColIndex);
+      TdsType tdsType = colMeta.getTypeInfo().getTdsType();
 
-      try {
-        // TODO: Determine column type from currentMetaData.getColumns().get(currentRowColIndex)
-        int dataTypeCategory = 1; // 1=Fixed, 2=VarLen, 3=PLP (Mocked for structure)
+      // 1. Determine if this column requires PLP chunking
+      boolean isPlp = tdsType.strategy == TdsType.LengthStrategy.PLP ||
+          (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && colMeta.getMaxLength() == 65535);
 
-        if (dataTypeCategory == 1 || dataTypeCategory == 2) {
-          if (!parseStandardColumn(dataTypeCategory)) return false;
-        } else if (dataTypeCategory == 3) {
-          if (!parsePlpColumn()) return false;
+      if (isPlp) {
+        // PLP tracks its own byte consumption incrementally.
+        // Do NOT use mark/reset here, otherwise we'd re-emit chunks on network boundaries.
+        if (!parsePlpColumn(colMeta)) {
+          return false; // Wait for more data. Progress is safely preserved.
         }
-
-        currentRowColIndex++; // Move to next column
-      } catch (BufferUnderflowException e) {
-        accumulator.reset();
-        return false; // Wait for more network data
+      } else {
+        // Standard columns are all-or-nothing. Safe to mark and reset on underflow.
+        accumulator.mark();
+        try {
+          if (!parseStandardColumn(colMeta, tdsType)) {
+            return false;
+          }
+        } catch (BufferUnderflowException e) {
+          accumulator.reset();
+          return false; // Wait for more data
+        }
       }
+
+      // Reset PLP header flag for the next column if applicable
+      expectingPlpTotalLengthHeader = true;
+      currentRowColIndex++;
     }
 
     // Row complete
@@ -146,70 +162,74 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
     return true;
   }
 
-  private boolean parseStandardColumn(int category) {
-    // Mock logic: Read length, then read bytes
-    int length = category == 1 ? 4 : accumulator.getShort(); // Fixed vs VarLen
+  private boolean parseStandardColumn(ColumnMeta colMeta, TdsType tdsType) {
+    // 1. Resolve length using extracted utility
+    int length = ColumnLengthResolver.resolveStandardLength(accumulator, tdsType, colMeta.getMaxLength());
+
+    if (length == -1) {
+      // Null column
+      sink.onColumnData(new CompleteDataColumn(currentRowColIndex, null));
+      return true;
+    }
+
+    // 2. Ensure we have the actual data bytes
     if (accumulator.remaining() < length) {
       throw new BufferUnderflowException();
     }
 
+    // 3. Extract and emit raw bytes
     byte[] data = new byte[length];
     accumulator.get(data);
-
     sink.onColumnData(new CompleteDataColumn(currentRowColIndex, data));
+
     return true;
   }
 
-  private boolean parsePlpColumn() {
-    // PLP Streams are broken into chunks
-    if (expectingPlpChunkLength || pendingPlpChunkBytes == 0) {
-      if (accumulator.remaining() < 4) throw new BufferUnderflowException();
-      pendingPlpChunkBytes = accumulator.getInt(); // 4-byte chunk length
-      expectingPlpChunkLength = false;
+  private boolean parsePlpColumn(ColumnMeta colMeta) {
+    // 1. Check for the initial 8-byte total length header if starting a new PLP column
+    if (expectingPlpTotalLengthHeader) {
+      if (accumulator.remaining() < 8) return false;
 
-      if (pendingPlpChunkBytes == 0) {
-        // PLP Terminator reached
-        sink.onColumnData(new PartialDataColumn(currentRowColIndex, new byte[0], true));
-        expectingPlpChunkLength = true; // Reset for next time
-        return true;
+      long totalLength = accumulator.getLong();
+      expectingPlpTotalLengthHeader = false;
+
+      if (totalLength == -1L || totalLength == 0xFFFFFFFFFFFFFFFFL) {
+        // PLP is Null
+        sink.onColumnData(new CompleteDataColumn(currentRowColIndex, null));
+        return true; // Column complete, move to next
       }
     }
 
-    int bytesToRead = (int) Math.min(accumulator.remaining(), pendingPlpChunkBytes);
-    if (bytesToRead == 0) throw new BufferUnderflowException(); // Need at least some data
+    // 2. Drain as many chunks as possible from the current buffer
+    while (true) {
+      if (expectingPlpChunkLength || pendingPlpChunkBytes == 0) {
+        if (accumulator.remaining() < 4) return false; // Need more data for the length header
 
-    byte[] chunkData = new byte[bytesToRead];
-    accumulator.get(chunkData);
-    pendingPlpChunkBytes -= bytesToRead;
+        pendingPlpChunkBytes = accumulator.getInt();
+        expectingPlpChunkLength = false;
 
-    boolean isClobOrBlob = checkExecutionBindingsForStreaming(currentRowColIndex);
+        if (pendingPlpChunkBytes == 0) {
+          // PLP Terminator reached.
+          // Simply reset state and return true to advance to the next column.
+          expectingPlpChunkLength = true;
+          return true;
+        }
+      }
 
-    if (isClobOrBlob) {
-      sink.onColumnData(new PartialDataColumn(currentRowColIndex, chunkData, false));
-    } else {
-      // If the user bound to String/ByteBuffer, we should technically accumulate it
-      // into a single CompleteDataColumn, but since PLP can be 2GB, you might
-      // still want to emit partials and let the draining layer concatenate it.
-      // For now, emitting as partial to prevent OOM in the network layer.
-      sink.onColumnData(new PartialDataColumn(currentRowColIndex, chunkData, false));
+      int bytesToRead = (int) Math.min(accumulator.remaining(), pendingPlpChunkBytes);
+      if (bytesToRead == 0) return false; // Need more data for the chunk payload
+
+      byte[] chunkData = new byte[bytesToRead];
+      accumulator.get(chunkData);
+      pendingPlpChunkBytes -= bytesToRead;
+
+      // Emit partial raw bytes immediately
+      sink.onColumnData(new PartialDataColumn(currentRowColIndex, chunkData));
+
+      if (pendingPlpChunkBytes == 0) {
+        expectingPlpChunkLength = true; // Ready to read the next chunk length on the next iteration
+      }
     }
-
-    if (pendingPlpChunkBytes == 0) {
-      expectingPlpChunkLength = true; // Ready for next chunk length
-    }
-
-    // We return true here even if the PLP column isn't fully done,
-    // because we successfully parsed *a chunk* and want the loop to continue.
-    // Wait, if it's not done, we shouldn't increment currentRowColIndex!
-    // So we return false to break the column loop but keep currentRowColIndex the same.
-    return false;
-  }
-
-  private boolean checkExecutionBindingsForStreaming(int colIndex) {
-    if (executions == null || executions.isEmpty()) return false;
-    // In a real scenario, you'd match the colIndex to the current result set's parameter bindings
-    // to see if the client requested java.sql.Clob / java.sql.Blob
-    return false;
   }
 
   private void ensureCapacity(int neededBytes) {

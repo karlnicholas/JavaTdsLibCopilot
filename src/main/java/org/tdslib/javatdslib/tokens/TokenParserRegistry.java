@@ -12,7 +12,6 @@ import org.tdslib.javatdslib.tokens.parsers.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.MessageTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnStatusTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnValueTokenParser;
-import org.tdslib.javatdslib.tokens.parsers.RowTokenParser;
 
 /** A central, thread-safe registry for all MS-TDS token parsers. */
 public class TokenParserRegistry {
@@ -28,7 +27,6 @@ public class TokenParserRegistry {
     DEFAULT.register(TokenType.DONE, new DoneTokenParser());
     DEFAULT.register(TokenType.FEATURE_EXT_ACK, new FeatureExtAckTokenParser());
     DEFAULT.register(TokenType.COL_METADATA, new ColMetaDataTokenParser());
-    DEFAULT.register(TokenType.ROW, new RowTokenParser());
     DEFAULT.register(TokenType.DONE_IN_PROC, new DoneInProcTokenParser());
     DEFAULT.register(TokenType.DONE_PROC, new DoneProcTokenParser());
     DEFAULT.register(TokenType.RETURN_STATUS, new ReturnStatusTokenParser());
