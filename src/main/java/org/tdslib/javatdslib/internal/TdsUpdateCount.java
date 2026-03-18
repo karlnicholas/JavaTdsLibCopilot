@@ -23,4 +23,9 @@ public class TdsUpdateCount implements Result.UpdateCount {
   public long value() {
     return value;
   }
+
+  @Override
+  public String toString() {
+    return "Result.UpdateCount";
+  }
 }

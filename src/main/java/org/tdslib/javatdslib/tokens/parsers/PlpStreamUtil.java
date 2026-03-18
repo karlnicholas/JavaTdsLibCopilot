@@ -29,9 +29,9 @@ public class PlpStreamUtil {
     transport.suspendNetworkRead();
 
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, leftover);
+      return new org.tdslib.javatdslib.streaming.TdsBlob(leftover);
     } else {
-      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
+      return new org.tdslib.javatdslib.streaming.TdsClob(leftover, charset);
     }
   }
 }

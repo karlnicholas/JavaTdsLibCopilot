@@ -17,8 +17,6 @@ public class DataParser {
    * @param payload The buffer containing the data.
    * @param type The TDS data type.
    * @param maxLength The maximum length of the data.
-   * @param transport The transport layer for reading streaming data.
-   * @param decoder The stream handler for processing streaming data.
    * @param charset The charset to use for character data.
    * @return The read data as an Object (byte[] or TdsBlob/TdsClob).
    */
@@ -26,8 +24,6 @@ public class DataParser {
       ByteBuffer payload,
       TdsType type,
       int maxLength,
-      TdsTransport transport,
-      TdsStreamHandler decoder,
       java.nio.charset.Charset charset) {
     Object data = null;
 
@@ -55,7 +51,7 @@ public class DataParser {
       case USHORTLEN:
         if (maxLength == 65535) {
           // Pass the type parameter down
-          data = readPlp(payload, transport, decoder, charset, type);
+          data = readPlp(payload, charset, type);
         } else {
           int varLen = Short.toUnsignedInt(payload.getShort());
           if (varLen != 0xFFFF) {
@@ -66,7 +62,7 @@ public class DataParser {
 
       case PLP:
         // Pass the type parameter down
-        data = readPlp(payload, transport, decoder, charset, type);
+        data = readPlp(payload, charset, type);
         break;
 
       case LONGLEN:
@@ -104,8 +100,6 @@ public class DataParser {
 
   private static Object readPlp(
       ByteBuffer payload,
-      TdsTransport transport,
-      TdsStreamHandler decoder,
       java.nio.charset.Charset charset,
       TdsType type) {
 
@@ -125,14 +119,11 @@ public class DataParser {
       payload.position(payload.limit());
     }
 
-    // 3. Suspend network reads! The StreamHandler will open the valve when the user subscribes.
-    transport.suspendNetworkRead();
-
     // 4. Return the streaming objects tied to the network
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new org.tdslib.javatdslib.streaming.TdsBlob(transport, decoder, leftover);
+      return new org.tdslib.javatdslib.streaming.TdsBlob(leftover);
     } else {
-      return new org.tdslib.javatdslib.streaming.TdsClob(transport, decoder, leftover, charset);
+      return new org.tdslib.javatdslib.streaming.TdsClob(leftover, charset);
     }
   }
 }

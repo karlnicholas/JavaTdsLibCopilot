@@ -85,9 +85,9 @@ public class TdsResult implements Result {
                 // Actively drain any RowSegments that arrive, otherwise the network hangs forever.
                 if (segment instanceof Result.RowSegment) {
                   Row row = ((Result.RowSegment) segment).row();
-                  if (row instanceof StatefulRow) {
-                    ((StatefulRow) row).drain();
-                  }
+//                  if (row instanceof StatefulRow) {
+//                    ((StatefulRow) row).drain();
+//                  }
                 }
 
                 if (segment instanceof Result.UpdateCount) {
@@ -172,9 +172,9 @@ public class TdsResult implements Result {
                         upstream.cancel();
                         worker.shutdown();
                       } finally {
-                        if (row instanceof StatefulRow) {
-                          ((StatefulRow) row).drain();
-                        }
+//                        if (row instanceof StatefulRow) {
+//                          ((StatefulRow) row).drain();
+//                        }
                       }
 
                       if (success) {
@@ -289,10 +289,10 @@ public class TdsResult implements Result {
                   }
 
                   private void drainIfRow(Result.Segment segment) {
-                    if (segment instanceof Result.RowSegment) {
-                      Row row = ((Result.RowSegment) segment).row();
-                      if (row instanceof StatefulRow) ((StatefulRow) row).drain();
-                    }
+//                    if (segment instanceof Result.RowSegment) {
+//                      Row row = ((Result.RowSegment) segment).row();
+//                      if (row instanceof StatefulRow) ((StatefulRow) row).drain();
+//                    }
                   }
                 }));
   }
@@ -389,12 +389,12 @@ public class TdsResult implements Result {
             Publisher<? extends T> innerPub = mapper.apply(segment);
             if (innerPub == null) {
               onError(new IllegalStateException("Mapper returned null Publisher"));
-              drainIfRow(segment);
+//              drainIfRow(segment);
               return;
             }
             innerPub.subscribe(new InnerSubscriber(segment));
           } catch (Throwable t) {
-            drainIfRow(segment);
+//            drainIfRow(segment);
             onError(t);
           }
         });
@@ -418,14 +418,14 @@ public class TdsResult implements Result {
       }
     }
 
-    private void drainIfRow(Result.Segment segment) {
-      if (segment instanceof Result.RowSegment) {
-        Row row = ((Result.RowSegment) segment).row();
-        if (row instanceof StatefulRow) {
-          ((StatefulRow) row).drain();
-        }
-      }
-    }
+//    private void drainIfRow(Result.Segment segment) {
+//      if (segment instanceof Result.RowSegment) {
+//        Row row = ((Result.RowSegment) segment).row();
+//        if (row instanceof StatefulRow) {
+//          ((StatefulRow) row).drain();
+//        }
+//      }
+//    }
 
     private class InnerSubscriber implements Subscriber<T> {
       private final Result.Segment parentSegment;
@@ -454,13 +454,13 @@ public class TdsResult implements Result {
 
       @Override
       public void onError(Throwable t) {
-        drainIfRow(parentSegment);
+//        drainIfRow(parentSegment);
         FlatMapSubscriber.this.onError(t);
       }
 
       @Override
       public void onComplete() {
-        drainIfRow(parentSegment);
+//        drainIfRow(parentSegment);
         activeInner.set(null);
         if (upstreamDone) {
           downstream.onComplete();

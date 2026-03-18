@@ -11,8 +11,6 @@ import org.tdslib.javatdslib.transport.TdsTransport;
 
 public class PlpStreamHandler<T> implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(PlpStreamHandler.class);
-  private final TdsTransport transport;
-  private final TdsStreamHandler controlPlaneHandler;
   private final Subscriber<? super T> subscriber;
   private final Function<byte[], T> dataTransformer;
   private final java.util.function.Consumer<ByteBuffer> onCompleteCallback;
@@ -21,13 +19,9 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
   private boolean expectingChunkLength = true;
 
   public PlpStreamHandler(
-      TdsTransport transport,
-      TdsStreamHandler controlPlaneHandler,
       Subscriber<? super T> subscriber,
       Function<byte[], T> dataTransformer,
       java.util.function.Consumer<ByteBuffer> onCompleteCallback) {
-    this.transport = transport;
-    this.controlPlaneHandler = controlPlaneHandler;
     this.subscriber = subscriber;
     this.dataTransformer = dataTransformer;
     this.onCompleteCallback = onCompleteCallback;
@@ -86,9 +80,7 @@ public class PlpStreamHandler<T> implements TdsStreamHandler {
     } catch (Exception e) {
       logger.error("[PlpStreamHandler] Fatal error during LOB parsing", e);
       // Ensure router is safely reverted on error
-      transport.switchStreamHandler(controlPlaneHandler);
       subscriber.onError(e);
-      transport.resumeNetworkRead();
     }
   }
 }

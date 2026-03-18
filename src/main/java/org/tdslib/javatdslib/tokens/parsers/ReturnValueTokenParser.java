@@ -50,8 +50,6 @@ public class ReturnValueTokenParser implements TokenParser {
                 payload,
                 typeInfo.getTdsType(),
                 typeInfo.getMaxLength(),
-                null,
-                null,
                 context.getEffectiveCharset());
 
     return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, value);
