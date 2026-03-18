@@ -8,11 +8,11 @@ import io.r2dbc.spi.Statement;
 import io.r2dbc.spi.TransactionDefinition;
 import io.r2dbc.spi.ValidationDepth;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -49,24 +49,14 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> close() {
-    return subscriber -> {
-      subscriber.onSubscribe(new Subscription() {
-        @Override
-        public void request(long n) {
-          try {
-            transport.close();
-            subscriber.onComplete();
-          } catch (IOException e) {
-            subscriber.onError(e);
-          }
-        }
-
-        @Override
-        public void cancel() {
-          // No-op
-        }
-      });
-    };
+    // Replaces ~20 lines of manual Subscription/IOException handling
+    return Mono.fromRunnable(() -> {
+      try {
+        transport.close();
+      } catch (IOException e) {
+        throw new RuntimeException("Failed to close TDS transport", e);
+      }
+    });
   }
 
   @Override

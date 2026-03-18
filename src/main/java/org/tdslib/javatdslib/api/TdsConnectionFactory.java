@@ -15,8 +15,11 @@ import org.tdslib.javatdslib.security.SslContextBuilder;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.DefaultConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLContext;
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -53,83 +56,40 @@ public class TdsConnectionFactory implements ConnectionFactory {
 
   @Override
   public Publisher<? extends Connection> create() {
-    return subscriber -> {
-      subscriber.onSubscribe(
-          new Subscription() {
-            private final AtomicBoolean isCanceled = new AtomicBoolean(false);
+    return Mono.<Connection>create(sink -> {
+      String hostname = options.getRequiredValue(HOST).toString();
+      int port = options.getValue(PORT) == null ? 1433 : (int) options.getValue(PORT);
+      String username = (String) options.getValue(USER);
+      String password = (String) options.getValue(PASSWORD);
+      String database = (String) options.getValue(DATABASE);
 
-            @Override
-            public void request(long n) {
-              if (n <= 0) {
-                return;
-              }
+      SslConfiguration sslConfig = new SslConfiguration(
+          Boolean.parseBoolean(String.valueOf(options.getValue(TRUST_SERVER_CERTIFICATE))),
+          (String) options.getValue(TRUST_STORE),
+          (String) options.getValue(TRUST_STORE_PASSWORD));
 
-              // Offload the blocking I/O to a background thread
-              CompletableFuture.runAsync(
-                  () -> {
-                    if (isCanceled.get()) {
-                      return;
-                    }
+      try {
+        SSLContext sslContext = SslContextBuilder.build(sslConfig);
+        ConnectionContext context = new DefaultConnectionContext();
+        TdsTransport transport = new TdsTransport(hostname, port, context);
 
-                    try {
-                      String hostname = options.getRequiredValue(HOST).toString();
-                      int port =
-                          options.getValue(PORT) == null ? 1433 : (int) options.getValue(PORT);
-                      String username = (String) options.getValue(USER);
-                      String password = (String) options.getValue(PASSWORD);
-                      String database = (String) options.getValue(DATABASE);
+        HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
+        orchestrator.performHandshake(transport, context, sslContext, hostname, username, password, database);
 
-                      // Extract SSL Options
-                      Object rawTrust = options.getValue(TRUST_SERVER_CERTIFICATE);
-                      boolean trustAll = false;
-                      if (rawTrust instanceof Boolean b) {
-                        trustAll = b;
-                      } else if (rawTrust != null) {
-                        trustAll = Boolean.parseBoolean(rawTrust.toString());
-                      }
+        transport.enterAsyncMode();
 
-                      // Build Internal Security Config
-                      SslConfiguration sslConfig =
-                          new SslConfiguration(
-                              trustAll,
-                              (String) options.getValue(TRUST_STORE),
-                              (String) options.getValue(TRUST_STORE_PASSWORD));
+        // Emit the connection and handle cancellation
+        TdsConnection connection = new TdsConnection(transport, context);
+        sink.onCancel(() -> {
+          try { transport.close(); } catch (IOException ignored) {}
+        });
+        sink.success(connection);
 
-                      SSLContext sslContext = SslContextBuilder.build(sslConfig);
-                      ConnectionContext context = new DefaultConnectionContext();
-                      TdsTransport transport = new TdsTransport(hostname, port, context);
-
-                      try {
-                        HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
-                        orchestrator.performHandshake(
-                            transport, context, sslContext, hostname, username, password, database);
-
-                        transport.enterAsyncMode();
-
-                        if (!isCanceled.get()) {
-                          subscriber.onNext(new TdsConnection(transport, context));
-                          subscriber.onComplete();
-                        } else {
-                          transport.close(); // Clean up if canceled during handshake
-                        }
-
-                      } catch (Exception e) {
-                        logger.error("Handshake failed", e);
-                        transport.close();
-                        subscriber.onError(e);
-                      }
-                    } catch (Exception e) {
-                      subscriber.onError(e);
-                    }
-                  });
-            }
-
-            @Override
-            public void cancel() {
-              isCanceled.set(true);
-            }
-          });
-    };
+      } catch (Exception e) {
+        logger.error("Handshake failed", e);
+        sink.error(e);
+      }
+    }).subscribeOn(Schedulers.boundedElastic()); // Crucial for blocking I/O during handshake
   }
 
   @Override
