@@ -8,12 +8,14 @@ import org.tdslib.javatdslib.reactive.events.TdsStreamEvent;
 import org.tdslib.javatdslib.reactive.events.TokenEvent;
 import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
+import org.tdslib.javatdslib.tokens.PartialDataColumn;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -39,6 +41,10 @@ public class AsyncWorkerSink {
   // --- Row Assembly State ---
   private ColMetaDataToken activeMetaData;
   private byte[][] assemblingRow;
+
+  // --- PLP Column Accumulation State ---
+  private int activePlpIndex = -1;
+  private final ByteArrayOutputStream plpAccumulator = new ByteArrayOutputStream();
 
   public AsyncWorkerSink(TdsTokenQueue tokenQueue, ConnectionContext context, Executor workerExecutor) {
     this.tokenQueue = tokenQueue;
@@ -122,8 +128,13 @@ public class AsyncWorkerSink {
     if (token instanceof ColMetaDataToken meta) {
       this.activeMetaData = meta;
     } else if (token instanceof RowToken) {
+      // A new row has started. Flush any trailing PLP from the previous row.
+      flushPlpIfNecessary(-1);
       this.assemblingRow = new byte[activeMetaData.getColumns().size()][];
     } else if (token instanceof DoneToken done) {
+      // The result set is done. Flush any trailing PLP from the final row.
+      flushPlpIfNecessary(-1);
+
       if (done.getStatus().hasCount()) {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
@@ -137,9 +148,34 @@ public class AsyncWorkerSink {
     if (this.assemblingRow == null) return;
 
     int colIndex = cd.getColumnIndex();
-    if (cd instanceof CompleteDataColumn c) {
+
+    // If the index changed, it means the previous PLP column (if any) is completely finished
+    flushPlpIfNecessary(colIndex);
+
+    if (cd instanceof PartialDataColumn p) {
+      activePlpIndex = colIndex;
+      if (p.getChunk() != null) {
+        plpAccumulator.write(p.getChunk(), 0, p.getChunk().length);
+      }
+    } else if (cd instanceof CompleteDataColumn c) {
       assemblingRow[colIndex] = c.getData();
       checkRowCompletion(colIndex);
+    }
+  }
+
+  private void flushPlpIfNecessary(int incomingColIndex) {
+    if (activePlpIndex != -1 && activePlpIndex != incomingColIndex) {
+      // We have moved on to a new column/token, so the active PLP stream is done.
+      byte[] fullPlpData = plpAccumulator.toByteArray();
+      assemblingRow[activePlpIndex] = fullPlpData;
+
+      plpAccumulator.reset();
+
+      int finishedIndex = activePlpIndex;
+      activePlpIndex = -1;
+
+      // Now that the array is populated, check if this was the last column in the row
+      checkRowCompletion(finishedIndex);
     }
   }
 
@@ -152,6 +188,10 @@ public class AsyncWorkerSink {
       this.assemblingRow = null;
     }
   }
+
+  // ====================================================================================
+  // EMISSION & UTILITIES
+  // ====================================================================================
 
   private void emitSegment(Result.Segment segment) {
     System.out.println("[" + Thread.currentThread().getName() + "] Assembled Segment: " + segment.getClass().getSimpleName());

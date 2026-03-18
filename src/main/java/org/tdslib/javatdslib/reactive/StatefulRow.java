@@ -267,4 +267,8 @@ public class StatefulRow implements Row, Result.RowSegment {
   public String toString() {
     return "Result.RowSegment";
   }
+
+  public byte[][] getRowData() {
+    return payload;
+  }
 }
