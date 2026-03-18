@@ -1,7 +1,5 @@
 package org.tdslib.javatdslib.tokens;
 
-import java.util.HashMap;
-import java.util.Map;
 import org.tdslib.javatdslib.tokens.parsers.ColMetaDataTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.DoneInProcTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.DoneProcTokenParser;
@@ -12,6 +10,9 @@ import org.tdslib.javatdslib.tokens.parsers.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.MessageTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnStatusTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnValueTokenParser;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /** A central, thread-safe registry for all MS-TDS token parsers. */
 public class TokenParserRegistry {

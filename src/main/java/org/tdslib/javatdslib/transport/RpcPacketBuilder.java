@@ -1,9 +1,5 @@
 package org.tdslib.javatdslib.transport;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
@@ -12,6 +8,11 @@ import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /** Builds TDS RPC packets for executing parameterized queries. */
 public class RpcPacketBuilder {

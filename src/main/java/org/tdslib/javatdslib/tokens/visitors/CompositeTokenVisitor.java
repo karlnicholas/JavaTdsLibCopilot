@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.tokens.visitors;
 
-import java.util.List;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
+
+import java.util.List;
 
 /**
  * A {@link TokenVisitor} that delegates token processing to a list of other visitors. This allows

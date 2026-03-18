@@ -6,13 +6,7 @@ import io.r2dbc.spi.R2dbcType;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import io.r2dbc.spi.Type;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
@@ -21,17 +15,17 @@ import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.rpc.RpcEncodingContext;
-import org.tdslib.javatdslib.reactive.DataSink;
 import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
 import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
-import org.tdslib.javatdslib.reactive.TdsResultBatchSequencer;
-import org.tdslib.javatdslib.reactive.TdsResultStreamHandler;
-import org.tdslib.javatdslib.tokens.visitors.CompositeTokenVisitor;
-import org.tdslib.javatdslib.tokens.visitors.EnvChangeVisitor;
-import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Implementation of {@link Statement} for the TDS protocol. This class allows for the execution of
@@ -46,13 +40,6 @@ public class TdsStatement implements Statement {
   private List<TdsParameter> currentParams = new ArrayList<>();
   private int fetchSize = 0;
 
-  /**
-   * Constructs a new TdsStatement.
-   *
-   * @param transport The transport layer for sending the statement execution request.
-   * @param context The connection context associated with this statement.
-   * @param query The SQL query or stored procedure call to be executed.
-   */
   public TdsStatement(TdsTransport transport, ConnectionContext context, String query) {
     this.transport = transport;
     this.context = context;
@@ -115,7 +102,7 @@ public class TdsStatement implements Statement {
   }
 
   @Override
-  public Publisher<Result> execute() {
+  public Publisher<? extends Result> execute() {
     if (batchParams.isEmpty() && !currentParams.isEmpty()) {
       batchParams.add(new ArrayList<>(currentParams));
       currentParams.clear();
@@ -132,90 +119,27 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    return subscriber -> {
-      try {
-        TdsMessage message;
-        if (isSimpleBatch) {
-          message = createSqlBatchMessage(query);
-        } else {
-          message = createRpcMessage(query, executions);
-        }
+    final TdsMessage message;
+    if (isSimpleBatch) {
+      message = createSqlBatchMessage(query);
+    } else {
+      message = createRpcMessage(query, executions);
+    }
 
-        TdsResultStreamHandler segmentVisitor =
-            new TdsResultStreamHandler(transport, context, message);
+    // TdsStatement delegates entirely to the transport execution engine
+    return transport.execute(message)
+        .windowUntil(this::isBoundarySegment)
+        .map(TdsResult::new)
+        .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
+  }
 
-        CompositeTokenVisitor pipeline =
-            new CompositeTokenVisitor(
-                new EnvChangeVisitor(context),
-                new MessageVisitor(segmentVisitor::onError),
-                segmentVisitor);
-
-        segmentVisitor.setVisitorChain(pipeline);
-
-        // --- ADAPTER 1: Bridge the pure-Java stream handler to the reactive batch sequencer
-        Publisher<Result.Segment> segmentPublisher = s -> {
-          segmentVisitor.setSink(new DataSink<Result.Segment>() {
-            @Override public void pushNext(Result.Segment item) { s.onNext(item); }
-            @Override public void pushComplete() { s.onComplete(); }
-            @Override public void pushError(Throwable t) { s.onError(t); }
-          });
-          s.onSubscribe(new Subscription() {
-            @Override public void request(long n) { segmentVisitor.increaseDemand(n); }
-            @Override public void cancel() { segmentVisitor.cancel(); }
-          });
-        };
-
-        TdsResultBatchSequencer resultSequencer = new TdsResultBatchSequencer(segmentPublisher);
-
-        // --- ADAPTER 2: Bridge the pure-Java batch sequencer to the user's R2DBC Subscriber
-        resultSequencer.setSink(
-            new DataSink<Result>() {
-              @Override
-              public void pushNext(Result result) {
-                subscriber.onNext(result);
-              }
-
-              @Override
-              public void pushComplete() {
-                subscriber.onComplete();
-              }
-
-              @Override
-              public void pushError(Throwable t) {
-                // Translate internal TDS errors to R2DBC SPI errors at the boundary
-                if (t instanceof TdsServerErrorException tdsError) {
-                  subscriber.onError(R2dbcErrorTranslator.translateException(tdsError));
-                } else {
-                  subscriber.onError(t); // Pass through non-database errors
-                }
-              }
-            });
-
-        subscriber.onSubscribe(
-            new Subscription() {
-              @Override
-              public void request(long n) {
-                resultSequencer.increaseDemand(n);
-              }
-
-              @Override
-              public void cancel() {
-                resultSequencer.cancel();
-              }
-            });
-
-      } catch (Exception e) {
-        subscriber.onSubscribe(
-            new Subscription() {
-              @Override
-              public void request(long n) {}
-
-              @Override
-              public void cancel() {}
-            });
-        subscriber.onError(e);
-      }
-    };
+  /**
+   * Helper method for Project Reactor's windowUntil operator.
+   * Determines if a segment marks the end of a specific SQL statement execution.
+   */
+  private boolean isBoundarySegment(Result.Segment segment) {
+    return segment instanceof org.tdslib.javatdslib.internal.TdsUpdateCount
+        || segment instanceof Result.OutSegment;
   }
 
   private TdsMessage createSqlBatchMessage(String sql) {

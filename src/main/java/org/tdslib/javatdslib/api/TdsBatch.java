@@ -3,20 +3,19 @@ package org.tdslib.javatdslib.api;
 import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
-import org.tdslib.javatdslib.reactive.TdsResultStreamHandler;
+import org.tdslib.javatdslib.protocol.TdsServerErrorException;
+import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * An implementation of the R2DBC {@link Batch} interface for executing multiple SQL statements as a
@@ -33,7 +32,7 @@ public class TdsBatch implements Batch {
    * Constructs a new TdsBatch.
    *
    * @param transport The transport layer for sending the batch execution request.
-   * @param context The connection context associated with this batch.
+   * @param context   The connection context associated with this batch.
    */
   public TdsBatch(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
@@ -51,50 +50,27 @@ public class TdsBatch implements Batch {
 
   @Override
   public Publisher<? extends Result> execute() {
-    return new Publisher<Result>() {
-      @Override
-      public void subscribe(Subscriber<? super Result> subscriber) {
-        subscriber.onSubscribe(
-            new Subscription() {
-              private final AtomicBoolean completed = new AtomicBoolean(false);
+    if (statements.isEmpty()) {
+      return Flux.empty();
+    }
 
-              @Override
-              public void request(long n) {
-                if (n <= 0) {
-                  subscriber.onError(new IllegalArgumentException("n must be > 0"));
-                  return;
-                }
+    String batchSql = String.join(";\n", statements);
+    TdsMessage message = createSqlBatchMessage(batchSql);
 
-                if (!completed.compareAndSet(false, true)) {
-                  return;
-                }
+    // TdsBatch delegates entirely to the transport execution engine
+    return transport.execute(message)
+        .windowUntil(this::isBoundarySegment)
+        .map(TdsResult::new)
+        .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
+  }
 
-                try {
-                  if (statements.isEmpty()) {
-                    subscriber.onComplete();
-                    return;
-                  }
-
-                  String batchSql = String.join(";\n", statements);
-                  TdsMessage message = createSqlBatchMessage(batchSql);
-
-                  // FIX: Removed TokenDispatcher, just pass transport, context, and message
-                  subscriber.onNext(
-                      new TdsResult(
-                          new TdsResultStreamHandler(transport, context, message)));
-                  subscriber.onComplete();
-                } catch (Exception e) {
-                  subscriber.onError(e);
-                }
-              }
-
-              @Override
-              public void cancel() {
-                completed.set(true);
-              }
-            });
-      }
-    };
+  /**
+   * Helper method for Project Reactor's windowUntil operator.
+   * Determines if a segment marks the end of a specific SQL statement execution.
+   */
+  private boolean isBoundarySegment(Result.Segment segment) {
+    return segment instanceof org.tdslib.javatdslib.internal.TdsUpdateCount
+        || segment instanceof Result.OutSegment;
   }
 
   private TdsMessage createSqlBatchMessage(String sql) {

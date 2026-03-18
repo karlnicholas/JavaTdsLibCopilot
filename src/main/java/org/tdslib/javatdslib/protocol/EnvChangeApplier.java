@@ -1,16 +1,17 @@
 package org.tdslib.javatdslib.protocol;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
+import org.tdslib.javatdslib.tokens.models.EnvChangeType;
+import org.tdslib.javatdslib.transport.ConnectionContext;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
-import org.tdslib.javatdslib.tokens.models.EnvChangeType;
-import org.tdslib.javatdslib.transport.ConnectionContext;
 
 /**
  * Handles applying ENVCHANGE tokens to the ConnectionContext. Extracted from TdsTransport to

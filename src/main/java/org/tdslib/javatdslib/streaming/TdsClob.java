@@ -1,10 +1,11 @@
 package org.tdslib.javatdslib.streaming;
 
 import io.r2dbc.spi.Clob;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 
 public class TdsClob implements Clob {
 

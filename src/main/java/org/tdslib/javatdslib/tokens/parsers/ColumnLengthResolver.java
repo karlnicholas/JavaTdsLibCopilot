@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import org.tdslib.javatdslib.protocol.TdsType;
+
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
-import org.tdslib.javatdslib.protocol.TdsType;
 
 public class ColumnLengthResolver {
 

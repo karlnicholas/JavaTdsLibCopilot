@@ -1,14 +1,15 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.HashMap;
-import java.util.Map;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.models.FeatureExtAckToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Parser for the FEATUREEXTACK token (0xAE). This token is sent by the server to acknowledge and

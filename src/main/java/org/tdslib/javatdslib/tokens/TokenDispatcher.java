@@ -1,11 +1,12 @@
 package org.tdslib.javatdslib.tokens;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * Dispatches parsing of individual TDS tokens from a single message payload. Processes one

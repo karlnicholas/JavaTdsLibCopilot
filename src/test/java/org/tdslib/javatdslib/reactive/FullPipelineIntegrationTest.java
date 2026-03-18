@@ -9,6 +9,8 @@ import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.DefaultConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -29,28 +31,28 @@ import static org.mockito.Mockito.mock;
 
 class FullPipelineIntegrationTest {
 
-  private ExecutorService workerThreadPool;
+  private Scheduler workerScheduler;
   private TdsTokenQueue tokenQueue;
   private AsyncWorkerSink workerSink;
   private StatefulTokenDecoder decoder;
-  private ConnectionContext context;
+  private ConnectionContext mockContext;
 
   @BeforeEach
   void setUp() {
-    workerThreadPool = Executors.newSingleThreadExecutor(r -> new Thread(r, "R2DBC-Worker-Thread"));
+    workerScheduler = Schedulers.newSingle("R2DBC-Worker-Thread");
     TdsTransport mockTransport = mock(TdsTransport.class);
-    context = new DefaultConnectionContext();
+    mockContext = new DefaultConnectionContext();
 
     tokenQueue = new TdsTokenQueue(mockTransport);
-    workerSink = new AsyncWorkerSink(tokenQueue, context, workerThreadPool);
+    workerSink = new AsyncWorkerSink(tokenQueue, mockContext, workerScheduler);
 
     TokenParserRegistry registry = TokenParserRegistry.DEFAULT;
-    decoder = new StatefulTokenDecoder(registry, context, tokenQueue, new ArrayList<>());
+    decoder = new StatefulTokenDecoder(registry, mockContext, tokenQueue, new ArrayList<>());
   }
 
   @AfterEach
   void tearDown() {
-    workerThreadPool.shutdownNow();
+    workerScheduler.dispose(); // Safely clean up Reactor's thread
   }
 
   @Test

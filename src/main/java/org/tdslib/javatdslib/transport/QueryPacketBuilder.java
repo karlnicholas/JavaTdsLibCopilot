@@ -1,12 +1,13 @@
 package org.tdslib.javatdslib.transport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.TdsMessage;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.TdsMessage;
 
 /**
  * A utility class for building TDS packets from a logical message payload. This class handles the

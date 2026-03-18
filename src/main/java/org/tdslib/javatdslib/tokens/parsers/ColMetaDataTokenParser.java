@@ -1,9 +1,5 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.tokens.Token;
@@ -12,6 +8,11 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parser for the COLMETADATA token (0x81). This token describes the result set metadata, including

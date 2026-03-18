@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.visitors;
 
-import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
@@ -9,6 +8,8 @@ import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.TokenVisitor;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
+
+import java.util.function.Consumer;
 
 /**
  * A {@link TokenVisitor} that processes INFO and ERROR tokens. It logs server messages and invokes

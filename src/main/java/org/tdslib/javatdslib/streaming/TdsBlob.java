@@ -1,10 +1,11 @@
 package org.tdslib.javatdslib.streaming;
 
 import io.r2dbc.spi.Blob;
-import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+
+import java.nio.ByteBuffer;
 
 public class TdsBlob implements Blob {
   private final ByteBuffer plpData;

@@ -1,12 +1,13 @@
 package org.tdslib.javatdslib.transport;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import org.tdslib.javatdslib.packets.PacketType;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLSession;
-import org.tdslib.javatdslib.packets.PacketType;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
  * Handles the TLS handshake process for a TDS connection. This class wraps the {@link SSLEngine}

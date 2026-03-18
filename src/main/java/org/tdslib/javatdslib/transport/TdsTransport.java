@@ -1,14 +1,23 @@
 package org.tdslib.javatdslib.transport;
 
+import io.r2dbc.spi.Result;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.reactive.AsyncWorkerSink;
+import org.tdslib.javatdslib.reactive.TdsTokenQueue;
+import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
+import org.tdslib.javatdslib.tokens.TokenParserRegistry;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.TdsMessage;
 
 /**
  * Orchestrates the TDS protocol layer.
@@ -29,6 +38,7 @@ public class TdsTransport implements AutoCloseable {
 
   private TdsStreamHandler currentStreamHandler;
   private Consumer<Throwable> currentErrorHandler;
+  private final AtomicBoolean isExecuting = new AtomicBoolean(false);
 
   /**
    * Primary constructor utilizing Dependency Injection.
@@ -71,6 +81,54 @@ public class TdsTransport implements AutoCloseable {
         context,
         new NioSocketConnection(host, port, 60_000),
         new QueryPacketBuilder()); // FIX: Removed the hardcoded null
+  }
+
+  /**
+   * Executes a TDS Message and returns a reactive stream of segments.
+   * Enforces strictly sequential query execution on the connection.
+   */
+  public Flux<Result.Segment> execute(TdsMessage message) {
+    // Lock the connection. If another query is running, fail fast.
+    if (!isExecuting.compareAndSet(false, true)) {
+      return Flux.error(new IllegalStateException(
+          "Connection is busy. Concurrent queries are not supported on a single TDS connection."));
+    }
+
+    return Flux.<Result.Segment>create(fluxSink -> {
+      try {
+        // 1. Setup Pipeline
+        TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
+        AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
+
+        // 2. Wire Callbacks cleanly
+        workerSink.setCallbacks(
+            fluxSink::next,
+            fluxSink::error,
+            fluxSink::complete
+        );
+
+        // 3. Wire Demand
+        fluxSink.onRequest(workerSink::request);
+        fluxSink.onCancel(workerSink::cancel);
+
+        // 4. Setup Decoder & Transport Handlers
+        StatefulTokenDecoder decoder = new StatefulTokenDecoder(
+            TokenParserRegistry.DEFAULT, context, tokenQueue, new ArrayList<>()
+        );
+
+        this.setStreamHandlers(decoder::onPayloadAvailable, fluxSink::error);
+
+        // 5. Send Request
+        this.sendQueryMessageAsync(message);
+
+      } catch (Exception e) {
+        fluxSink.error(e);
+      }
+    }).doFinally(signalType -> {
+      // 6. Centralized Teardown & Lock Release
+      this.setStreamHandlers(null, null);
+      this.isExecuting.set(false);
+    });
   }
 
   // --- Handshake & TLS Methods ---

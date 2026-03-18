@@ -1,6 +1,8 @@
 package org.tdslib.javatdslib.reactive;
 
 import io.r2dbc.spi.Result;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.ErrorEvent;
@@ -14,50 +16,53 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+import reactor.core.scheduler.Scheduler;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 public class AsyncWorkerSink {
+  private static final Logger logger = LoggerFactory.getLogger(AsyncWorkerSink.class);
+
   private final TdsTokenQueue tokenQueue;
   private final ConnectionContext context;
-  private final Executor workerExecutor;
+  private final Scheduler workerScheduler; // Swapped from Executor
 
-  // --- Reactive Demand State ---
   private final AtomicLong demand = new AtomicLong(0);
   private final AtomicInteger wip = new AtomicInteger(0);
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
 
-  // --- Test Output State ---
   private final CountDownLatch completionLatch = new CountDownLatch(1);
   private final List<Result.Segment> receivedSegments = new CopyOnWriteArrayList<>();
 
-  // --- Row Assembly State ---
   private ColMetaDataToken activeMetaData;
   private byte[][] assemblingRow;
-
-  // --- PLP Column Accumulation State ---
   private int activePlpIndex = -1;
   private final ByteArrayOutputStream plpAccumulator = new ByteArrayOutputStream();
 
-  public AsyncWorkerSink(TdsTokenQueue tokenQueue, ConnectionContext context, Executor workerExecutor) {
+  // Replace DataSink with standard Java functional callbacks
+  private Consumer<Result.Segment> onNext;
+  private Consumer<Throwable> onError;
+  private Runnable onComplete;
+
+  public AsyncWorkerSink(TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
     this.tokenQueue = tokenQueue;
     this.context = context;
-    this.workerExecutor = workerExecutor;
-
-    // Wire up the queue's notification to our drain loop
+    this.workerScheduler = workerScheduler;
     this.tokenQueue.setOnEventAvailableCallback(this::scheduleDrain);
   }
 
-  // ====================================================================================
-  // REACTIVE SUBSCRIBER CONTRACT
-  // ====================================================================================
+  public void setCallbacks(Consumer<Result.Segment> onNext, Consumer<Throwable> onError, Runnable onComplete) {
+    this.onNext = onNext;
+    this.onError = onError;
+    this.onComplete = onComplete;
+  }
 
   public void request(long n) {
     if (n > 0) {
@@ -71,14 +76,11 @@ public class AsyncWorkerSink {
     tokenQueue.clear();
   }
 
-  // ====================================================================================
-  // THREAD HANDOFF & DRAIN LOOP
-  // ====================================================================================
-
   private void scheduleDrain() {
     if (wip.getAndIncrement() == 0) {
-      if (workerExecutor != null) {
-        workerExecutor.execute(this::drain);
+      if (workerScheduler != null) {
+        // Use Reactor's schedule method
+        workerScheduler.schedule(this::drain);
       } else {
         drain();
       }
@@ -94,9 +96,11 @@ public class AsyncWorkerSink {
       while (emitted != requested) {
         if (isCancelled.get()) return;
 
-        // Pull directly from the pure queue
+        // Track how many segments we have before polling the next token
+        int segmentsBefore = receivedSegments.size();
+
         TdsStreamEvent event = tokenQueue.poll();
-        if (event == null) break; // Queue is empty, wait for next notification
+        if (event == null) break;
 
         if (event instanceof ErrorEvent err) {
           pushError(err.error());
@@ -107,34 +111,27 @@ public class AsyncWorkerSink {
           processColumn(ce.data());
         }
 
-        // Note: We are counting raw events emitted against demand for the test.
-        // In full R2DBC, demand applies to fully assembled Rows, not raw tokens.
-        emitted++;
+        // Only increment 'emitted' if a complete Row or UpdateCount was produced
+        if (receivedSegments.size() > segmentsBefore) {
+          emitted++;
+        }
       }
 
       if (emitted != 0 && requested != Long.MAX_VALUE) {
         demand.addAndGet(-emitted);
       }
-
       missed = wip.addAndGet(-missed);
     } while (missed != 0);
   }
-
-  // ====================================================================================
-  // ROW ASSEMBLY STATE MACHINE
-  // ====================================================================================
 
   private void processToken(Token token) {
     if (token instanceof ColMetaDataToken meta) {
       this.activeMetaData = meta;
     } else if (token instanceof RowToken) {
-      // A new row has started. Flush any trailing PLP from the previous row.
       flushPlpIfNecessary(-1);
       this.assemblingRow = new byte[activeMetaData.getColumns().size()][];
     } else if (token instanceof DoneToken done) {
-      // The result set is done. Flush any trailing PLP from the final row.
       flushPlpIfNecessary(-1);
-
       if (done.getStatus().hasCount()) {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
@@ -146,10 +143,7 @@ public class AsyncWorkerSink {
 
   private void processColumn(ColumnData cd) {
     if (this.assemblingRow == null) return;
-
     int colIndex = cd.getColumnIndex();
-
-    // If the index changed, it means the previous PLP column (if any) is completely finished
     flushPlpIfNecessary(colIndex);
 
     if (cd instanceof PartialDataColumn p) {
@@ -165,47 +159,38 @@ public class AsyncWorkerSink {
 
   private void flushPlpIfNecessary(int incomingColIndex) {
     if (activePlpIndex != -1 && activePlpIndex != incomingColIndex) {
-      // We have moved on to a new column/token, so the active PLP stream is done.
       byte[] fullPlpData = plpAccumulator.toByteArray();
       assemblingRow[activePlpIndex] = fullPlpData;
-
       plpAccumulator.reset();
-
       int finishedIndex = activePlpIndex;
       activePlpIndex = -1;
-
-      // Now that the array is populated, check if this was the last column in the row
       checkRowCompletion(finishedIndex);
     }
   }
 
   private void checkRowCompletion(int justFinishedColIndex) {
     if (activeMetaData != null && justFinishedColIndex == activeMetaData.getColumns().size() - 1) {
-      final byte[][] finalRowData = this.assemblingRow;
-      final ColMetaDataToken meta = this.activeMetaData;
-
-      emitSegment(new StatefulRow(finalRowData, meta, context));
+      emitSegment(new StatefulRow(this.assemblingRow, this.activeMetaData, context));
       this.assemblingRow = null;
     }
   }
 
-  // ====================================================================================
-  // EMISSION & UTILITIES
-  // ====================================================================================
-
   private void emitSegment(Result.Segment segment) {
-    System.out.println("[" + Thread.currentThread().getName() + "] Assembled Segment: " + segment.getClass().getSimpleName());
+    logger.trace("Assembled Segment: {}", segment.getClass().getSimpleName());
     receivedSegments.add(segment);
+    if (onNext != null) onNext.accept(segment);
   }
 
   private void pushError(Throwable error) {
-    System.err.println("[" + Thread.currentThread().getName() + "] Error: " + error.getMessage());
+    logger.error("Stream Error: {}", error.getMessage(), error);
     completionLatch.countDown();
+    if (onError != null) onError.accept(error);
   }
 
   private void pushComplete() {
-    System.out.println("[" + Thread.currentThread().getName() + "] Stream Complete!");
+    logger.trace("Stream Complete!");
     completionLatch.countDown();
+    if (onComplete != null) onComplete.run();
   }
 
   public void awaitCompletion() throws InterruptedException { completionLatch.await(); }

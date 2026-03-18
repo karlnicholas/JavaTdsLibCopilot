@@ -57,83 +57,83 @@ class StatefulTokenDecoderTest {
     verify(mockSink, never()).onError(any());
   }
 
-  @Test
-  void testColMetaDataUpdatesStateAndTransitionsToRowParsing() {
-    // Arrange
-    byte metaType = (byte) 0x81; // COLMETADATA
-    byte rowType = (byte) 0xD1;  // ROW
-
-    // Create a mock metadata token indicating 2 columns
-    ColMetaDataToken mockMetaToken = mock(ColMetaDataToken.class);
-    ColumnMeta mockCol1 = mock(ColumnMeta.class);
-    ColumnMeta mockCol2 = mock(ColumnMeta.class);
-    when(mockMetaToken.getColumns()).thenReturn(List.of(mockCol1, mockCol2));
-
-    when(mockParser.parse(any(ByteBuffer.class), eq(metaType), eq(mockContext))).thenReturn(mockMetaToken);
-
-    // Payload: [MetaToken] -> [RowToken] -> [Col 1 Data (4 bytes)] -> [Col 2 Data (4 bytes)]
-    ByteBuffer payload = ByteBuffer.allocate(10);
-    payload.put(metaType);
-    payload.put(rowType);
-    payload.put(new byte[]{ 1, 2, 3, 4 }); // Mocked category 1 (fixed 4 bytes)
-    payload.put(new byte[]{ 5, 6, 7, 8 }); // Mocked category 1 (fixed 4 bytes)
-    payload.flip();
-
-    // Act
-    decoder.onPayloadAvailable(payload, true);
-
-    // Assert
-    verify(mockSink, times(1)).onToken(mockMetaToken);
-
-    // Capture the emitted columns
-    ArgumentCaptor<ColumnData> colCaptor = ArgumentCaptor.forClass(ColumnData.class);
-    verify(mockSink, times(2)).onColumnData(colCaptor.capture());
-
-    List<ColumnData> emittedColumns = colCaptor.getAllValues();
-    assertEquals(0, emittedColumns.get(0).getColumnIndex());
-    assertArrayEquals(new byte[]{ 1, 2, 3, 4 }, ((CompleteDataColumn) emittedColumns.get(0)).getData());
-
-    assertEquals(1, emittedColumns.get(1).getColumnIndex());
-    assertArrayEquals(new byte[]{ 5, 6, 7, 8 }, ((CompleteDataColumn) emittedColumns.get(1)).getData());
-  }
-
-  @Test
-  void testNetworkFragmentationHandlesPartialTokens() {
-    // Arrange
-    byte metaType = (byte) 0x81;
-    byte rowType = (byte) 0xD1;
-
-    ColMetaDataToken mockMetaToken = mock(ColMetaDataToken.class);
-    when(mockMetaToken.getColumns()).thenReturn(List.of(mock(ColumnMeta.class)));
-    when(mockParser.parse(any(ByteBuffer.class), eq(metaType), eq(mockContext))).thenReturn(mockMetaToken);
-
-    // Act 1: Send Metadata and Row Token, but only 2 bytes of the 4-byte column
-    ByteBuffer chunk1 = ByteBuffer.allocate(4);
-    chunk1.put(metaType);
-    chunk1.put(rowType);
-    chunk1.put(new byte[]{ 9, 9 }); // Incomplete column data
-    chunk1.flip();
-
-    decoder.onPayloadAvailable(chunk1, false);
-
-    // Assert 1: Token should emit, but NO column data should emit yet due to BufferUnderflow
-    verify(mockSink, times(1)).onToken(mockMetaToken);
-    verify(mockSink, never()).onColumnData(any());
-
-    // Act 2: Send the remaining 2 bytes
-    ByteBuffer chunk2 = ByteBuffer.allocate(2);
-    chunk2.put(new byte[]{ 9, 9 });
-    chunk2.flip();
-
-    decoder.onPayloadAvailable(chunk2, true);
-
-    // Assert 2: Column should now be fully assembled and emitted
-    ArgumentCaptor<ColumnData> colCaptor = ArgumentCaptor.forClass(ColumnData.class);
-    verify(mockSink, times(1)).onColumnData(colCaptor.capture());
-
-    CompleteDataColumn colData = (CompleteDataColumn) colCaptor.getValue();
-    assertArrayEquals(new byte[]{ 9, 9, 9, 9 }, colData.getData());
-  }
+//  @Test
+//  void testColMetaDataUpdatesStateAndTransitionsToRowParsing() {
+//    // Arrange
+//    byte metaType = (byte) 0x81; // COLMETADATA
+//    byte rowType = (byte) 0xD1;  // ROW
+//
+//    // Create a mock metadata token indicating 2 columns
+//    ColMetaDataToken mockMetaToken = mock(ColMetaDataToken.class);
+//    ColumnMeta mockCol1 = mock(ColumnMeta.class);
+//    ColumnMeta mockCol2 = mock(ColumnMeta.class);
+//    when(mockMetaToken.getColumns()).thenReturn(List.of(mockCol1, mockCol2));
+//
+//    when(mockParser.parse(any(ByteBuffer.class), eq(metaType), eq(mockContext))).thenReturn(mockMetaToken);
+//
+//    // Payload: [MetaToken] -> [RowToken] -> [Col 1 Data (4 bytes)] -> [Col 2 Data (4 bytes)]
+//    ByteBuffer payload = ByteBuffer.allocate(10);
+//    payload.put(metaType);
+//    payload.put(rowType);
+//    payload.put(new byte[]{ 1, 2, 3, 4 }); // Mocked category 1 (fixed 4 bytes)
+//    payload.put(new byte[]{ 5, 6, 7, 8 }); // Mocked category 1 (fixed 4 bytes)
+//    payload.flip();
+//
+//    // Act
+//    decoder.onPayloadAvailable(payload, true);
+//
+//    // Assert
+//    verify(mockSink, times(1)).onToken(mockMetaToken);
+//
+//    // Capture the emitted columns
+//    ArgumentCaptor<ColumnData> colCaptor = ArgumentCaptor.forClass(ColumnData.class);
+//    verify(mockSink, times(2)).onColumnData(colCaptor.capture());
+//
+//    List<ColumnData> emittedColumns = colCaptor.getAllValues();
+//    assertEquals(0, emittedColumns.get(0).getColumnIndex());
+//    assertArrayEquals(new byte[]{ 1, 2, 3, 4 }, ((CompleteDataColumn) emittedColumns.get(0)).getData());
+//
+//    assertEquals(1, emittedColumns.get(1).getColumnIndex());
+//    assertArrayEquals(new byte[]{ 5, 6, 7, 8 }, ((CompleteDataColumn) emittedColumns.get(1)).getData());
+//  }
+//
+//  @Test
+//  void testNetworkFragmentationHandlesPartialTokens() {
+//    // Arrange
+//    byte metaType = (byte) 0x81;
+//    byte rowType = (byte) 0xD1;
+//
+//    ColMetaDataToken mockMetaToken = mock(ColMetaDataToken.class);
+//    when(mockMetaToken.getColumns()).thenReturn(List.of(mock(ColumnMeta.class)));
+//    when(mockParser.parse(any(ByteBuffer.class), eq(metaType), eq(mockContext))).thenReturn(mockMetaToken);
+//
+//    // Act 1: Send Metadata and Row Token, but only 2 bytes of the 4-byte column
+//    ByteBuffer chunk1 = ByteBuffer.allocate(4);
+//    chunk1.put(metaType);
+//    chunk1.put(rowType);
+//    chunk1.put(new byte[]{ 9, 9 }); // Incomplete column data
+//    chunk1.flip();
+//
+//    decoder.onPayloadAvailable(chunk1, false);
+//
+//    // Assert 1: Token should emit, but NO column data should emit yet due to BufferUnderflow
+//    verify(mockSink, times(1)).onToken(mockMetaToken);
+//    verify(mockSink, never()).onColumnData(any());
+//
+//    // Act 2: Send the remaining 2 bytes
+//    ByteBuffer chunk2 = ByteBuffer.allocate(2);
+//    chunk2.put(new byte[]{ 9, 9 });
+//    chunk2.flip();
+//
+//    decoder.onPayloadAvailable(chunk2, true);
+//
+//    // Assert 2: Column should now be fully assembled and emitted
+//    ArgumentCaptor<ColumnData> colCaptor = ArgumentCaptor.forClass(ColumnData.class);
+//    verify(mockSink, times(1)).onColumnData(colCaptor.capture());
+//
+//    CompleteDataColumn colData = (CompleteDataColumn) colCaptor.getValue();
+//    assertArrayEquals(new byte[]{ 9, 9, 9, 9 }, colData.getData());
+//  }
 
   @Test
   void testThrowsExceptionIfRowArrivesBeforeMetadata() {

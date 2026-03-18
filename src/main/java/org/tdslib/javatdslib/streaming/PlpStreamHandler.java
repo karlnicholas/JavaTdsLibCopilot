@@ -1,13 +1,13 @@
 package org.tdslib.javatdslib.streaming;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.function.Function;
 import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
-import org.tdslib.javatdslib.transport.TdsTransport;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.function.Function;
 
 public class PlpStreamHandler<T> implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(PlpStreamHandler.class);

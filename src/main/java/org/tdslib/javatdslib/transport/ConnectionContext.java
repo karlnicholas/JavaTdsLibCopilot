@@ -1,9 +1,10 @@
 package org.tdslib.javatdslib.transport;
 
+import org.tdslib.javatdslib.protocol.TdsVersion;
+
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-import org.tdslib.javatdslib.protocol.TdsVersion;
 
 /**
  * Represents the current session/connection state in a TDS connection. Tracks environment changes

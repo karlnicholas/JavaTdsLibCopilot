@@ -3,6 +3,7 @@ module org.tdslib.javatdslib {
   requires r2dbc.spi;
   requires org.reactivestreams;
   requires org.slf4j;
+  requires reactor.core;
 
   // 2. Export ONLY your clean public API
   exports org.tdslib.javatdslib.api;

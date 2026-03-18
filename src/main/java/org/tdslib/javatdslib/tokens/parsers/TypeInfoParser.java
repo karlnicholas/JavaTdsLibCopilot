@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
+
+import java.nio.ByteBuffer;
 
 /** Shared parser for the TYPE_INFO stream structure. */
 public class TypeInfoParser {

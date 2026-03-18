@@ -1,9 +1,8 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import java.nio.ByteBuffer;
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.transport.TdsStreamHandler;
-import org.tdslib.javatdslib.transport.TdsTransport;
+
+import java.nio.ByteBuffer;
 
 /**
  * Parser for reading data values from a TDS stream based on the data type. This class handles the

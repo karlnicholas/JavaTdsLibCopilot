@@ -1,8 +1,9 @@
 package org.tdslib.javatdslib.transport;
 
-import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.ByteBuffer;
 
 /**
  * Extracts complete TDS packets from the network stream, strips the 8-byte headers,

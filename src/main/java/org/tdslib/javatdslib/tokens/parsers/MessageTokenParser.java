@@ -1,7 +1,5 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import org.tdslib.javatdslib.protocol.TdsVersion;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
@@ -9,6 +7,9 @@ import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * A unified parser for TDS "Message" tokens.

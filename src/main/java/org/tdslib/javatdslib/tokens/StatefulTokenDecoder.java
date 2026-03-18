@@ -1,10 +1,5 @@
 package org.tdslib.javatdslib.tokens;
 
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.List;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.TdsParameter;
@@ -15,6 +10,11 @@ import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.tokens.parsers.ColumnLengthResolver;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
+
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.List;
 
 public class StatefulTokenDecoder implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(StatefulTokenDecoder.class);

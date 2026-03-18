@@ -11,6 +11,8 @@ import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -22,20 +24,24 @@ import static org.mockito.Mockito.when;
 
 class ThreadHandoffTest {
 
-  private ExecutorService workerThreadPool;
+  // Swap ExecutorService for Reactor Scheduler
+  private Scheduler workerScheduler;
   private TdsTokenQueue tokenQueue;
   private AsyncWorkerSink workerSink;
   private ColMetaDataToken mockMetaData;
 
   @BeforeEach
   void setUp() {
-    workerThreadPool = Executors.newSingleThreadExecutor(r -> new Thread(r, "R2DBC-Worker-Thread"));
+    // Let Reactor manage the thread lifecycle
+    workerScheduler = Schedulers.newSingle("R2DBC-Worker-Thread");
 
     TdsTransport mockTransport = mock(TdsTransport.class);
     ConnectionContext mockContext = mock(ConnectionContext.class);
 
     tokenQueue = new TdsTokenQueue(mockTransport);
-    workerSink = new AsyncWorkerSink(tokenQueue, mockContext, workerThreadPool);
+
+    // Pass the scheduler to the sink
+    workerSink = new AsyncWorkerSink(tokenQueue, mockContext, workerScheduler);
 
     mockMetaData = mock(ColMetaDataToken.class);
     List mockColumns = mock(List.class);
@@ -45,7 +51,8 @@ class ThreadHandoffTest {
 
   @AfterEach
   void tearDown() {
-    workerThreadPool.shutdownNow();
+    // Safely dispose of the Reactor thread
+    workerScheduler.dispose();
   }
 
   @Test

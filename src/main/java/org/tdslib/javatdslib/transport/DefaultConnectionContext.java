@@ -1,12 +1,13 @@
 package org.tdslib.javatdslib.transport;
 
-import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.CollationUtils;
 import org.tdslib.javatdslib.protocol.TdsVersion;
+
+import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.Optional;
 
 /**
  * Clean implementation of ConnectionContext. Strictly holds session state without knowing about TCP

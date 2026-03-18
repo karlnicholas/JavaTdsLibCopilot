@@ -1,13 +1,14 @@
 package org.tdslib.javatdslib.tokens;
 
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.protocol.TdsType.LengthStrategy;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
+
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
 
 /**
  * Utility to proactively calculate the byte length of a ROW token without materializing data.

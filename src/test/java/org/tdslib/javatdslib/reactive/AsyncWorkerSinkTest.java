@@ -41,13 +41,13 @@ class AsyncWorkerSinkTest {
     when(mockMetaData.getColumns()).thenReturn(mockColumns);
     when(mockColumns.size()).thenReturn(2);
 
-    // Prime the mocked queue to return exactly one complete row sequence, then return null (empty)
+// Prime the mocked queue to return exactly one complete row sequence, then return null (empty)
     when(mockQueue.poll()).thenReturn(
         new TokenEvent(mockMetaData),
         new TokenEvent(new RowToken(mockMetaData)),
         new ColumnEvent(new CompleteDataColumn(0, new byte[]{1})),
         new ColumnEvent(new CompleteDataColumn(1, new byte[]{2})),
-        null
+        (org.tdslib.javatdslib.reactive.events.TdsStreamEvent) null // <-- Cast here
     );
 
     // Act: Request enough items to pull all elements and trigger the assembly
@@ -68,10 +68,10 @@ class AsyncWorkerSinkTest {
     when(mockDone.getCount()).thenReturn(42L);
     when(mockStatus.hasMoreResults()).thenReturn(true); // Don't trigger complete yet
 
-    // Prime the mocked queue
+// Prime the mocked queue
     when(mockQueue.poll()).thenReturn(
         new TokenEvent(mockDone),
-        null
+        (org.tdslib.javatdslib.reactive.events.TdsStreamEvent) null // <-- Cast here
     );
 
     // Act
