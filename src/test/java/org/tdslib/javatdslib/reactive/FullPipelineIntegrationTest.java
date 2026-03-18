@@ -33,23 +33,19 @@ class FullPipelineIntegrationTest {
   private TdsTokenQueue tokenQueue;
   private AsyncWorkerSink workerSink;
   private StatefulTokenDecoder decoder;
+  private ConnectionContext context;
 
   @BeforeEach
   void setUp() {
-    // 1. Thread Pool for R2DBC Assembly
     workerThreadPool = Executors.newSingleThreadExecutor(r -> new Thread(r, "R2DBC-Worker-Thread"));
-
-    // 2. Mocks for dependencies we aren't testing here
     TdsTransport mockTransport = mock(TdsTransport.class);
-    ConnectionContext mockContext = new DefaultConnectionContext();
+    context = new DefaultConnectionContext();
 
-    // 3. Assemble the Reactive Pipeline
     tokenQueue = new TdsTokenQueue(mockTransport);
-    workerSink = new AsyncWorkerSink(tokenQueue, mockContext, workerThreadPool);
+    workerSink = new AsyncWorkerSink(tokenQueue, context, workerThreadPool);
 
-    // 4. Assemble the Protocol Decoder (Note: The queue IS the TdsDecoderSink)
     TokenParserRegistry registry = TokenParserRegistry.DEFAULT;
-    decoder = new StatefulTokenDecoder(registry, mockContext, tokenQueue, new ArrayList<>());
+    decoder = new StatefulTokenDecoder(registry, context, tokenQueue, new ArrayList<>());
   }
 
   @AfterEach
@@ -58,53 +54,68 @@ class FullPipelineIntegrationTest {
   }
 
   @Test
-  void testEndToEndBinaryStreamDecodingAndAssembly() throws Exception {
-    // 1. Open the demand valve so the worker thread freely drains whatever arrives
-    System.out.println("[Main/Test-Thread] Initiating infinite demand to start stream...");
+  void testThreeSelectDump() throws Exception {
+    runIntegrationTest("src/test/resources/three select dump packet ");
+  }
+
+  @Test
+  void testSelectAllDump() throws Exception {
+    runIntegrationTest("src/test/resources/select all dump packet ");
+  }
+
+  /**
+   * Common test runner that pumps raw TDS packets through the decoder and verifies
+   * the final assembled R2DBC segments on the worker thread.
+   */
+  private void runIntegrationTest(String filePrefix) throws Exception {
+    System.out.println("[Main/Test-Thread] Testing pipeline with: " + filePrefix);
+
+    // 1. Initiate demand
     workerSink.request(Long.MAX_VALUE);
 
-    String baseFileName = "src/test/resources/three select dump packet ";
+    String originalThreadName = Thread.currentThread().getName();
     Thread.currentThread().setName("NIO-Network-Thread");
 
-    // 2. Feed the actual Wireshark TCP payloads into the decoder
-    System.out.println("[NIO-Network-Thread] Pushing raw TCP packets into decoder...");
+    try {
+      // 2. Feed the 6 binary packet files into the decoder
+      for (int i = 1; i <= 6; i++) {
+        Path path = Paths.get(filePrefix + i + ".txt");
+        byte[] packetBytes = parseWiresharkHexDump(path);
 
-    for (int i = 1; i <= 6; i++) {
-      Path path = Paths.get(baseFileName + i + ".txt");
-      byte[] packetBytes = parseWiresharkHexDump(path);
+        ByteBuffer packet = ByteBuffer.wrap(packetBytes).order(ByteOrder.LITTLE_ENDIAN);
 
-      ByteBuffer packet = ByteBuffer.wrap(packetBytes).order(ByteOrder.LITTLE_ENDIAN);
+        // TDS Packet Header is 8 bytes. Skip to payload.
+        packet.position(8);
+        ByteBuffer payloadOnly = packet.slice();
 
-      // TDS Packet Header is 8 bytes. Slice to pass only the payload.
-      packet.position(8);
-      ByteBuffer payloadOnly = packet.slice();
+        decoder.onPayloadAvailable(payloadOnly, (i == 6));
+      }
 
-      boolean isLast = (i == 6);
+      System.out.println("[NIO-Network-Thread] Packets pushed. Waiting for worker assembly...");
 
-      // This call executes on the NIO thread. The decoder chunks it, puts it in the TdsTokenQueue,
-      // and immediately returns. The actual row assembly happens concurrently on the worker thread.
-      decoder.onPayloadAvailable(payloadOnly, isLast);
+      // 3. Wait for Worker Thread completion
+      workerSink.awaitCompletion();
+
+      // 4. Verification Logic
+      verifyAssembledData(filePrefix);
+
+    } finally {
+      Thread.currentThread().setName(originalThreadName);
     }
+  }
 
-    System.out.println("[NIO-Network-Thread] Finished pushing raw bytes. Waiting for assembly...");
-
-    // 3. Wait for the Worker Thread to finish draining the queue and assembling segments.
-    // The final DONE token in packet 6 has no "More" flag, which will trigger pushComplete().
-    workerSink.awaitCompletion();
-
-// 4. Verification
+  private void verifyAssembledData(String scenarioName) {
     List<Result.Segment> segments = workerSink.getReceivedSegments();
-    assertFalse(segments.isEmpty(), "Worker thread should have assembled segments.");
+    assertFalse(segments.isEmpty(), "Worker thread should have assembled segments for " + scenarioName);
 
-    // Filter for only the Row segments to inspect data
     List<StatefulRow> rows = segments.stream()
         .filter(segment -> segment instanceof StatefulRow)
         .map(segment -> (StatefulRow) segment)
         .toList();
 
-    assertEquals(3, rows.size(), "Exactly 3 complete R2DBC Row segments should be assembled.");
+    assertEquals(3, rows.size(), "Expected 3 rows for " + scenarioName);
 
-    // The expected lengths for columns 0 through 30 based on the audit trail
+    // Expected column lengths based on the established audit trail
     int[] expectedLengths = {
         4, 1, 1, 2, 4, 8, 5, 5, 4, 8, 4, 8, 3, 5, 8, 8, 4, 10, 9, 22, // Col 0-19
         5000,                                                         // Col 20 (Stitched)
@@ -116,24 +127,20 @@ class FullPipelineIntegrationTest {
 
     for (int i = 0; i < rows.size(); i++) {
       StatefulRow row = rows.get(i);
-      byte[][] rowData = row.getRowData(); // Accesses the payload provided in StatefulRow.java
+      byte[][] rowData = row.getRowData();
 
       assertEquals(expectedLengths.length, rowData.length,
-          String.format("Row %d should have %d columns.", i, expectedLengths.length));
+          String.format("[%s] Row %d: column count mismatch.", scenarioName, i));
 
       for (int colIndex = 0; colIndex < expectedLengths.length; colIndex++) {
         byte[] actualColumn = rowData[colIndex];
-
-        assertNotNull(actualColumn,
-            String.format("Row %d, Column %d should not be null", i, colIndex));
-
+        assertNotNull(actualColumn, String.format("[%s] Row %d, Col %d is null", scenarioName, i, colIndex));
         assertEquals(expectedLengths[colIndex], actualColumn.length,
-            String.format("Row %d, Column %d length mismatch. Expected %d but got %d",
-                i, colIndex, expectedLengths[colIndex], actualColumn.length));
+            String.format("[%s] Row %d, Col %d length mismatch.", scenarioName, i, colIndex));
       }
     }
 
-    System.out.println("Integration Test Verified: 3 rows, 31 columns each, all PLP chunks correctly stitched.");
+    System.out.println("Verified " + scenarioName + ": 3 rows, 31 columns, all PLP stitched correctly.");
   }
 
   // ====================================================================================
