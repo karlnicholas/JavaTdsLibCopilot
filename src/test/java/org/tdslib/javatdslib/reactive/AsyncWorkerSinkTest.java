@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.reactive;
 
-import io.r2dbc.spi.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
@@ -21,15 +20,17 @@ import static org.mockito.Mockito.*;
 
 class AsyncWorkerSinkTest {
 
-  private TdsEventPublisher mockPublisher;
+  private TdsTokenQueue mockQueue;
   private ConnectionContext mockContext;
   private AsyncWorkerSink sink;
 
   @BeforeEach
   void setUp() {
-    mockPublisher = mock(TdsEventPublisher.class);
+    mockQueue = mock(TdsTokenQueue.class);
     mockContext = mock(ConnectionContext.class);
-    sink = new AsyncWorkerSink(mockPublisher, mockContext);
+
+    // Pass null for the Executor so the drain loop runs synchronously on the main thread for testing
+    sink = new AsyncWorkerSink(mockQueue, mockContext, null);
   }
 
   @Test
@@ -40,23 +41,21 @@ class AsyncWorkerSinkTest {
     when(mockMetaData.getColumns()).thenReturn(mockColumns);
     when(mockColumns.size()).thenReturn(2);
 
-    // Act: Push the exact sequence of events the StatefulTokenDecoder would generate
-    sink.pushNext(new TokenEvent(mockMetaData));
-    sink.pushNext(new TokenEvent(new RowToken(mockMetaData)));
-    sink.pushNext(new ColumnEvent(new CompleteDataColumn(0, new byte[]{1})));
+    // Prime the mocked queue to return exactly one complete row sequence, then return null (empty)
+    when(mockQueue.poll()).thenReturn(
+        new TokenEvent(mockMetaData),
+        new TokenEvent(new RowToken(mockMetaData)),
+        new ColumnEvent(new CompleteDataColumn(0, new byte[]{1})),
+        new ColumnEvent(new CompleteDataColumn(1, new byte[]{2})),
+        null
+    );
 
-    // Row is not finished yet, list should be empty
-    assertTrue(sink.getReceivedSegments().isEmpty());
-
-    // Push the final column to trigger checkRowCompletion()
-    sink.pushNext(new ColumnEvent(new CompleteDataColumn(1, new byte[]{2})));
+    // Act: Request enough items to pull all elements and trigger the assembly
+    sink.request(4);
 
     // Assert: Row is complete and was added to the segments list
     assertEquals(1, sink.getReceivedSegments().size());
     assertTrue(sink.getReceivedSegments().get(0) instanceof StatefulRow);
-
-    // Verify it correctly requested the next items
-    verify(mockPublisher, times(4)).request(1);
   }
 
   @Test
@@ -69,8 +68,14 @@ class AsyncWorkerSinkTest {
     when(mockDone.getCount()).thenReturn(42L);
     when(mockStatus.hasMoreResults()).thenReturn(true); // Don't trigger complete yet
 
+    // Prime the mocked queue
+    when(mockQueue.poll()).thenReturn(
+        new TokenEvent(mockDone),
+        null
+    );
+
     // Act
-    sink.pushNext(new TokenEvent(mockDone));
+    sink.request(1);
 
     // Assert
     assertEquals(1, sink.getReceivedSegments().size());
