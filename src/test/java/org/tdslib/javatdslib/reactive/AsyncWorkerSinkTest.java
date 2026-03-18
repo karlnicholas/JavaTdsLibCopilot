@@ -7,6 +7,7 @@ import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.TokenEvent;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.DoneStatus;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
@@ -37,17 +38,21 @@ class AsyncWorkerSinkTest {
   void testStandardRowAssembly() {
     // Arrange: Setup Metadata for a 2-column row
     ColMetaDataToken mockMetaData = mock(ColMetaDataToken.class);
-    List mockColumns = mock(List.class);
-    when(mockMetaData.getColumns()).thenReturn(mockColumns);
-    when(mockColumns.size()).thenReturn(2);
 
-// Prime the mocked queue to return exactly one complete row sequence, then return null (empty)
+    // FIX: Use a real list populated with mocked ColumnMeta objects
+    ColumnMeta mockCol1 = mock(ColumnMeta.class);
+    ColumnMeta mockCol2 = mock(ColumnMeta.class);
+    List<ColumnMeta> mockColumns = java.util.Arrays.asList(mockCol1, mockCol2);
+
+    when(mockMetaData.getColumns()).thenReturn(mockColumns);
+
+    // Prime the mocked queue to return exactly one complete row sequence...
     when(mockQueue.poll()).thenReturn(
         new TokenEvent(mockMetaData),
         new TokenEvent(new RowToken(mockMetaData)),
         new ColumnEvent(new CompleteDataColumn(0, new byte[]{1})),
         new ColumnEvent(new CompleteDataColumn(1, new byte[]{2})),
-        (org.tdslib.javatdslib.reactive.events.TdsStreamEvent) null // <-- Cast here
+        (org.tdslib.javatdslib.reactive.events.TdsStreamEvent) null
     );
 
     // Act: Request enough items to pull all elements and trigger the assembly

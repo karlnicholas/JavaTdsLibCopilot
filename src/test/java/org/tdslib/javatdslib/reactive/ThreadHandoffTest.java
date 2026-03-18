@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
 import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.DoneStatus;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
@@ -43,10 +44,10 @@ class ThreadHandoffTest {
     // Pass the scheduler to the sink
     workerSink = new AsyncWorkerSink(tokenQueue, mockContext, workerScheduler);
 
+    // FIX: Use a real list with a mock column instead of a mocked list
     mockMetaData = mock(ColMetaDataToken.class);
-    List mockColumns = mock(List.class);
-    when(mockMetaData.getColumns()).thenReturn(mockColumns);
-    when(mockColumns.size()).thenReturn(1);
+    ColumnMeta mockCol = mock(ColumnMeta.class);
+    when(mockMetaData.getColumns()).thenReturn(java.util.Collections.singletonList(mockCol));
   }
 
   @AfterEach

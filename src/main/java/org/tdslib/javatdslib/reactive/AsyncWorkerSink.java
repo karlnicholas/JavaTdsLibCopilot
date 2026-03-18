@@ -89,39 +89,44 @@ public class AsyncWorkerSink {
 
   private void drain() {
     int missed = 1;
-    do {
-      long requested = demand.get();
-      long emitted = 0;
+    try {
+      do {
+        long requested = demand.get();
+        long emitted = 0;
 
-      while (emitted != requested) {
-        if (isCancelled.get()) return;
+        while (emitted != requested) {
+          if (isCancelled.get()) return;
 
-        // Track how many segments we have before polling the next token
-        int segmentsBefore = receivedSegments.size();
+          int segmentsBefore = receivedSegments.size();
 
-        TdsStreamEvent event = tokenQueue.poll();
-        if (event == null) break;
+          TdsStreamEvent event = tokenQueue.poll();
+          if (event == null) break;
 
-        if (event instanceof ErrorEvent err) {
-          pushError(err.error());
-          return;
-        } else if (event instanceof TokenEvent te) {
-          processToken(te.token());
-        } else if (event instanceof ColumnEvent ce) {
-          processColumn(ce.data());
+          if (event instanceof ErrorEvent err) {
+            pushError(err.error());
+            return;
+          } else if (event instanceof TokenEvent te) {
+            processToken(te.token());
+          } else if (event instanceof ColumnEvent ce) {
+            processColumn(ce.data());
+          }
+
+          if (receivedSegments.size() > segmentsBefore) {
+            emitted++;
+          }
         }
 
-        // Only increment 'emitted' if a complete Row or UpdateCount was produced
-        if (receivedSegments.size() > segmentsBefore) {
-          emitted++;
+        if (emitted != 0 && requested != Long.MAX_VALUE) {
+          demand.addAndGet(-emitted);
         }
-      }
+        missed = wip.addAndGet(-missed);
+      } while (missed != 0);
 
-      if (emitted != 0 && requested != Long.MAX_VALUE) {
-        demand.addAndGet(-emitted);
-      }
-      missed = wip.addAndGet(-missed);
-    } while (missed != 0);
+    } catch (Throwable t) {
+      // CRITICAL: Catch any fatal runtime exceptions to prevent infinite hangs
+      // and safely propagate the error down the reactive chain.
+      pushError(t);
+    }
   }
 
   private void processToken(Token token) {
