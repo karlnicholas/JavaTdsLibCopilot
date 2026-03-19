@@ -34,7 +34,7 @@ public class MessageVisitor implements TokenVisitor {
   public void onToken(Token token) {
     if (token.getType() == TokenType.INFO) {
       InfoToken info = (InfoToken) token;
-      logger.info(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
+      logger.debug(SERVER_MESSAGE, info.getNumber(), info.getState(), info.getMessage());
 
     } else if (token.getType() == TokenType.ERROR) {
       ErrorToken err = (ErrorToken) token;

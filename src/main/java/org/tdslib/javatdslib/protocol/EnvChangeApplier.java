@@ -58,13 +58,13 @@ public class EnvChangeApplier {
 
         if (type == EnvChangeType.DATABASE) {
           context.setDatabase(dbNewValue);
-          logger.info("Database changed from '{}' to '{}'", dbOldValue, dbNewValue);
+          logger.debug("Database changed from '{}' to '{}'", dbOldValue, dbNewValue);
         } else if (type == EnvChangeType.LANGUAGE) {
           context.setLanguage(dbNewValue);
-          logger.info("Language changed from '{}' to '{}'", dbOldValue, dbNewValue);
+          logger.debug("Language changed from '{}' to '{}'", dbOldValue, dbNewValue);
         } else if (type == EnvChangeType.CHARSET) {
           context.setCharset(dbNewValue);
-          logger.info("Charset changed from '{}' to '{}'", dbOldValue, dbNewValue);
+          logger.debug("Charset changed from '{}' to '{}'", dbOldValue, dbNewValue);
         }
         break;
 
@@ -78,7 +78,7 @@ public class EnvChangeApplier {
           int newSize = Integer.parseInt(sizeStr);
           if (newSize >= 512 && newSize <= 32767) {
             context.setPacketSize(newSize);
-            logger.info("Packet size changed to {}", newSize);
+            logger.debug("Packet size changed to {}", newSize);
           }
         } catch (NumberFormatException e) {
           logger.warn("Failed to parse packet size: '{}'", sizeStr);
@@ -98,14 +98,14 @@ public class EnvChangeApplier {
           final int fullLcid = collationBuf.getInt();
           final int baseLcid = fullLcid & 0x000FFFFF;
 
-          logger.info("SQL Collation updated: LCID={}", baseLcid);
+          logger.debug("SQL Collation updated: LCID={}", baseLcid);
         }
         break;
 
       case RESET_CONNECTION:
       case RESET_CONNECTION_SKIP_TRAN:
         context.resetToDefaults();
-        logger.info("Connection reset by server ({})", type);
+        logger.warn("Connection reset by server ({})", type);
         break;
 
       case BEGIN_TRANSACTION:
