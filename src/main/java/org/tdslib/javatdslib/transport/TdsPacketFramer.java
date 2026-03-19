@@ -22,7 +22,7 @@ public class TdsPacketFramer {
   }
 
   public void decode(ByteBuffer networkBuffer) {
-    logger.trace(">>> FRAMER ENTER: networkBuffer.remaining() = {}", networkBuffer.remaining());
+    logger.trace(">>> [Framer] ENTER: Analyzing {} bytes", networkBuffer.remaining());
 
     while (networkBuffer.hasRemaining()) {
 
@@ -36,7 +36,7 @@ public class TdsPacketFramer {
 
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
-        logger.trace(">>> FRAMER WAIT: Need {} bytes for full packet, have {}", packetLength, networkBuffer.remaining());
+        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}", packetLength, networkBuffer.remaining());
         return;
       }
 
@@ -53,9 +53,12 @@ public class TdsPacketFramer {
       networkBuffer.limit(networkBuffer.position() + payloadLength);
       ByteBuffer payloadSlice = networkBuffer.slice();
 
-      logger.trace(">>> FRAMER HANDOFF: Giving complete payload of {} bytes to handler", payloadLength);
+      logger.trace(">>> [Framer] HANDOFF: Sliced {} byte payload. (isEom: {})", payloadLength, isEom);
 
       // 5. Fire and forget. We assume the handler fully processes this discrete frame.
+      if (isEom) {
+        logger.debug(">>> [Framer] EOM: Reached End of Message for the current TDS response.");
+      }
       streamHandler.onPayloadAvailable(payloadSlice, isEom);
 
       // 6. Advance the main buffer past the payload we just delivered
@@ -63,6 +66,6 @@ public class TdsPacketFramer {
       networkBuffer.position(networkBuffer.position() + payloadLength);
     }
 
-    logger.trace(">>> FRAMER EXIT: networkBuffer fully processed.");
+    logger.trace(">>> [Framer] EXIT: networkBuffer fully processed.");
   }
 }

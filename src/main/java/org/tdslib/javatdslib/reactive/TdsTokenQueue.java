@@ -57,10 +57,11 @@ public class TdsTokenQueue implements TdsDecoderSink {
   private void offer(TdsStreamEvent event) {
     queue.offer(event);
     int currentWeight = queueByteWeight.addAndGet(event.getByteWeight());
+    logger.trace("[TokenQueue] Enqueued {}. Current weight: {} bytes", event.getClass().getSimpleName(), currentWeight);
 
     // 1. Manage High Watermark (Suspend)
     if (currentWeight > HIGH_WATERMARK && isNetworkSuspended.compareAndSet(false, true)) {
-      logger.debug("High Watermark reached ({} bytes). Suspending network.", currentWeight);
+      logger.debug("[TokenQueue] HIGH WATERMARK BREACHED ({} bytes). Triggering network suspension.", currentWeight);
       transport.suspendNetworkRead();
     }
 
@@ -78,10 +79,11 @@ public class TdsTokenQueue implements TdsDecoderSink {
     TdsStreamEvent event = queue.poll();
     if (event != null) {
       int weight = queueByteWeight.addAndGet(-event.getByteWeight());
+      logger.trace("[TokenQueue] Dequeued {}. Current weight: {} bytes", event.getClass().getSimpleName(), weight);
 
       // Manage Low Watermark (Resume)
       if (weight < LOW_WATERMARK && isNetworkSuspended.compareAndSet(true, false)) {
-        logger.debug("Low Watermark reached ({} bytes). Resuming network.", weight);
+        logger.debug("[TokenQueue] LOW WATERMARK REACHED ({} bytes). Triggering network resumption.", weight);
         transport.resumeNetworkRead();
       }
     }

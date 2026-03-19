@@ -58,9 +58,11 @@ public class StatefulRow implements Row, Result.RowSegment {
     ColumnMeta colMeta = metaData.getColumns().get(index);
     TdsType tdsType = TdsType.valueOf(colMeta.getDataType());
 
-    // Resolve Charset (Fallback to session context if not explicitly collated)
-    Charset charset = java.nio.charset.StandardCharsets.UTF_16LE;
-    if (tdsType == TdsType.BIGVARCHR || tdsType == TdsType.VARCHAR || tdsType == TdsType.TEXT) {
+    // Everything else (CHAR, VARCHAR, TEXT) uses the server collation.
+    Charset charset;
+    if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT) {
+      charset = java.nio.charset.StandardCharsets.UTF_16LE;
+    } else {
       byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
       charset = collation != null
           ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())

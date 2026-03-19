@@ -49,7 +49,7 @@ public class NioSocketConnection implements NetworkConnection {
     this.socketChannel.configureBlocking(true);
     this.socketChannel.socket().setSoTimeout(readTimeoutMs);
 
-    logger.trace("Initiating connection to {}:{}", host, port);
+    logger.debug("Initiating physical TCP connection to {}:{}", host, port);
     InetSocketAddress address = new InetSocketAddress(host, port);
     if (!socketChannel.connect(address)) {
       socketChannel.finishConnect();
@@ -75,6 +75,7 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void enterAsyncMode(int bufferSize) throws IOException {
+    logger.debug("Entering asynchronous mode. Starting NIO event loop (Buffer: {} bytes)", bufferSize);
     this.readBuffer = ByteBuffer.allocate(bufferSize);
     this.selector = Selector.open();
     this.socketChannel.configureBlocking(false);
@@ -161,7 +162,7 @@ public class NioSocketConnection implements NetworkConnection {
       return;
     }
 
-    logger.trace("[NioSocketConnection] NIO: Read {} bytes from socket. Buffer capacity: {}", read, readBuffer.capacity());
+    logger.trace("[NIO] Read {} bytes. Buffer capacity: {}", read, readBuffer.capacity());
 
     readBuffer.flip();
     try {
@@ -173,7 +174,7 @@ public class NioSocketConnection implements NetworkConnection {
     } finally {
       // Any unconsumed bytes (e.g., partial headers or suspended streams) are preserved
       readBuffer.compact();
-      logger.trace("[NioSocketConnection] Buffer compacted. Position: {}", readBuffer.position());
+      logger.trace("[NIO] Buffer compacted. Position: {}", readBuffer.position());
     }
   }
 
@@ -209,7 +210,7 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
-      logger.trace("[NioSocketConnection] suspendRead() invoked. Removing OP_READ from selector.");
+      logger.debug("[NIO-Backpressure] Suspending OP_READ. The application is processing too slowly.");
       key.interestOpsAnd(~SelectionKey.OP_READ);
       selector.wakeup(); // Force selector to recognize the change immediately
     }
@@ -222,7 +223,7 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
-      logger.trace("[NioSocketConnection] resumeRead() invoked. Adding OP_READ to selector.");
+      logger.debug("[NIO-Backpressure] Resuming OP_READ. The application caught up.");
       key.interestOpsOr(SelectionKey.OP_READ);
       selector.wakeup();
     }
@@ -230,6 +231,7 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void close() throws IOException {
+    logger.debug("Closing NIO socket connection and shutting down event loop.");
     if (eventLoopExecutor != null) {
       eventLoopExecutor.shutdownNow(); // Cleanly shut down the background thread
     }
