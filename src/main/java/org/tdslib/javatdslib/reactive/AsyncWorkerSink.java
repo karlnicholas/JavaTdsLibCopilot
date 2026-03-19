@@ -4,6 +4,7 @@ import io.r2dbc.spi.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.internal.TdsUpdateCount;
+import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.ErrorEvent;
 import org.tdslib.javatdslib.reactive.events.TdsStreamEvent;
@@ -14,6 +15,8 @@ import org.tdslib.javatdslib.tokens.PartialDataColumn;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
+import org.tdslib.javatdslib.tokens.models.ErrorToken;
+import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import reactor.core.scheduler.Scheduler;
@@ -143,7 +146,31 @@ public class AsyncWorkerSink {
       if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
+    } else if (token instanceof ErrorToken error) {
+      logger.debug("WE CAUGHT AN ERROR TOKEN! {}", error.getMessage());
+      // Halt everything and propagate the server error immediately
+      pushError(new TdsServerErrorException(
+          error.getMessage(),
+          error.getNumber(),
+          error.getState(),
+          error.getSeverity(), // FIX: Was err.getClassLevel()
+          error.getServerName(),
+          error.getProcName(),
+          error.getLineNumber()));
+    } else if (token instanceof InfoToken info) {
+      logger.debug("Received InfoToken [{}]: {}", info.getNumber(), info.getMessage());
+
+      // TDS "State" is a byte/int, so we convert it to the String sqlState R2DBC expects
+      emitSegment(new TdsMessageSegment(
+          (int) info.getNumber(),
+          String.valueOf(info.getState()),
+          info.getMessage()
+      ));
+    } else {
+      // FAIL FAST: Never let a token be ignored silently!
+      logger.error("SILENT FAILURE DETECTED! Unhandled token: {}", token.getClass().getSimpleName());
     }
+
   }
 
   private void processColumn(ColumnData cd) {
@@ -187,7 +214,7 @@ public class AsyncWorkerSink {
   }
 
   private void pushError(Throwable error) {
-    logger.error("Stream Error: {}", error.getMessage(), error);
+    logger.debug("Stream Error: {}", error.getMessage(), error);
     completionLatch.countDown();
     if (onError != null) onError.accept(error);
   }

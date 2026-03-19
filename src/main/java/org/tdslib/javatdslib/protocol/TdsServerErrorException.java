@@ -5,12 +5,12 @@ package org.tdslib.javatdslib.protocol;
  * from any specific database API (like JDBC or R2DBC).
  */
 public class TdsServerErrorException extends RuntimeException {
-  private final int errorNumber;
+  private final long errorNumber;
   private final int state;
   private final int severity;
   private final String serverName;
   private final String procName;
-  private final int lineNumber;
+  private final long lineNumber;
 
   /**
    * Constructs a new TdsServerErrorException.
@@ -25,12 +25,12 @@ public class TdsServerErrorException extends RuntimeException {
    */
   public TdsServerErrorException(
       String message,
-      int errorNumber,
+      long errorNumber,
       int state,
       int severity,
       String serverName,
       String procName,
-      int lineNumber) {
+      long lineNumber) {
     super(message);
     this.errorNumber = errorNumber;
     this.state = state;
@@ -40,7 +40,7 @@ public class TdsServerErrorException extends RuntimeException {
     this.lineNumber = lineNumber;
   }
 
-  public int getErrorNumber() {
+  public long getErrorNumber() {
     return errorNumber;
   }
 
@@ -60,7 +60,7 @@ public class TdsServerErrorException extends RuntimeException {
     return procName;
   }
 
-  public int getLineNumber() {
+  public long getLineNumber() {
     return lineNumber;
   }
 }

@@ -45,7 +45,7 @@ public class MessageVisitor implements TokenVisitor {
         TdsServerErrorException tdsError =
             new TdsServerErrorException(
                 err.getMessage(),
-                (int) err.getNumber(),
+                err.getNumber(),
                 err.getState(),
                 err.getSeverity(), // FIX: Was err.getClassLevel()
                 err.getServerName(),
