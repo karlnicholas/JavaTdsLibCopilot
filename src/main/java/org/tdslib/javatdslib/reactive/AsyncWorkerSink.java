@@ -17,6 +17,7 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
+import org.tdslib.javatdslib.tokens.models.ReturnStatusToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import reactor.core.scheduler.Scheduler;
@@ -166,6 +167,10 @@ public class AsyncWorkerSink {
           String.valueOf(info.getState()),
           info.getMessage()
       ));
+    } else if (token instanceof ReturnStatusToken) {
+      // INTENTIONALLY IGNORED:
+      // RPCs always return a status (0 for success). We do not need to emit
+      // this for standard R2DBC queries, so we drop it silently.
     } else {
       // FAIL FAST: Never let a token be ignored silently!
       logger.error("SILENT FAILURE DETECTED! Unhandled token: {}", token.getClass().getSimpleName());
