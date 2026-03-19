@@ -47,11 +47,13 @@ public class StatefulRow implements Row, Result.RowSegment {
   @Override
   public <T> T get(int index, Class<T> type) {
     if (index < 0 || index >= payload.length) {
+      logger.debug("[StatefulRow] Out of bounds access attempt: index {} for row with {} columns", index, payload.length);
       throw new IllegalArgumentException("Invalid Column Index: " + index);
     }
 
     byte[] rawData = payload[index];
     if (rawData == null) {
+      logger.trace("[StatefulRow] Column {} is NULL", index);
       return null;
     }
 
@@ -70,7 +72,10 @@ public class StatefulRow implements Row, Result.RowSegment {
     }
 
     // Decode directly from the byte[] into the requested Java type
-    return DecoderRegistry.DEFAULT.decode(rawData, tdsType, type, colMeta.getScale(), charset);
+    T decoded = DecoderRegistry.DEFAULT.decode(rawData, tdsType, type, colMeta.getScale(), charset);
+    logger.trace("[StatefulRow] Decoding column {}: Type={}, Target={}, Charset={}, Bytes={}, Value={}",
+        index, tdsType, type.getSimpleName(), charset, rawData.length, decoded);
+    return decoded;
   }
 
   @Override
@@ -80,6 +85,7 @@ public class StatefulRow implements Row, Result.RowSegment {
         return get(i, type);
       }
     }
+    logger.debug("[StatefulRow] Column name '{}' not found in row metadata.", name);
     throw new IllegalArgumentException("Column not found: " + name);
   }
 

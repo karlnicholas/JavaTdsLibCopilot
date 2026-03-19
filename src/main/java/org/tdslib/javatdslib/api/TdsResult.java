@@ -35,7 +35,7 @@ public class TdsResult implements Result {
 
   @Override
   public Publisher<Long> getRowsUpdated() {
-    // R2DBC Spec: getRowsUpdated only emits UpdateCount segments
+    logger.debug("[TdsResult] User requested 'getRowsUpdated' for this result set.");
     return Flux.from(source)
         .ofType(Result.UpdateCount.class)
         .map(Result.UpdateCount::value);
@@ -44,7 +44,7 @@ public class TdsResult implements Result {
   @Override
   public <T> Publisher<T> map(BiFunction<Row, RowMetadata, ? extends T> mappingFunction) {
     if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
-
+    logger.debug("[TdsResult] User initiated row mapping (Result.map).");
     // R2DBC Spec: map only applies to RowSegments. UpdateCounts are ignored.
     return Flux.from(source)
         .ofType(Result.RowSegment.class)
@@ -54,7 +54,7 @@ public class TdsResult implements Result {
   @Override
   public Result filter(Predicate<Result.Segment> predicate) {
     if (predicate == null) throw new IllegalArgumentException("predicate must not be null");
-
+    logger.debug("[TdsResult] Applying filter predicate to segment stream.");
     // R2DBC Spec: filter applies to the entire segment stream, returning a new Result
     return new TdsResult(Flux.from(source).filter(predicate));
   }
@@ -62,7 +62,7 @@ public class TdsResult implements Result {
   @Override
   public <T> Publisher<T> flatMap(Function<Result.Segment, ? extends Publisher<? extends T>> mappingFunction) {
     if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
-
+    logger.debug("[TdsResult] User initiated flatMap on segments (typically for OutParameters).");
     // R2DBC Spec: flatMap applies to all segments (Rows, OutParameters, UpdateCounts)
     return Flux.from(source).flatMap(mappingFunction);
   }
