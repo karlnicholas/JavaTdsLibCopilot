@@ -18,6 +18,7 @@ import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.tokens.models.ReturnStatusToken;
+import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import reactor.core.scheduler.Scheduler;
@@ -49,6 +50,9 @@ public class AsyncWorkerSink {
   private byte[][] assemblingRow;
   private int activePlpIndex = -1;
   private final ByteArrayOutputStream plpAccumulator = new ByteArrayOutputStream();
+
+  // Add this field to buffer OUT parameters
+  private final List<ReturnValueToken> activeOutParams = new java.util.ArrayList<>();
 
   // Replace DataSink with standard Java functional callbacks
   private Consumer<Result.Segment> onNext;
@@ -139,8 +143,21 @@ public class AsyncWorkerSink {
     } else if (token instanceof RowToken) {
       flushPlpIfNecessary(-1);
       this.assemblingRow = new byte[activeMetaData.getColumns().size()][];
+    } else if (token instanceof ReturnValueToken retVal) {
+      // ACCUMULATE OUT PARAMETERS
+      logger.debug("Buffering ReturnValueToken for param: {}", retVal.getParamName());
+      this.activeOutParams.add(retVal);
+
     } else if (token instanceof DoneToken done) {
       flushPlpIfNecessary(-1);
+
+      // 1. EMIT OUT PARAMETERS BEFORE UPDATE COUNT OR COMPLETION
+      if (!activeOutParams.isEmpty()) {
+        emitSegment(new TdsOutSegment(new java.util.ArrayList<>(activeOutParams), context));
+        activeOutParams.clear(); // Reset for the next statement in the batch
+      }
+
+      // 2. Existing DoneToken logic...
       if (done.getStatus().hasCount()) {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
