@@ -19,8 +19,6 @@ import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
