@@ -55,6 +55,7 @@ public class TdsTokenQueue implements TdsDecoderSink {
   public void onError(Throwable error) { offer(new ErrorEvent(error)); }
 
   private void offer(TdsStreamEvent event) {
+    //TODO:check offer, paranoid code.
     queue.offer(event);
     int currentWeight = queueByteWeight.addAndGet(event.getByteWeight());
     logger.trace("[TokenQueue] Enqueued {}. Current weight: {} bytes", event.getClass().getSimpleName(), currentWeight);

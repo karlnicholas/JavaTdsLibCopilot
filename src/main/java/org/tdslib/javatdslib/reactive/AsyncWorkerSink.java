@@ -47,10 +47,7 @@ public class AsyncWorkerSink {
   private final List<Result.Segment> receivedSegments = new CopyOnWriteArrayList<>();
 
   private ColMetaDataToken activeMetaData;
-  private byte[][] assemblingRow;
-  private int activePlpIndex = -1;
-  private final ByteArrayOutputStream plpAccumulator = new ByteArrayOutputStream();
-
+  private RowDrainer activeRowDrainer;
   // Add this field to buffer OUT parameters
   private final List<ReturnValueToken> activeOutParams = new java.util.ArrayList<>();
 
@@ -141,29 +138,43 @@ public class AsyncWorkerSink {
     if (token instanceof ColMetaDataToken meta) {
       this.activeMetaData = meta;
     } else if (token instanceof RowToken) {
-      flushPlpIfNecessary(-1);
-      this.assemblingRow = new byte[activeMetaData.getColumns().size()][];
-    } else if (token instanceof ReturnValueToken retVal) {
-      // ACCUMULATE OUT PARAMETERS
-      logger.debug("Buffering ReturnValueToken for param: {}", retVal.getParamName());
-      this.activeOutParams.add(retVal);
+
+      // Phase A: The Handoff (and Edge Case Safety)
+      if (activeRowDrainer != null) {
+        activeRowDrainer.flushPlpIfNecessary(-1); // Flush trailing LOB from previous row
+        if (activeRowDrainer.isComplete()) {
+          emitSegment(activeRowDrainer.assembleRow());
+        }
+      }
+      this.activeRowDrainer = new RowDrainer(activeMetaData, context);
 
     } else if (token instanceof DoneToken done) {
-      flushPlpIfNecessary(-1);
 
-      // 1. EMIT OUT PARAMETERS BEFORE UPDATE COUNT OR COMPLETION
+      // 1. Safety flush for the very last row in the result set if it ends in a LOB
+      if (activeRowDrainer != null) {
+        activeRowDrainer.flushPlpIfNecessary(-1);
+        if (activeRowDrainer.isComplete()) {
+          emitSegment(activeRowDrainer.assembleRow());
+        }
+        activeRowDrainer = null;
+      }
+
+      // 2. Emit Out Parameters (If any exist for this statement)
       if (!activeOutParams.isEmpty()) {
         emitSegment(new TdsOutSegment(new java.util.ArrayList<>(activeOutParams), context));
         activeOutParams.clear(); // Reset for the next statement in the batch
       }
 
-      // 2. Existing DoneToken logic...
+      // 3. Emit the Update Count
       if (done.getStatus().hasCount()) {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
+
+      // 4. Terminate the reactive stream
       if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
+
     } else if (token instanceof ErrorToken error) {
       logger.debug("WE CAUGHT AN ERROR TOKEN! {}", error.getMessage());
       // Halt everything and propagate the server error immediately
@@ -196,36 +207,17 @@ public class AsyncWorkerSink {
   }
 
   private void processColumn(ColumnData cd) {
-    if (this.assemblingRow == null) return;
-    int colIndex = cd.getColumnIndex();
-    flushPlpIfNecessary(colIndex);
+    // If we receive column data but have no active drainer, drop it safely
+    if (this.activeRowDrainer == null) return;
 
-    if (cd instanceof PartialDataColumn p) {
-      activePlpIndex = colIndex;
-      if (p.getChunk() != null) {
-        plpAccumulator.write(p.getChunk(), 0, p.getChunk().length);
-      }
-    } else if (cd instanceof CompleteDataColumn c) {
-      assemblingRow[colIndex] = c.getData();
-      checkRowCompletion(colIndex);
-    }
-  }
+    // Delegate the data to Phase B (The Asynchronous Drain)
+    this.activeRowDrainer.processColumn(cd);
 
-  private void flushPlpIfNecessary(int incomingColIndex) {
-    if (activePlpIndex != -1 && activePlpIndex != incomingColIndex) {
-      byte[] fullPlpData = plpAccumulator.toByteArray();
-      assemblingRow[activePlpIndex] = fullPlpData;
-      plpAccumulator.reset();
-      int finishedIndex = activePlpIndex;
-      activePlpIndex = -1;
-      checkRowCompletion(finishedIndex);
-    }
-  }
-
-  private void checkRowCompletion(int justFinishedColIndex) {
-    if (activeMetaData != null && justFinishedColIndex == activeMetaData.getColumns().size() - 1) {
-      emitSegment(new StatefulRow(this.assemblingRow, this.activeMetaData, context));
-      this.assemblingRow = null;
+    // Phase C: The Yield
+    // If the drainer reports the row is finished, emit it and clean up
+    if (this.activeRowDrainer.isComplete()) {
+      emitSegment(this.activeRowDrainer.assembleRow());
+      this.activeRowDrainer = null;
     }
   }
 
