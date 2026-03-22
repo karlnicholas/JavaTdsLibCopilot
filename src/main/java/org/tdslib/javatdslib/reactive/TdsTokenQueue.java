@@ -91,6 +91,10 @@ public class TdsTokenQueue implements TdsDecoderSink {
     return event;
   }
 
+  public TdsStreamEvent peek() {
+    return queue.peek();
+  }
+
   public void clear() {
     queue.clear();
     queueByteWeight.set(0);

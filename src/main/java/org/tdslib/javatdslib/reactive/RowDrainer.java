@@ -2,36 +2,42 @@ package org.tdslib.javatdslib.reactive;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
 import org.tdslib.javatdslib.tokens.PartialDataColumn;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
+import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.transport.ConnectionContext;
-
-import java.io.ByteArrayOutputStream;
 
 /**
  * Responsible for assembling a single row's data.
- * Currently materializes all columns (including PLPs) into memory.
- * Designed to be upgraded to a deferred LOB handoff architecture in the future.
+ * Upgraded to lay the tracks for deferred LOB handoffs.
  */
 public class RowDrainer {
   private static final Logger logger = LoggerFactory.getLogger(RowDrainer.class);
 
+  // ADDED: Marker for columns we haven't read from the network yet
+  public static final Object UNFETCHED = new Object();
+
   private final ColMetaDataToken metaData;
   private final ConnectionContext context;
-  private final byte[][] assemblingRow;
+  private final Object[] assemblingRow; // Shifted from byte[][] to Object[]
   private final int totalColumns;
 
-  private int activePlpIndex = -1;
-  private final ByteArrayOutputStream plpAccumulator = new ByteArrayOutputStream();
-  private boolean isComplete = false;
+  private boolean isReadyToYield = false;
 
-  public RowDrainer(ColMetaDataToken metaData, ConnectionContext context) {
+  // ADD FIELD
+  private final TdsTokenQueue tokenQueue;
+
+  public RowDrainer(ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
     this.metaData = metaData;
     this.context = context;
+    this.tokenQueue = tokenQueue;
     this.totalColumns = metaData.getColumns().size();
-    this.assemblingRow = new byte[totalColumns][];
+    this.assemblingRow = new Object[totalColumns];
+// Initialize the row to UNFETCHED
+    java.util.Arrays.fill(this.assemblingRow, UNFETCHED);
   }
 
   /**
@@ -40,50 +46,36 @@ public class RowDrainer {
    */
   public void processColumn(ColumnData cd) {
     int colIndex = cd.getColumnIndex();
-    flushPlpIfNecessary(colIndex);
+    ColumnMeta colMeta = metaData.getColumns().get(colIndex);
+    TdsType tdsType = TdsType.valueOf(colMeta.getDataType());
 
-    if (cd instanceof PartialDataColumn p) {
-      activePlpIndex = colIndex;
-      if (p.getChunk() != null) {
-        plpAccumulator.write(p.getChunk(), 0, p.getChunk().length);
-      }
-    } else if (cd instanceof CompleteDataColumn c) {
-      assemblingRow[colIndex] = c.getData();
-      checkRowCompletion(colIndex);
+    // FIX: A column is PLP if the strategy is PLP, OR if the Framer chunked it as PartialData
+    boolean isPlp = (cd instanceof PartialDataColumn) ||
+        (tdsType != null && tdsType.strategy == TdsType.LengthStrategy.PLP);
+
+    if (isPlp) {
+      logger.trace("[RowDrainer] PLP/LOB detected at index {}. Yielding early.", colIndex);
+      // FIX: Do not drop the chunk! Save it in the array for StatefulRow to process.
+      assemblingRow[colIndex] = cd;
+      isReadyToYield = true;
+      return;
     }
-  }
 
-  /**
-   * Flushes accumulating PLP bytes into the row payload.
-   * Can be triggered by moving to a new column, or forcefully by a Done/Row token.
-   */
-  public void flushPlpIfNecessary(int incomingColIndex) {
-    if (activePlpIndex != -1 && activePlpIndex != incomingColIndex) {
-      assemblingRow[activePlpIndex] = plpAccumulator.toByteArray();
-      plpAccumulator.reset();
-      int finishedIndex = activePlpIndex;
-      activePlpIndex = -1;
-      checkRowCompletion(finishedIndex);
+    if (cd instanceof CompleteDataColumn c) {
+      assemblingRow[colIndex] = c.getData(); // Standard materialized data
+      checkRowCompletion(colIndex);
     }
   }
 
   private void checkRowCompletion(int justFinishedColIndex) {
     if (justFinishedColIndex == totalColumns - 1) {
-      this.isComplete = true;
+      this.isReadyToYield = true;
     }
   }
 
-  /**
-   * Phase C Trigger: Informs the Sink if the row is ready to be yielded.
-   */
-  public boolean isComplete() {
-    return isComplete;
-  }
+  public boolean isComplete() { return isReadyToYield; }
 
-  /**
-   * Phase C: Wraps the internal state into the StatefulRow for the user's synchronous get().
-   */
   public StatefulRow assembleRow() {
-    return new StatefulRow(this.assemblingRow, this.metaData, this.context);
+    return new StatefulRow(this.assemblingRow, this.metaData, this.context, this.tokenQueue);
   }
 }

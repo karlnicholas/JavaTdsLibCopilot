@@ -141,18 +141,18 @@ public class AsyncWorkerSink {
 
       // Phase A: The Handoff (and Edge Case Safety)
       if (activeRowDrainer != null) {
-        activeRowDrainer.flushPlpIfNecessary(-1); // Flush trailing LOB from previous row
         if (activeRowDrainer.isComplete()) {
           emitSegment(activeRowDrainer.assembleRow());
         }
       }
-      this.activeRowDrainer = new RowDrainer(activeMetaData, context);
+      // PASS THE TOKEN QUEUE HERE
+      this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
 
     } else if (token instanceof DoneToken done) {
 
       // 1. Safety flush for the very last row in the result set if it ends in a LOB
       if (activeRowDrainer != null) {
-        activeRowDrainer.flushPlpIfNecessary(-1);
+        // REMOVED: activeRowDrainer.flushPlpIfNecessary(-1);
         if (activeRowDrainer.isComplete()) {
           emitSegment(activeRowDrainer.assembleRow());
         }
@@ -182,7 +182,7 @@ public class AsyncWorkerSink {
           error.getMessage(),
           error.getNumber(),
           error.getState(),
-          error.getSeverity(), // FIX: Was err.getClassLevel()
+          error.getSeverity(),
           error.getServerName(),
           error.getProcName(),
           error.getLineNumber()));
@@ -196,14 +196,11 @@ public class AsyncWorkerSink {
           info.getMessage()
       ));
     } else if (token instanceof ReturnStatusToken) {
-      // INTENTIONALLY IGNORED:
-      // RPCs always return a status (0 for success). We do not need to emit
-      // this for standard R2DBC queries, so we drop it silently.
+      // INTENTIONALLY IGNORED
     } else {
       // FAIL FAST: Never let a token be ignored silently!
       logger.error("SILENT FAILURE DETECTED! Unhandled token: {}", token.getClass().getSimpleName());
     }
-
   }
 
   private void processColumn(ColumnData cd) {
