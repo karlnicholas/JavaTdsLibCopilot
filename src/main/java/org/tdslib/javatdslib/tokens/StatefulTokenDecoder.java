@@ -93,6 +93,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
             try {
               TokenParser parser = registry.getParser(currentTokenType);
               if (parser == null) {
+                // ADD THE CRASH DUMP HERE
+                String dump = generateCrashDump(accumulator, currentTokenType);
+                logger.error(dump);
                 throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
               }
 
@@ -108,6 +111,8 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
               // Standard token didn't have enough bytes to finish parsing.
               // Rewind to the mark (the token type byte) and wait for next packet.
               accumulator.reset();
+              System.out.println('.');
+              expectingNewToken = true; // <--- THE FIX
               break;
             }
           }
@@ -239,5 +244,36 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       expanded.put(accumulator);
       accumulator = expanded;
     }
+  }
+
+  private String generateCrashDump(ByteBuffer buffer, byte badToken) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("\n================ FATAL DECODER DESYNC =================\n");
+    sb.append(String.format("Failed Token Type : 0x%02X\n", badToken));
+    sb.append(String.format("Buffer Position   : %d\n", buffer.position()));
+    sb.append(String.format("Buffer Limit      : %d\n", buffer.limit()));
+
+    if (currentMetaData != null) {
+      sb.append(String.format("Last Known Column : %d of %d\n",
+          currentRowColIndex, currentMetaData.getColumns().size()));
+    }
+
+    sb.append("\n--- HEX DUMP (Surrounding Bytes) ---\n");
+
+    // Look 16 bytes backwards (or to the start of the buffer)
+    int start = Math.max(0, buffer.position() - 16);
+    // Look 32 bytes forwards (or to the limit)
+    int end = Math.min(buffer.limit(), buffer.position() + 32);
+
+    for (int i = start; i < end; i++) {
+      if (i == buffer.position() - 1) {
+        // Highlight the byte that caused the crash
+        sb.append(String.format("[0x%02X] ", buffer.get(i)));
+      } else {
+        sb.append(String.format("0x%02X ", buffer.get(i)));
+      }
+    }
+    sb.append("\n=======================================================\n");
+    return sb.toString();
   }
 }

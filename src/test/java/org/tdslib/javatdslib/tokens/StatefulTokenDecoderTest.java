@@ -8,6 +8,7 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
@@ -134,6 +135,50 @@ class StatefulTokenDecoderTest {
 //    CompleteDataColumn colData = (CompleteDataColumn) colCaptor.getValue();
 //    assertArrayEquals(new byte[]{ 9, 9, 9, 9 }, colData.getData());
 //  }
+
+  @Test
+  void testTokenFragmentationStateLeakBug() {
+    // 1. OVERRIDE THE TRAP: Restrict the registry so it only knows about 0xFD.
+    // If the state leaks and it tries to parse the 0x00 byte, it will return null and correctly crash.
+    reset(mockRegistry);
+    when(mockRegistry.getParser(eq((byte) 0xFD))).thenReturn(mockParser);
+
+    // Arrange: The exact byte sequence from the crash dump (13 bytes total)
+    // 0xFD (DONE), 0x10 0x00 (Status), 0xC1 0x00 (Cmd), 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 (RowCount)
+    byte[] fullToken = new byte[] {
+        (byte)0xFD, 0x10, 0x00, (byte)0xC1, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    // Mock the DoneToken parser to consume exactly 12 bytes of payload (throwing Underflow if less)
+    Token mockDoneToken = mock(Token.class);
+    when(mockParser.parse(any(ByteBuffer.class), eq((byte)0xFD), eq(mockContext))).thenAnswer(invocation -> {
+      ByteBuffer buf = invocation.getArgument(0);
+      if (buf.remaining() < 12) throw new BufferUnderflowException();
+      buf.position(buf.position() + 12); // Consume payload
+      return mockDoneToken;
+    });
+
+    // Act 1: Send the first 12 bytes (Simulating network fragmentation, missing the last 0x00 byte)
+    ByteBuffer packet1 = ByteBuffer.allocate(12);
+    packet1.put(fullToken, 0, 12);
+    packet1.flip();
+    decoder.onPayloadAvailable(packet1, false);
+
+    // Act 2: Send the final 1 byte in a new packet
+    ByteBuffer packet2 = ByteBuffer.allocate(1);
+    packet2.put(fullToken, 12, 1);
+    packet2.flip();
+
+    decoder.onPayloadAvailable(packet2, true);
+
+    // ASSERTION 1: Verify the token was eventually emitted successfully
+    verify(mockSink, times(1)).onToken(mockDoneToken);
+
+    // ASSERTION 2: THE SMOKING GUN.
+    // If the bug is present, the decoder will swallow the IllegalStateException
+    // and push it to the sink. This verify will fail if the fix is missing!
+    verify(mockSink, never()).onError(any());
+  }
 
   @Test
   void testThrowsExceptionIfRowArrivesBeforeMetadata() {
