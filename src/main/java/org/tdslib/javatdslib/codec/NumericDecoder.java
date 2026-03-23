@@ -44,32 +44,25 @@ public class NumericDecoder implements ResultDecoder {
                       Charset varcharCharset) {
     switch (tdsType) {
       case INT1:
-        // FIX: Mask with 0xFF to treat SQL Server TINYINT as Unsigned
-        return convertSimple(data[0] & 0xFF, targetType);
+        return convertSimple(data[0] & 0xFF, 1, targetType);
       case INT2:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(),
-            targetType);
+        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
       case INT4:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(),
-            targetType);
+        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
       case INT8:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(),
-            targetType);
+        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
       case INTN:
         if (data.length == 1) {
-          return convertSimple(data[0] & 0xFF, targetType); // FIX: Unsigned mask
+          return convertSimple(data[0] & 0xFF, 1, targetType);
         }
         if (data.length == 2) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(),
-              targetType);
+          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
         }
         if (data.length == 4) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(),
-              targetType);
+          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
         }
         if (data.length == 8) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(),
-              targetType);
+          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
         }
         throw new IllegalStateException("Unexpected INTN length");
 
@@ -80,12 +73,11 @@ public class NumericDecoder implements ResultDecoder {
         if (data.length == 4) {
           return targetType.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
         }
-        // Explicitly handle the 8-byte FLTN scenario instead of falling through
         double fltnDouble = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
         if (targetType == Float.class) {
           return targetType.cast((float) fltnDouble);
         }
-        return targetType.cast(fltnDouble);
+        return targetType.cast(fltnDouble); // Defaults to Double for Object.class
 
       case FLT8:
         double flt8Double = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
@@ -97,10 +89,11 @@ public class NumericDecoder implements ResultDecoder {
       case BIT:
       case BITN:
         boolean boolVal = data[0] != 0;
-        if (targetType == Boolean.class) {
+        // FIX: Allow Object.class to naturally yield a Boolean
+        if (targetType == Boolean.class || targetType == Object.class) {
           return targetType.cast(boolVal);
         }
-        return convertSimple(boolVal ? 1 : 0, targetType);
+        return convertSimple(boolVal ? 1 : 0, 1, targetType);
 
       case NUMERIC:
       case DECIMAL:
@@ -111,7 +104,8 @@ public class NumericDecoder implements ResultDecoder {
       case MONEY:
       case MONEYN:
       case SMALLMONEY:
-        if (targetType == BigDecimal.class) {
+        // FIX: Allow Object.class to naturally yield a BigDecimal
+        if (targetType == BigDecimal.class || targetType == Object.class) {
           if (data.length == 4) {
             int valM = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt();
             return targetType.cast(BigDecimal.valueOf(valM, 4));
@@ -132,22 +126,25 @@ public class NumericDecoder implements ResultDecoder {
   }
 
   @SuppressWarnings("unchecked")
-  private <T> T convertSimple(long val, Class<T> type) {
-    if (type == Integer.class) {
+  private <T> T convertSimple(long val, int byteLength, Class<T> type) {
+    // Dynamically size the Java primitive based on the actual byte length from the network
+    if (type == Integer.class || (type == Object.class && byteLength == 4)) {
       return (T) Integer.valueOf((int) val);
     }
-    if (type == Long.class) {
+    if (type == Long.class || (type == Object.class && byteLength == 8)) {
       return (T) Long.valueOf(val);
     }
-    if (type == Short.class) {
+    if (type == Short.class || (type == Object.class && byteLength == 2)) {
       return (T) Short.valueOf((short) val);
     }
-    if (type == Byte.class) {
-      return (T) Byte.valueOf((byte) val);
+    if (type == Byte.class || (type == Object.class && byteLength == 1)) {
+      return (T) Short.valueOf((short) val); // SQL Server TINYINT is 0-255 unsigned, Short is safest
     }
     if (type == Boolean.class) {
       return (T) Boolean.valueOf(val != 0);
     }
+
+    // Safest ultimate fallback
     return (T) Long.valueOf(val);
   }
 

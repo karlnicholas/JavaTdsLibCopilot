@@ -100,35 +100,49 @@ public class TdsTransport implements AutoCloseable {
         TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
         AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
 
-        // 2. Wire Callbacks cleanly
+        // 2. Wire Callbacks cleanly - RELEASE LOCK BEFORE EMITTING
         workerSink.setCallbacks(
             fluxSink::next,
-            fluxSink::error,
-            fluxSink::complete
+            error -> {
+              this.setStreamHandlers(null, null);
+              this.isExecuting.set(false); // Unlock BEFORE error propagates
+              fluxSink.error(error);
+            },
+            () -> {
+              this.setStreamHandlers(null, null);
+              this.isExecuting.set(false); // Unlock BEFORE completion propagates
+              fluxSink.complete();
+            }
         );
 
         // 3. Wire Demand
         fluxSink.onRequest(workerSink::request);
-        fluxSink.onCancel(workerSink::cancel);
+        fluxSink.onCancel(() -> {
+          workerSink.cancel();
+          this.setStreamHandlers(null, null);
+          this.isExecuting.set(false); // Unlock if client cancels the stream early
+        });
 
         // 4. Setup Decoder & Transport Handlers
         StatefulTokenDecoder decoder = new StatefulTokenDecoder(
             TokenParserRegistry.DEFAULT, context, tokenQueue, new ArrayList<>()
         );
 
-        this.setStreamHandlers(decoder::onPayloadAvailable, fluxSink::error);
+        this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
+          this.setStreamHandlers(null, null);
+          this.isExecuting.set(false);
+          fluxSink.error(error);
+        });
 
         // 5. Send Request
         this.sendQueryMessageAsync(message);
 
       } catch (Exception e) {
+        this.setStreamHandlers(null, null);
+        this.isExecuting.set(false);
         fluxSink.error(e);
       }
-    }).doFinally(signalType -> {
-      // 6. Centralized Teardown & Lock Release
-      this.setStreamHandlers(null, null);
-      this.isExecuting.set(false);
-    });
+    }); // REMOVE the entire .doFinally block!
   }
 
   // --- Handshake & TLS Methods ---

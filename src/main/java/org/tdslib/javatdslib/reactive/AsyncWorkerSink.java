@@ -17,6 +17,7 @@ import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
+import org.tdslib.javatdslib.tokens.models.OrderToken;
 import org.tdslib.javatdslib.tokens.models.ReturnStatusToken;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
@@ -196,6 +197,8 @@ public class AsyncWorkerSink {
           info.getMessage()
       ));
     } else if (token instanceof ReturnStatusToken) {
+      // INTENTIONALLY IGNORED
+    } else if (token instanceof OrderToken) {
       // INTENTIONALLY IGNORED
     } else {
       // FAIL FAST: Never let a token be ignored silently!

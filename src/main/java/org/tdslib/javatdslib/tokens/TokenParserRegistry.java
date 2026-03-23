@@ -8,6 +8,7 @@ import org.tdslib.javatdslib.tokens.parsers.EnvChangeTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.FeatureExtAckTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.LoginAckTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.MessageTokenParser;
+import org.tdslib.javatdslib.tokens.parsers.OrderTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnStatusTokenParser;
 import org.tdslib.javatdslib.tokens.parsers.ReturnValueTokenParser;
 
@@ -32,6 +33,7 @@ public class TokenParserRegistry {
     DEFAULT.register(TokenType.DONE_PROC, new DoneProcTokenParser());
     DEFAULT.register(TokenType.RETURN_STATUS, new ReturnStatusTokenParser());
     DEFAULT.register(TokenType.RETURN_VALUE, new ReturnValueTokenParser());
+    DEFAULT.register(TokenType.ORDER, new OrderTokenParser());
   }
 
   private final Map<Byte, TokenParser> parsers = new HashMap<>();

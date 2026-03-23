@@ -22,6 +22,7 @@ import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,7 +105,7 @@ public class StatefulRow implements Row, Result.RowSegment {
           (tdsType != null && (tdsType.strategy == TdsType.LengthStrategy.PLP || tdsType.strategy == TdsType.LengthStrategy.LONGLEN));
 
       if (isChunked) {
-        if (type == String.class || type == byte[].class) {
+        if (type == String.class || type == byte[].class || type == ByteBuffer.class || type == Object.class) {
           return (T) drainLobSynchronously(index, type, tdsType, colMeta, chunk);
         } else {
           throw new UnsupportedOperationException("Async Clob retrieval is under construction.");
