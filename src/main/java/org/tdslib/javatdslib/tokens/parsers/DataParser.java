@@ -125,4 +125,100 @@ public class DataParser {
       return new org.tdslib.javatdslib.streaming.TdsClob(leftover, charset);
     }
   }
+  /**
+   * Safely calculates the number of bytes required to read the data value from the stream,
+   * advancing the peekBuffer position if enough bytes are available.
+   *
+   * @param peekBuffer A read-only duplicate of the current network buffer.
+   * @param type       The TDS data type.
+   * @param maxLength  The maximum length of the data (from TypeInfo).
+   * @return The number of bytes required, or -1 if the buffer underflows.
+   */
+  public static int getRequiredValueBytes(ByteBuffer peekBuffer, TdsType type, int maxLength) {
+    int startPos = peekBuffer.position();
+
+    switch (type.strategy) {
+      case FIXED:
+        if (type == TdsType.DATE) {
+          if (peekBuffer.remaining() < 1) return -1;
+          int len = peekBuffer.get() & 0xFF;
+          if (len > 0) {
+            if (peekBuffer.remaining() < len) return -1;
+            peekBuffer.position(peekBuffer.position() + len);
+          }
+        } else {
+          if (peekBuffer.remaining() < type.fixedSize) return -1;
+          peekBuffer.position(peekBuffer.position() + type.fixedSize);
+        }
+        break;
+
+      case SCALE_LEN:
+      case PREC_SCALE:
+      case BYTELEN:
+        if (peekBuffer.remaining() < 1) return -1;
+        int len = peekBuffer.get() & 0xFF;
+        if (len > 0) {
+          if (peekBuffer.remaining() < len) return -1;
+          peekBuffer.position(peekBuffer.position() + len);
+        }
+        break;
+
+      case USHORTLEN:
+        if (maxLength == 65535) { // PLP stream
+          if (!checkPlpBytes(peekBuffer)) return -1;
+        } else {
+          if (peekBuffer.remaining() < 2) return -1;
+          int varLen = Short.toUnsignedInt(peekBuffer.getShort());
+          if (varLen != 0xFFFF && varLen > 0) { // 0xFFFF means NULL
+            if (peekBuffer.remaining() < varLen) return -1;
+            peekBuffer.position(peekBuffer.position() + varLen);
+          }
+        }
+        break;
+
+      case PLP:
+        if (!checkPlpBytes(peekBuffer)) return -1;
+        break;
+
+      case LONGLEN:
+        if (peekBuffer.remaining() < 1) return -1;
+        int textPtrLen = peekBuffer.get() & 0xFF;
+        if (textPtrLen > 0) {
+          // Need textPtrLen + 8 (timestamp) + 4 (dataLen) = 12 bytes of fixed headers
+          if (peekBuffer.remaining() < (textPtrLen + 12)) return -1;
+
+          peekBuffer.position(peekBuffer.position() + textPtrLen + 8); // Skip text pointer and timestamp
+          int dataLen = peekBuffer.getInt();
+
+          if (dataLen > 0) {
+            if (peekBuffer.remaining() < dataLen) return -1;
+            peekBuffer.position(peekBuffer.position() + dataLen);
+          }
+        }
+        break;
+
+      default:
+        throw new IllegalArgumentException("Unsupported length strategy: " + type.strategy);
+    }
+
+    return peekBuffer.position() - startPos;
+  }
+
+  /**
+   * Safely checks the bounds for a PLP (Partially Length-Prefixed) stream.
+   * Matches the current getDataBytes behavior of consuming the rest of the available packet.
+   */
+  private static boolean checkPlpBytes(ByteBuffer peekBuffer) {
+    if (peekBuffer.remaining() < 8) return false;
+
+    long totalLength = peekBuffer.getLong();
+
+    // -1L (0xFFFFFFFFFFFFFFFFL) represents a NULL PLP value.
+    // If it's not null, we mirror the current stream-stealing behavior.
+    if (totalLength != -1L) {
+      peekBuffer.position(peekBuffer.limit());
+    }
+
+    return true;
+  }
 }

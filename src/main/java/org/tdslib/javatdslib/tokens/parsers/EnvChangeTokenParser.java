@@ -38,4 +38,17 @@ public class EnvChangeTokenParser implements TokenParser {
 
     return new EnvChangeToken(tokenType, changeType, valueBytes);
   }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    // ENVCHANGE also uses a 2-byte UShort length header
+    if (peekBuffer.remaining() < 2) {
+      return -1;
+    }
+
+    int envDataLength = peekBuffer.getShort() & 0xFFFF;
+
+    // 2 bytes for the header + the data length
+    return 2 + envDataLength;
+  }
 }

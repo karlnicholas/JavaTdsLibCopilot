@@ -9,6 +9,7 @@ import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.tokens.models.TypeInfo;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,5 +59,41 @@ public class ColMetaDataTokenParser implements TokenParser {
     final ColMetaDataToken token = new ColMetaDataToken(tokenType, columnCount, columns);
     // FIX: Removed the queryContext.setColMetaDataToken(token) line
     return token;
+  }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    int startPos = peekBuffer.position();
+
+    // 1. Check for columnCount (2 bytes)
+    if (peekBuffer.remaining() < 2) return -1;
+    short columnCount = peekBuffer.getShort();
+
+    if (columnCount == (short) 0xFFFF) {
+      return 2; // 0xFFFF means no metadata
+    }
+
+    for (int i = 0; i < columnCount; i++) {
+      // 2. Check for userType (4 bytes) and flags (2 bytes) = 6 total bytes
+      if (peekBuffer.remaining() < 6) return -1;
+      peekBuffer.getInt();   // userType
+      peekBuffer.getShort(); // flags
+
+      // 3. Safely delegate to TypeInfoParser to check its required bytes
+      // This will automatically advance the peekBuffer if successful
+      int typeInfoBytes = TypeInfoParser.getRequiredBytes(peekBuffer);
+      if (typeInfoBytes == -1) return -1;
+
+      // 4. Check for nameLengthInChars (1 byte)
+      if (peekBuffer.remaining() < 1) return -1;
+      byte nameLengthInChars = peekBuffer.get();
+      int nameBytes = nameLengthInChars * 2;
+
+      // 5. Check for the string payload
+      if (peekBuffer.remaining() < nameBytes) return -1;
+      peekBuffer.position(peekBuffer.position() + nameBytes);
+    }
+
+    return peekBuffer.position() - startPos;
   }
 }

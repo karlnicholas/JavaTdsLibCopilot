@@ -55,4 +55,45 @@ public class ReturnValueTokenParser implements TokenParser {
 
     return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, value);
   }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    int startPos = peekBuffer.position();
+
+    // 1. Ordinal (2 bytes) + Param Name Length (1 byte)
+    if (peekBuffer.remaining() < 3) return -1;
+    peekBuffer.position(peekBuffer.position() + 2); // skip ordinal
+    int nameLen = peekBuffer.get() & 0xFF;
+
+    // 2. Param Name Bytes (nameLen * 2 characters)
+    int nameBytesLen = nameLen * 2;
+    if (peekBuffer.remaining() < nameBytesLen) return -1;
+    peekBuffer.position(peekBuffer.position() + nameBytesLen);
+
+    // 3. Status Flags (1 byte) + User Type (4 bytes) + Flags (2 bytes) = 7 bytes
+    if (peekBuffer.remaining() < 7) return -1;
+    peekBuffer.position(peekBuffer.position() + 7);
+
+    // 4. Safely verify and parse the TYPE_INFO
+    int typeInfoStart = peekBuffer.position();
+    if (TypeInfoParser.getRequiredBytes(peekBuffer) == -1) {
+      return -1; // Incomplete TypeInfo
+    }
+
+    // Since getRequiredBytes advanced the position, we must rewind it to actually parse the TypeInfo
+    // object so we know how to calculate the length of the data value.
+    peekBuffer.position(typeInfoStart);
+    TypeInfo typeInfo = TypeInfoParser.parse(peekBuffer);
+
+    // 5. Calculate Required Bytes for Data Value
+    // We delegate this to a new safe method in DataParser
+    int dataBytesRequired = DataParser.getRequiredValueBytes(peekBuffer, typeInfo.getTdsType(), typeInfo.getMaxLength());
+    if (dataBytesRequired == -1) {
+      return -1;
+    }
+
+    peekBuffer.position(peekBuffer.position() + dataBytesRequired);
+
+    return peekBuffer.position() - startPos;
+  }
 }

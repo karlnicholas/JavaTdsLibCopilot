@@ -6,6 +6,7 @@ import org.tdslib.javatdslib.tokens.TokenType;
 import org.tdslib.javatdslib.tokens.models.FeatureExtAckToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashMap;
@@ -46,5 +47,39 @@ public class FeatureExtAckTokenParser implements TokenParser {
 
     // Return the immutable token with no side-effects
     return new FeatureExtAckToken(tokenType, features);
+  }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    int startPos = peekBuffer.position();
+    peekBuffer.order(ByteOrder.LITTLE_ENDIAN);
+
+    // Instead of catching an exception, we use an infinite loop and break/return
+    // cleanly when we hit the terminator or run out of bytes.
+    while (true) {
+      // 1. Check if we have enough bytes to read the featureId (1 byte)
+      if (peekBuffer.remaining() < 1) {
+        return -1;
+      }
+
+      byte featureId = peekBuffer.get();
+      if (featureId == (byte) 0xFF) { // 255 = Terminator
+        return peekBuffer.position() - startPos;
+      }
+
+      // 2. Check if we have enough bytes to read the featureLen (4 bytes)
+      if (peekBuffer.remaining() < 4) {
+        return -1;
+      }
+      int featureLen = peekBuffer.getInt();
+
+      // 3. Check if we have enough bytes to skip the feature data
+      if (peekBuffer.remaining() < featureLen) {
+        return -1;
+      }
+
+      // Skip past this feature's data to check the next one
+      peekBuffer.position(peekBuffer.position() + featureLen);
+    }
   }
 }

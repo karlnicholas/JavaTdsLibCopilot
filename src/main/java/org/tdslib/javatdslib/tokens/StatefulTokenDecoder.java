@@ -89,32 +89,44 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
               break;
             }
           } else {
-            // 3. Standard Token Parsing (Done, Info, Error, MetaData, etc.)
-            try {
-              TokenParser parser = registry.getParser(currentTokenType);
-              if (parser == null) {
-                // ADD THE CRASH DUMP HERE
-                String dump = generateCrashDump(accumulator, currentTokenType);
-                logger.error(dump);
-                throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
-              }
+            // 3. Standard Token Parsing (Hybrid Approach)
+            TokenParser parser = registry.getParser(currentTokenType);
+            if (parser == null) {
+              logger.error(generateCrashDump(accumulator, currentTokenType));
+              throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
+            }
 
-              Token token = parser.parse(accumulator, currentTokenType, context);
+// Create a read-only peek buffer to check boundaries safely
+            ByteBuffer peekBuffer = accumulator.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+            int requiredBytes = parser.getRequiredBytes(peekBuffer, context);
 
-              if (token instanceof ColMetaDataToken meta) {
-                this.currentMetaData = meta;
-              }
-
-              sink.onToken(token);
-              expectingNewToken = true;
-            } catch (BufferUnderflowException e) {
-              // Standard token didn't have enough bytes to finish parsing.
-              // Rewind to the mark (the token type byte) and wait for next packet.
+            if (requiredBytes == -1) {
+              // Not enough bytes to parse the token.
               accumulator.reset();
-              System.out.println('.');
-              expectingNewToken = true; // <--- THE FIX
+              expectingNewToken = true; // CRITICAL FIX: Reset the state flag!
               break;
             }
+
+            // --- THE SAFETY NET ---
+            Token token;
+            try {
+              token = parser.parse(accumulator, currentTokenType, context);
+            } catch (BufferUnderflowException e) {
+              logger.debug("Legacy parser underflowed for token type: 0x{}",
+                  Integer.toHexString(currentTokenType & 0xFF));
+              accumulator.reset();
+              expectingNewToken = true; // CRITICAL FIX: Reset the state flag!
+              System.out.println('.');
+              break;
+            }
+            // -----------------------
+
+            if (token instanceof ColMetaDataToken meta) {
+              this.currentMetaData = meta;
+            }
+
+            sink.onToken(token);
+            expectingNewToken = true;
           }
         }
       }
@@ -148,10 +160,14 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
         accumulator.mark();
         try {
           if (!parseStandardColumn(colMeta, tdsType)) {
+            accumulator.reset(); // REWIND: Standard column was split across packets
             return false;
           }
         } catch (BufferUnderflowException e) {
+          // This catch block remains ONLY to protect against ColumnLengthResolver
+          // throwing an exception if the network cuts off the length header itself.
           accumulator.reset();
+          System.out.println('.');
           return false; // Wait for more data
         }
       }
@@ -179,7 +195,7 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
 
     // 2. Ensure we have the actual data bytes
     if (accumulator.remaining() < length) {
-      throw new BufferUnderflowException();
+      return false; // CRITICAL FIX: Yield gracefully instead of throwing!
     }
 
     // 3. Extract and emit raw bytes

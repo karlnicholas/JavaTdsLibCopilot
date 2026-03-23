@@ -51,4 +51,14 @@ public class LoginAckTokenParser implements TokenParser {
 
     return new LoginAckToken(tokenType, interfaceType, tdsVersion, serverName, serverVersion);
   }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    if (peekBuffer.remaining() < 2) {
+      return -1;
+    }
+    // The length provided in the token does NOT include the 2-byte length header itself
+    int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
+    return 2 + tokenLen;
+  }
 }

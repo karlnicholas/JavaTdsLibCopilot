@@ -38,4 +38,14 @@ public class DoneTokenParser implements TokenParser {
 
     return new DoneToken(tokenType, status, currentCommand, rowCount);
   }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    // Status (2) + CurCmd (2) + RowCount (8 or 4 depending on TDS version)
+    if (context.getTdsVersion().ordinal() >= org.tdslib.javatdslib.protocol.TdsVersion.V7_2.ordinal()) {
+      return 12;
+    } else {
+      return 8;
+    }
+  }
 }

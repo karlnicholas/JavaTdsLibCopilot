@@ -129,4 +129,28 @@ public class MessageTokenParser implements TokenParser {
     // CRITICAL FIX: Use UTF_16LE instead of US_ASCII
     return new String(bytes, StandardCharsets.UTF_16LE);
   }
+
+  @Override
+  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
+    int startPos = peekBuffer.position();
+
+    // 1. We need at least 2 bytes to read the total token length header
+    if (peekBuffer.remaining() < 2) {
+      return -1;
+    }
+
+    // Read the claimed length (unsigned short)
+    int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
+
+    // 2. Check if the buffer has the rest of the claimed token payload
+    if (peekBuffer.remaining() < tokenLen) {
+      return -1; // Wait for more network packets
+    }
+
+    // Advance the buffer past this token
+    peekBuffer.position(peekBuffer.position() + tokenLen);
+
+    // Total bytes = 2 (header) + tokenLen (payload)
+    return peekBuffer.position() - startPos;
+  }
 }

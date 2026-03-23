@@ -107,4 +107,100 @@ public class TypeInfoParser {
       payload.position(payload.position() + byteLen); // Skip bytes
     }
   }
+  /**
+   * Safely calculates the required bytes for the TYPE_INFO structure and advances
+   * the peekBuffer position if enough bytes are available.
+   *
+   * @param peekBuffer A read-only duplicate of the current network buffer.
+   * @return The number of bytes required, or -1 if the buffer underflows.
+   */
+  public static int getRequiredBytes(ByteBuffer peekBuffer) {
+    int startPos = peekBuffer.position();
+
+    // 1. Check Data Type
+    if (peekBuffer.remaining() < 1) return -1;
+    int dataTypeByte = peekBuffer.get() & 0xFF;
+    TdsType tdsType = TdsType.valueOf((byte) dataTypeByte);
+
+    if (tdsType == null) {
+      throw new IllegalStateException("Unknown Type: 0x" + Integer.toHexString(dataTypeByte));
+    }
+
+    // 2. Check details based on Length Strategy
+    switch (tdsType.strategy) {
+      case FIXED:
+        break; // No extra bytes needed
+
+      case BYTELEN:
+        if (tdsType == TdsType.DECIMALN || tdsType == TdsType.NUMERICN) {
+          if (peekBuffer.remaining() < 3) return -1;
+          peekBuffer.position(peekBuffer.position() + 3); // maxLength, precision, scale
+        } else {
+          if (peekBuffer.remaining() < 1) return -1;
+          peekBuffer.position(peekBuffer.position() + 1); // maxLength
+        }
+        break;
+
+      case PREC_SCALE:
+        if (peekBuffer.remaining() < 3) return -1;
+        peekBuffer.position(peekBuffer.position() + 3); // maxLength, precision, scale
+        break;
+
+      case USHORTLEN:
+        int bytesRequiredUshort = 2; // maxLength
+        if (isTextType(tdsType)) {
+          bytesRequiredUshort += 5; // collation
+        }
+        if (peekBuffer.remaining() < bytesRequiredUshort) return -1;
+        peekBuffer.position(peekBuffer.position() + bytesRequiredUshort);
+        break;
+
+      case LONGLEN:
+        int bytesRequiredLong = 4; // maxLength
+        if (tdsType == TdsType.TEXT || tdsType == TdsType.NTEXT) {
+          bytesRequiredLong += 5; // collation
+        }
+        if (peekBuffer.remaining() < bytesRequiredLong) return -1;
+        peekBuffer.position(peekBuffer.position() + bytesRequiredLong);
+
+        // Consume Table Names safely
+        if (!skipTableNames(peekBuffer)) {
+          return -1;
+        }
+        break;
+
+      case PLP:
+        if (peekBuffer.remaining() < 1) return -1;
+        peekBuffer.position(peekBuffer.position() + 1); // schemaPresent
+        break;
+
+      case SCALE_LEN:
+        if (peekBuffer.remaining() < 1) return -1;
+        peekBuffer.position(peekBuffer.position() + 1); // scale
+        break;
+
+      default:
+        throw new IllegalArgumentException("Unsupported length strategy: " + tdsType.strategy);
+    }
+
+    return peekBuffer.position() - startPos;
+  }
+
+  /**
+   * Safely skips table names without throwing BufferUnderflowExceptions.
+   */
+  private static boolean skipTableNames(ByteBuffer peekBuffer) {
+    if (peekBuffer.remaining() < 1) return false;
+    int numParts = peekBuffer.get() & 0xFF;
+
+    for (int i = 0; i < numParts; i++) {
+      if (peekBuffer.remaining() < 2) return false;
+      int len = peekBuffer.getShort() & 0xFFFF; // Length in chars
+      int byteLen = len * 2;
+
+      if (peekBuffer.remaining() < byteLen) return false;
+      peekBuffer.position(peekBuffer.position() + byteLen);
+    }
+    return true;
+  }
 }
