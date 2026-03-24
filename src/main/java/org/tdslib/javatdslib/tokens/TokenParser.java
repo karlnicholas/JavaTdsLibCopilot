@@ -11,14 +11,13 @@ import java.nio.ByteBuffer;
 public interface TokenParser {
 
   /**
-   * Determines the exact number of bytes required to safely parse this token's payload.
+   * Determines if the buffer contains enough bytes to safely parse this token's payload.
    *
    * @param peekBuffer A read-only duplicate of the current network buffer.
    * @param context    The connection context (needed for version-specific lengths).
-   * @return The total payload bytes required, or -1 if the buffer does not contain
-   * enough bytes to even read the length header.
+   * @return true if the full token payload is present, false otherwise.
    */
-  int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context);
+  boolean canParse(ByteBuffer peekBuffer, ConnectionContext context);
 
   /**
    * Parse exactly one token of the given type from the current payload position.

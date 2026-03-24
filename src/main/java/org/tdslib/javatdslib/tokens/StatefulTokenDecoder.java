@@ -187,6 +187,11 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
     // 1. Resolve length using extracted utility
     int length = ColumnLengthResolver.resolveStandardLength(accumulator, tdsType, colMeta.getMaxLength());
 
+    // NEW: Check for the incomplete header signal
+    if (length == ColumnLengthResolver.INCOMPLETE_HEADER) {
+      return false; // Header was sliced across packets. Yield gracefully.
+    }
+
     if (length == -1) {
       // Null column
       sink.onColumnData(new CompleteDataColumn(currentRowColIndex, null));
@@ -195,7 +200,7 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
 
     // 2. Ensure we have the actual data bytes
     if (accumulator.remaining() < length) {
-      return false; // CRITICAL FIX: Yield gracefully instead of throwing!
+      return false; // Yield gracefully instead of throwing!
     }
 
     // 3. Extract and emit raw bytes

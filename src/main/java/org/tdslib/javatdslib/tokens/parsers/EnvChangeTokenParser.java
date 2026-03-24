@@ -41,14 +41,19 @@ public class EnvChangeTokenParser implements TokenParser {
 
   @Override
   public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    // ENVCHANGE also uses a 2-byte UShort length header
     if (peekBuffer.remaining() < 2) {
       return -1;
     }
 
     int envDataLength = peekBuffer.getShort() & 0xFFFF;
 
-    // 2 bytes for the header + the data length
+    // MISSING IN YOUR CODE: Check if the actual data is present
+    if (peekBuffer.remaining() < envDataLength) {
+      return -1;
+    }
+
+    // Advance buffer position to mark as successfully peeked
+    peekBuffer.position(peekBuffer.position() + envDataLength);
     return 2 + envDataLength;
   }
 }

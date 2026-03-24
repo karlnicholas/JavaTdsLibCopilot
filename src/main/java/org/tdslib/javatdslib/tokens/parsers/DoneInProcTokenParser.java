@@ -42,11 +42,16 @@ public class DoneInProcTokenParser implements TokenParser {
 
   @Override
   public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    // Status (2) + CurCmd (2) + RowCount (8 or 4 depending on TDS version)
-    if (context.getTdsVersion().ordinal() >= org.tdslib.javatdslib.protocol.TdsVersion.V7_2.ordinal()) {
-      return 12;
-    } else {
-      return 8;
+    // 1. Determine the required bytes based on TDS version
+    int required = (context.getTdsVersion().ordinal() >= org.tdslib.javatdslib.protocol.TdsVersion.V7_2.ordinal()) ? 12 : 8;
+
+    // 2. CRITICAL: Check if the buffer actually contains the full token payload
+    if (peekBuffer.remaining() < required) {
+      return -1;
     }
+
+    // 3. Advance the peek buffer (consistency with your other parsers)
+    peekBuffer.position(peekBuffer.position() + required);
+    return required;
   }
 }
