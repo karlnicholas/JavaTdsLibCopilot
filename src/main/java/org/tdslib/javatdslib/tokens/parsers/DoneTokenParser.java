@@ -40,17 +40,9 @@ public class DoneTokenParser implements TokenParser {
   }
 
   @Override
-  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    // 1. Determine the required bytes based on TDS version
-    int required = (context.getTdsVersion().ordinal() >= org.tdslib.javatdslib.protocol.TdsVersion.V7_2.ordinal()) ? 12 : 8;
-
-    // 2. CRITICAL: Check if the buffer actually contains the full token payload
-    if (peekBuffer.remaining() < required) {
-      return -1;
-    }
-
-    // 3. Advance the peek buffer (consistency with your other parsers)
-    peekBuffer.position(peekBuffer.position() + required);
-    return required;
+  public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
+    // Determine the required bytes based on TDS version and evaluate instantly
+    int required = (context.getTdsVersion().ordinal() >= TdsVersion.V7_2.ordinal()) ? 12 : 8;
+    return peekBuffer.remaining() >= required;
   }
 }

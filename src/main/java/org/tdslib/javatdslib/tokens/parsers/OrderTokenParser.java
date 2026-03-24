@@ -43,26 +43,9 @@ public class OrderTokenParser implements TokenParser {
   }
 
   @Override
-  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    int startPos = peekBuffer.position();
-
-    // 1. We need at least 2 bytes to read the length header
-    if (peekBuffer.remaining() < 2) {
-      return -1;
-    }
-
-    // Read the claimed length (unsigned short)
+  public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
+    if (peekBuffer.remaining() < 2) return false;
     int length = Short.toUnsignedInt(peekBuffer.getShort());
-
-    // 2. Check if the buffer has enough bytes for all the column indices
-    if (peekBuffer.remaining() < length) {
-      return -1;
-    }
-
-    // Advance the buffer past this token's data
-    peekBuffer.position(peekBuffer.position() + length);
-
-    // Total bytes = 2 (header) + length (column indices data)
-    return peekBuffer.position() - startPos;
+    return peekBuffer.remaining() >= length;
   }
 }

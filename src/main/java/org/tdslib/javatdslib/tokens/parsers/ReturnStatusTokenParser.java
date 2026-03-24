@@ -32,14 +32,8 @@ public class ReturnStatusTokenParser implements TokenParser {
   }
 
   @Override
-  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    // RETURN_STATUS payload is always exactly 4 bytes (one 32-bit integer)
-    if (peekBuffer.remaining() < 4) {
-      return -1;
-    }
-
-    // Advance the position to reflect the consumed bytes
-    peekBuffer.position(peekBuffer.position() + 4);
-    return 4;
+  public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
+    // RETURN_STATUS payload is always exactly 4 bytes
+    return peekBuffer.remaining() >= 4;
   }
 }

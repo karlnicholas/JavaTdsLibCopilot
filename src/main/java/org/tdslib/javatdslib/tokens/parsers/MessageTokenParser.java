@@ -13,15 +13,6 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * A unified parser for TDS "Message" tokens.
- *
- * <p>Handles both:
- * <ul>
- * <li>{@link TokenType#ERROR} (0xAA)</li>
- * <li>{@link TokenType#INFO} (0xAB)</li>
- * </ul>
- *
- * <p>These tokens share an identical binary structure but differ in semantic meaning
- * (Errors have severity &gt; 10, Info messages have severity &le; 10).
  */
 public class MessageTokenParser implements TokenParser {
 
@@ -78,12 +69,10 @@ public class MessageTokenParser implements TokenParser {
     }
 
     // 6. Verify Consumption
-    // consumed calculation includes the initial token length field (2 bytes)
     final int consumed = payload.position() - start;
     if (consumed != 2 + tokenLen) {
       final int claimed = tokenLen;
       final int actualConsumed = consumed - 2;
-      // In production, you might log this as a warning rather than printing to stderr
       System.err.printf(
           "WARN: Length mismatch in MessageToken - claimed %d, consumed %d%n",
           claimed, actualConsumed);
@@ -99,58 +88,28 @@ public class MessageTokenParser implements TokenParser {
     }
   }
 
-  /** Reads a US_VARCHAR (Unsigned Short Length + Unicode Characters). */
   private String readUsVarChar(final ByteBuffer buf) {
-    // Length is number of CHARACTERS (not bytes)
     final int charCount = Short.toUnsignedInt(buf.getShort());
-    if (charCount == 0) {
-      return "";
-    }
-
-    final int byteCount = charCount * 2; // TDS 7+ uses 2 bytes per char (UTF-16)
+    if (charCount == 0) return "";
+    final int byteCount = charCount * 2;
     final byte[] bytes = new byte[byteCount];
     buf.get(bytes);
-
     return new String(bytes, StandardCharsets.UTF_16LE);
   }
 
-  /** Reads a B_VARCHAR (Byte Length + Unicode Characters). */
   private String readBvarChar(final ByteBuffer buf) {
-    // Length is number of CHARACTERS (not bytes)
     final int charCount = Byte.toUnsignedInt(buf.get());
-    if (charCount == 0) {
-      return "";
-    }
-
-    final int byteCount = charCount * 2; // TDS 7+ uses 2 bytes per char (UTF-16)
+    if (charCount == 0) return "";
+    final int byteCount = charCount * 2;
     final byte[] bytes = new byte[byteCount];
     buf.get(bytes);
-
-    // CRITICAL FIX: Use UTF_16LE instead of US_ASCII
     return new String(bytes, StandardCharsets.UTF_16LE);
   }
 
   @Override
-  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    int startPos = peekBuffer.position();
-
-    // 1. We need at least 2 bytes to read the total token length header
-    if (peekBuffer.remaining() < 2) {
-      return -1;
-    }
-
-    // Read the claimed length (unsigned short)
+  public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
+    if (peekBuffer.remaining() < 2) return false;
     int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
-
-    // 2. Check if the buffer has the rest of the claimed token payload
-    if (peekBuffer.remaining() < tokenLen) {
-      return -1; // Wait for more network packets
-    }
-
-    // Advance the buffer past this token
-    peekBuffer.position(peekBuffer.position() + tokenLen);
-
-    // Total bytes = 2 (header) + tokenLen (payload)
-    return peekBuffer.position() - startPos;
+    return peekBuffer.remaining() >= tokenLen;
   }
 }

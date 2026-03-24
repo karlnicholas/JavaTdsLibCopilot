@@ -53,25 +53,9 @@ public class LoginAckTokenParser implements TokenParser {
   }
 
   @Override
-  public int getRequiredBytes(ByteBuffer peekBuffer, ConnectionContext context) {
-    int startPos = peekBuffer.position();
-
-    // 1. Check for the 2-byte length header
-    if (peekBuffer.remaining() < 2) {
-      return -1;
-    }
-
-    // The length provided in the token does NOT include the 2-byte length header itself
+  public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
+    if (peekBuffer.remaining() < 2) return false;
     int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
-
-    // 2. CRITICAL: Check if the buffer has the rest of the payload
-    if (peekBuffer.remaining() < tokenLen) {
-      return -1;
-    }
-
-    // 3. Advance the buffer past this token's data
-    peekBuffer.position(peekBuffer.position() + tokenLen);
-
-    return peekBuffer.position() - startPos;
+    return peekBuffer.remaining() >= tokenLen;
   }
 }

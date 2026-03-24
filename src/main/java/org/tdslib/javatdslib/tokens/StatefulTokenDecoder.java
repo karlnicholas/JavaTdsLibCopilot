@@ -11,7 +11,6 @@ import org.tdslib.javatdslib.tokens.parsers.ColumnLengthResolver;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsStreamHandler;
 
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
@@ -96,30 +95,19 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
               throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
             }
 
-// Create a read-only peek buffer to check boundaries safely
+            // Create a read-only peek buffer to check boundaries safely
             ByteBuffer peekBuffer = accumulator.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-            int requiredBytes = parser.getRequiredBytes(peekBuffer, context);
 
-            if (requiredBytes == -1) {
+            // NEW BOOLEAN CHECK
+            if (!parser.canParse(peekBuffer, context)) {
               // Not enough bytes to parse the token.
               accumulator.reset();
-              expectingNewToken = true; // CRITICAL FIX: Reset the state flag!
+              expectingNewToken = true; // Reset the state flag
               break;
             }
 
-            // --- THE SAFETY NET ---
-            Token token;
-            try {
-              token = parser.parse(accumulator, currentTokenType, context);
-            } catch (BufferUnderflowException e) {
-              logger.debug("Legacy parser underflowed for token type: 0x{}",
-                  Integer.toHexString(currentTokenType & 0xFF));
-              accumulator.reset();
-              expectingNewToken = true; // CRITICAL FIX: Reset the state flag!
-              System.out.println('.');
-              break;
-            }
-            // -----------------------
+            // We safely parse without the try-catch safety net
+            Token token = parser.parse(accumulator, currentTokenType, context);
 
             if (token instanceof ColMetaDataToken meta) {
               this.currentMetaData = meta;
@@ -158,17 +146,11 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       } else {
         // Standard columns are all-or-nothing. Safe to mark and reset on underflow.
         accumulator.mark();
-        try {
-          if (!parseStandardColumn(colMeta, tdsType)) {
-            accumulator.reset(); // REWIND: Standard column was split across packets
-            return false;
-          }
-        } catch (BufferUnderflowException e) {
-          // This catch block remains ONLY to protect against ColumnLengthResolver
-          // throwing an exception if the network cuts off the length header itself.
-          accumulator.reset();
-          System.out.println('.');
-          return false; // Wait for more data
+
+        // NO TRY-CATCH NEEDED ANYMORE!
+        if (!parseStandardColumn(colMeta, tdsType)) {
+          accumulator.reset(); // REWIND: Standard column was split across packets
+          return false;
         }
       }
 
