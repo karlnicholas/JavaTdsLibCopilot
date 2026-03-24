@@ -14,6 +14,7 @@ import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.ErrorEvent;
 import org.tdslib.javatdslib.reactive.events.TdsStreamEvent;
+import org.tdslib.javatdslib.reactive.events.TokenEvent;
 import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
 import org.tdslib.javatdslib.tokens.PartialDataColumn;
@@ -157,7 +158,7 @@ public class StatefulRow implements Row, Result.RowSegment {
         } else {
           throw new IllegalStateException("Desync: Expected col " + targetIndex + " but got " + ce.data().getColumnIndex());
         }
-      } else if (event instanceof org.tdslib.javatdslib.reactive.events.TokenEvent) {
+      } else if (event instanceof TokenEvent) {
         return null; // End of row reached without finding the column
       } else if (event instanceof ErrorEvent ee) {
         tokenQueue.poll();
