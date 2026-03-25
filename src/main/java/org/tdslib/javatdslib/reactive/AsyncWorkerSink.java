@@ -224,7 +224,14 @@ public class AsyncWorkerSink {
   private void emitSegment(Result.Segment segment) {
     logger.trace("Assembled Segment: {}", segment.getClass().getSimpleName());
     receivedSegments.add(segment);
-    if (onNext != null) onNext.accept(segment);
+
+    try {
+      if (onNext != null) onNext.accept(segment);
+    } catch (Throwable t) {
+      // If the user's map crashes (even fatally), ensure the driver cleans up
+      pushError(t);
+      throw t; // Re-throw to let Reactor do its logging
+    }
   }
 
   private void pushError(Throwable error) {

@@ -236,7 +236,18 @@ public class StatefulRow implements Row, Result.RowSegment {
           : context.getVarcharCharset();
     }
 
-    return DecoderRegistry.DEFAULT.decode(rawBytes, tdsType, type, colMeta.getScale(), charset);
+    try {
+      return DecoderRegistry.DEFAULT.decode(rawBytes, tdsType, type, colMeta.getScale(), charset);
+    } catch (OutOfMemoryError oom) {
+      // 1. Immediately drop the massive array reference so the Garbage Collector can recover
+      rawBytes = null;
+      buffer = null;
+
+      // 2. Wrap the fatal Error in a standard RuntimeException
+      throw new IllegalStateException(
+          "Driver ran out of memory materializing a large object. " +
+              "Consider using streaming (Publisher.class) instead of synchronous get.", oom);
+    }
   }
 
   @Override

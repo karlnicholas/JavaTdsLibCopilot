@@ -210,7 +210,6 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
-      logger.debug("[NIO-Backpressure] Suspending OP_READ. The application is processing too slowly.");
       key.interestOpsAnd(~SelectionKey.OP_READ);
       selector.wakeup(); // Force selector to recognize the change immediately
     }
@@ -223,7 +222,6 @@ public class NioSocketConnection implements NetworkConnection {
     }
     SelectionKey key = socketChannel.keyFor(selector);
     if (key != null && key.isValid()) {
-      logger.debug("[NIO-Backpressure] Resuming OP_READ. The application caught up.");
       key.interestOpsOr(SelectionKey.OP_READ);
       selector.wakeup();
     }
@@ -231,7 +229,6 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void close() throws IOException {
-    logger.debug("Closing NIO socket connection and shutting down event loop.");
     if (eventLoopExecutor != null) {
       eventLoopExecutor.shutdownNow(); // Cleanly shut down the background thread
     }
