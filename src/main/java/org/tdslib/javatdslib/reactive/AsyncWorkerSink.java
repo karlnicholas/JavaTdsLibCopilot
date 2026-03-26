@@ -10,8 +10,6 @@ import org.tdslib.javatdslib.reactive.events.ErrorEvent;
 import org.tdslib.javatdslib.reactive.events.TdsStreamEvent;
 import org.tdslib.javatdslib.reactive.events.TokenEvent;
 import org.tdslib.javatdslib.tokens.ColumnData;
-import org.tdslib.javatdslib.tokens.CompleteDataColumn;
-import org.tdslib.javatdslib.tokens.PartialDataColumn;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
@@ -24,7 +22,6 @@ import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import reactor.core.scheduler.Scheduler;
 
-import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -38,21 +35,20 @@ public class AsyncWorkerSink {
 
   private final TdsTokenQueue tokenQueue;
   private final ConnectionContext context;
-  private final Scheduler workerScheduler; // Swapped from Executor
+  private final Scheduler workerScheduler;
 
   private final AtomicLong demand = new AtomicLong(0);
   private final AtomicInteger wip = new AtomicInteger(0);
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
+  private final AtomicBoolean isPaused = new AtomicBoolean(false); // Stream Lock
 
   private final CountDownLatch completionLatch = new CountDownLatch(1);
   private final List<Result.Segment> receivedSegments = new CopyOnWriteArrayList<>();
 
   private ColMetaDataToken activeMetaData;
   private RowDrainer activeRowDrainer;
-  // Add this field to buffer OUT parameters
   private final List<ReturnValueToken> activeOutParams = new java.util.ArrayList<>();
 
-  // Replace DataSink with standard Java functional callbacks
   private Consumer<Result.Segment> onNext;
   private Consumer<Throwable> onError;
   private Runnable onComplete;
@@ -85,7 +81,6 @@ public class AsyncWorkerSink {
   private void scheduleDrain() {
     if (wip.getAndIncrement() == 0) {
       if (workerScheduler != null) {
-        // Use Reactor's schedule method
         workerScheduler.schedule(this::drain);
       } else {
         drain();
@@ -101,7 +96,10 @@ public class AsyncWorkerSink {
         long emitted = 0;
 
         while (emitted != requested) {
-          if (isCancelled.get()) return;
+          // CRITICAL FIX: Use 'break' to gracefully exit and decrement WIP
+          if (isCancelled.get() || isPaused.get()) {
+            break;
+          }
 
           int segmentsBefore = receivedSegments.size();
 
@@ -110,7 +108,8 @@ public class AsyncWorkerSink {
 
           if (event instanceof ErrorEvent err) {
             pushError(err.error());
-            return;
+            isCancelled.set(true);
+            break; // Break instead of return to close out WIP safely
           } else if (event instanceof TokenEvent te) {
             processToken(te.token());
           } else if (event instanceof ColumnEvent ce) {
@@ -119,6 +118,11 @@ public class AsyncWorkerSink {
 
           if (receivedSegments.size() > segmentsBefore) {
             emitted++;
+          }
+
+          // Check immediately after processing just in case a LOB paused us
+          if (isPaused.get()) {
+            break;
           }
         }
 
@@ -129,8 +133,6 @@ public class AsyncWorkerSink {
       } while (missed != 0);
 
     } catch (Throwable t) {
-      // CRITICAL: Catch any fatal runtime exceptions to prevent infinite hangs
-      // and safely propagate the error down the reactive chain.
       pushError(t);
     }
   }
@@ -140,108 +142,83 @@ public class AsyncWorkerSink {
       this.activeMetaData = meta;
     } else if (token instanceof RowToken) {
 
-      // Phase A: The Handoff (and Edge Case Safety)
-      if (activeRowDrainer != null) {
-        if (activeRowDrainer.isComplete()) {
-          emitSegment(activeRowDrainer.assembleRow());
-        }
+      if (activeRowDrainer != null && activeRowDrainer.isComplete()) {
+        emitSegment(activeRowDrainer.assembleRow());
       }
-      // PASS THE TOKEN QUEUE HERE
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
 
     } else if (token instanceof DoneToken done) {
 
-      // 1. Safety flush for the very last row in the result set if it ends in a LOB
       if (activeRowDrainer != null) {
-        // REMOVED: activeRowDrainer.flushPlpIfNecessary(-1);
         if (activeRowDrainer.isComplete()) {
           emitSegment(activeRowDrainer.assembleRow());
         }
         activeRowDrainer = null;
       }
 
-      // 2. Emit Out Parameters (If any exist for this statement)
       if (!activeOutParams.isEmpty()) {
         emitSegment(new TdsOutSegment(new java.util.ArrayList<>(activeOutParams), context));
-        activeOutParams.clear(); // Reset for the next statement in the batch
+        activeOutParams.clear();
       }
 
-      // 3. Emit the Update Count
       if (done.getStatus().hasCount()) {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
 
-      // 4. Terminate the reactive stream
       if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
 
     } else if (token instanceof ErrorToken error) {
-      logger.debug("WE CAUGHT AN ERROR TOKEN! {}", error.getMessage());
-      // Halt everything and propagate the server error immediately
       pushError(new TdsServerErrorException(
-          error.getMessage(),
-          error.getNumber(),
-          error.getState(),
-          error.getSeverity(),
-          error.getServerName(),
-          error.getProcName(),
-          error.getLineNumber()));
+          error.getMessage(), error.getNumber(), error.getState(),
+          error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber()));
     } else if (token instanceof InfoToken info) {
-      logger.debug("Received InfoToken [{}]: {}", info.getNumber(), info.getMessage());
-
-      // TDS "State" is a byte/int, so we convert it to the String sqlState R2DBC expects
-      emitSegment(new TdsMessageSegment(
-          (int) info.getNumber(),
-          String.valueOf(info.getState()),
-          info.getMessage()
-      ));
-    } else if (token instanceof ReturnStatusToken) {
-      // INTENTIONALLY IGNORED
-    } else if (token instanceof OrderToken) {
-      // INTENTIONALLY IGNORED
-    } else {
-      // FAIL FAST: Never let a token be ignored silently!
-      logger.error("SILENT FAILURE DETECTED! Unhandled token: {}", token.getClass().getSimpleName());
+      emitSegment(new TdsMessageSegment((int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
+    } else if (token instanceof ReturnStatusToken || token instanceof OrderToken) {
+      // Ignored
     }
   }
 
   private void processColumn(ColumnData cd) {
-    // If we receive column data but have no active drainer, drop it safely
     if (this.activeRowDrainer == null) return;
 
-    // Delegate the data to Phase B (The Asynchronous Drain)
     this.activeRowDrainer.processColumn(cd);
 
-    // Phase C: The Yield
-    // If the drainer reports the row is finished, emit it and clean up
     if (this.activeRowDrainer.isComplete()) {
-      emitSegment(this.activeRowDrainer.assembleRow());
+      StatefulRow row = this.activeRowDrainer.assembleRow();
+
+      // Hand the pause/resume power directly to the Row
+      row.setAsyncCallbacks(
+          () -> isPaused.set(true),
+          () -> {
+            isPaused.set(false);
+            scheduleDrain(); // Wake up when Clob is done
+          }
+      );
+
+      emitSegment(row); // User's map() executes here
       this.activeRowDrainer = null;
     }
   }
 
   private void emitSegment(Result.Segment segment) {
-    logger.trace("Assembled Segment: {}", segment.getClass().getSimpleName());
     receivedSegments.add(segment);
-
     try {
       if (onNext != null) onNext.accept(segment);
     } catch (Throwable t) {
-      // If the user's map crashes (even fatally), ensure the driver cleans up
       pushError(t);
-      throw t; // Re-throw to let Reactor do its logging
+      throw t;
     }
   }
 
   private void pushError(Throwable error) {
-    logger.debug("Stream Error: {}", error.getMessage(), error);
+    logger.debug("Stream Error: {}", error.getMessage());
     completionLatch.countDown();
     if (onError != null) onError.accept(error);
   }
 
   private void pushComplete() {
-    logger.trace("Stream Complete!");
     completionLatch.countDown();
     if (onComplete != null) onComplete.run();
   }
