@@ -179,6 +179,14 @@ public class StatefulRow implements Row, Result.RowSegment {
         } else {
           throw new IllegalArgumentException("Cannot map chunked LOB data to requested type: " + type.getName());
         }
+      } else {
+        // It's a standard column that was fetched on-demand. Unpack it natively.
+        if (chunk instanceof CompleteDataColumn c) {
+          rawData = c.getData();
+          if (rawData == null) return null;
+        } else {
+          throw new IllegalStateException("Unexpected PartialDataColumn for standard type");
+        }
       }
     }
     // 3. Process Standard Materialized Columns
