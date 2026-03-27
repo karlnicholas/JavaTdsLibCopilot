@@ -67,11 +67,19 @@ public class NumericDecoder implements ResultDecoder {
         throw new IllegalStateException("Unexpected INTN length");
 
       case FLT4:
-        return targetType.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
+        float flt4Val = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat();
+        if (targetType == Double.class) {
+          return targetType.cast((double) flt4Val); // Widen safely
+        }
+        return targetType.cast(flt4Val);
 
       case FLTN:
         if (data.length == 4) {
-          return targetType.cast(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat());
+          float fltnFloat = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getFloat();
+          if (targetType == Double.class) {
+            return targetType.cast((double) fltnFloat); // Widen safely
+          }
+          return targetType.cast(fltnFloat);
         }
         double fltnDouble = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getDouble();
         if (targetType == Float.class) {
@@ -127,18 +135,19 @@ public class NumericDecoder implements ResultDecoder {
 
   @SuppressWarnings("unchecked")
   private <T> T convertSimple(long val, int byteLength, Class<T> type) {
-    // Dynamically size the Java primitive based on the actual byte length from the network
     if (type == Integer.class || (type == Object.class && byteLength == 4)) {
       return (T) Integer.valueOf((int) val);
     }
     if (type == Long.class || (type == Object.class && byteLength == 8)) {
       return (T) Long.valueOf(val);
     }
-    if (type == Short.class || (type == Object.class && byteLength == 2)) {
-      return (T) Short.valueOf((short) val);
+    // 1. Explicit Byte Request: Honor the contract, let the client handle overflow
+    if (type == Byte.class) {
+      return type.cast((byte) val);
     }
-    if (type == Byte.class || (type == Object.class && byteLength == 1)) {
-      return (T) Short.valueOf((short) val); // SQL Server TINYINT is 0-255 unsigned, Short is safest
+    // 2. Explicit Short Request OR Generic Object Request (Safe Default for TINYINT/SMALLINT)
+    if (type == Short.class || (type == Object.class && byteLength <= 2)) {
+      return (T) Short.valueOf((short) val);
     }
     if (type == Boolean.class) {
       return (T) Boolean.valueOf(val != 0);

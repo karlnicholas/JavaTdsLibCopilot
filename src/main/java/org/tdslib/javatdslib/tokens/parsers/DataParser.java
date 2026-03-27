@@ -1,8 +1,11 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.protocol.TdsType;
+import org.tdslib.javatdslib.streaming.TdsBlob;
+import org.tdslib.javatdslib.streaming.TdsClob;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * Parser for reading data values from a TDS stream based on the data type. This class handles the
@@ -110,7 +113,7 @@ public class DataParser {
     // Do NOT loop and steal the whole stream!
     ByteBuffer leftover = null;
     if (payload.hasRemaining()) {
-      leftover = ByteBuffer.allocate(payload.remaining()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+      leftover = ByteBuffer.allocate(payload.remaining()).order(ByteOrder.LITTLE_ENDIAN);
       leftover.put(payload);
       leftover.flip();
 
@@ -120,9 +123,9 @@ public class DataParser {
 
     // 4. Return the streaming objects tied to the network
     if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new org.tdslib.javatdslib.streaming.TdsBlob(leftover);
+      return new TdsBlob(leftover);
     } else {
-      return new org.tdslib.javatdslib.streaming.TdsClob(leftover, charset);
+      return new TdsClob(leftover, charset);
     }
   }
   /**
