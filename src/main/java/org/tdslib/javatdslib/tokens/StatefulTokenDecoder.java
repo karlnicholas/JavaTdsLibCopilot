@@ -6,6 +6,7 @@ import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
+import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.tokens.parsers.ColumnLengthResolver;
 import org.tdslib.javatdslib.transport.ConnectionContext;
@@ -21,7 +22,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
   private final TokenParserRegistry registry;
   private final ConnectionContext context;
   private final TdsDecoderSink sink;
-  private final List<List<TdsParameter>> executions;
+  // ADD THESE FIELDS:
+  private ReturnValueToken activeReturnHeader = null;
+  private ColumnData currentRowColData = null;
 
   private ByteBuffer accumulator;
   private ColMetaDataToken currentMetaData;
@@ -37,12 +40,10 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
   public StatefulTokenDecoder(
       TokenParserRegistry registry,
       ConnectionContext context,
-      TdsDecoderSink sink,
-      List<List<TdsParameter>> executions) {
+      TdsDecoderSink sink) {
     this.registry = registry;
     this.context = context;
     this.sink = sink;
-    this.executions = executions;
     accumulator = ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
   }
 
@@ -64,9 +65,69 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
           // 2. We are expecting a new protocol Token
           accumulator.mark();
 
+          // Inside the onPayloadAvailable while loop:
           if (expectingNewToken) {
+            accumulator.mark();
             currentTokenType = accumulator.get();
             expectingNewToken = false;
+          }
+
+// Inside the onPayloadAvailable while loop:
+          if (currentTokenType == TokenType.RETURN_VALUE.getValue()) {
+
+            // STEP 1: Parse the Metadata Header
+            if (activeReturnHeader == null) {
+              TokenParser parser = registry.getParser(currentTokenType);
+              if (!parser.canParse(accumulator, context)) {
+                return; // Yield safely
+              }
+              activeReturnHeader = (ReturnValueToken) parser.parse(accumulator, currentTokenType, context);
+            }
+
+            // STEP 2: Resolve Data Length and Extract
+            // Mark the buffer BEFORE reading the length. If the payload is fragmented,
+            // we can rewind to this exact spot and try again when the next packet arrives.
+            accumulator.mark();
+
+            TdsType tdsType = activeReturnHeader.getTypeInfo().getTdsType();
+            int dataLen = ColumnLengthResolver.resolveStandardLength(
+                accumulator,
+                tdsType,
+                activeReturnHeader.getTypeInfo().getMaxLength());
+
+            if (dataLen == ColumnLengthResolver.INCOMPLETE_HEADER) {
+              accumulator.reset();
+              return;
+            }
+
+            byte[] data = null;
+
+            if (dataLen > 0) {
+              // Yield if the full data payload hasn't arrived over the network yet
+              if (accumulator.remaining() < dataLen) {
+                accumulator.reset();
+                return;
+              }
+              data = new byte[dataLen];
+              accumulator.get(data);
+            } else if (dataLen == 0) {
+              data = new byte[0]; // Empty payload
+            }
+            // If dataLen == -1, the value is SQL NULL. The byte[] remains null.
+
+            // STEP 3: Emit the fully populated token
+            sink.onToken(new ReturnValueToken(
+                currentTokenType,
+                activeReturnHeader.getOrdinal(),
+                activeReturnHeader.getParamName(),
+                activeReturnHeader.getStatusFlags(),
+                activeReturnHeader.getTypeInfo(),
+                data));
+
+            // STEP 4: Cleanup state for the next token
+            activeReturnHeader = null;
+            expectingNewToken = true;
+            continue;
           }
 
           if (currentTokenType == TokenType.ROW.getValue()) {

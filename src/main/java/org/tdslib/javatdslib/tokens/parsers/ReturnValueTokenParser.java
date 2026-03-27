@@ -1,6 +1,5 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
-import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -17,8 +16,7 @@ import java.nio.ByteBuffer;
 public class ReturnValueTokenParser implements TokenParser {
 
   @Override
-  public Token parse(
-      final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
+  public Token parse(final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
     if (tokenType != TokenType.RETURN_VALUE.getValue()) {
       throw new IllegalArgumentException("Expected RETURNVALUE token (0xAC)");
     }
@@ -33,72 +31,43 @@ public class ReturnValueTokenParser implements TokenParser {
       paramName = new String(nameBytes, context.getEffectiveCharset());
     }
 
-    // 2. Status flags
+    // 2. Status Flags (1 byte) + User Type (4 bytes) + Flags (2 bytes)
     byte statusFlags = payload.get();
+    payload.getInt(); // Skip UserType
+    payload.getShort(); // Skip Flags
 
-    // 3. User type
-    int userType = payload.getInt();
-
-    // 4. Flags
-    short flags = payload.getShort();
-
-    // 5. TYPE_INFO (Robust Parsing)
+    // 3. TYPE_INFO (Parsed, but data is NOT extracted here)
     TypeInfo typeInfo = TypeInfoParser.parse(payload);
-    TdsType tdsType = typeInfo.getTdsType();
 
-    // 6. GUARDRAIL: Reject LOB OUT Parameters for Phase 1
-    boolean isPlp = tdsType.strategy == TdsType.LengthStrategy.PLP ||
-        (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && typeInfo.getMaxLength() == 65535);
-
-    if (isPlp) {
-      throw new UnsupportedOperationException(
-          "LOB OUT parameters (VARCHAR(MAX), VARBINARY(MAX), etc.) are not yet supported in this driver version."
-      );
-    }
-
-    // Since we rejected PLPs, we can now safely guarantee DataParser returns a byte[]
-    byte[] value =
-        (byte[])
-            DataParser.getDataBytes(
-                payload,
-                tdsType,
-                typeInfo.getMaxLength(),
-                context.getEffectiveCharset());
-
-    return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, value);
+    // Return a token with a null value; StatefulTokenDecoder will fill the data
+    return new ReturnValueToken(tokenType, ordinal, paramName, statusFlags, typeInfo, null);
   }
 
   @Override
   public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
-    // 1. Ordinal (2 bytes) + Param Name Length (1 byte)
-    if (peekBuffer.remaining() < 3) return false;
-    peekBuffer.position(peekBuffer.position() + 2); // skip ordinal
-    int nameLen = peekBuffer.get() & 0xFF;
+    int startPos = peekBuffer.position();
+    try {
+      // 1. Ordinal (2 bytes) + Param Name Length (1 byte)
+      if (peekBuffer.remaining() < 3) return false;
+      peekBuffer.getShort(); // skip ordinal
+      int nameLen = peekBuffer.get() & 0xFF;
 
-    // 2. Param Name Bytes (nameLen * 2 characters)
-    int nameBytesLen = nameLen * 2;
-    if (peekBuffer.remaining() < nameBytesLen) return false;
-    peekBuffer.position(peekBuffer.position() + nameBytesLen);
+      // 2. Param Name Bytes (Unicode = nameLen * 2)
+      int nameBytesLen = nameLen * 2;
+      if (peekBuffer.remaining() < nameBytesLen) return false;
+      peekBuffer.position(peekBuffer.position() + nameBytesLen);
 
-    // 3. Status Flags (1 byte) + User Type (4 bytes) + Flags (2 bytes) = 7 bytes
-    if (peekBuffer.remaining() < 7) return false;
-    peekBuffer.position(peekBuffer.position() + 7);
+      // 3. Status Flags (1) + User Type (4) + Flags (2) = 7 bytes
+      if (peekBuffer.remaining() < 7) return false;
+      peekBuffer.position(peekBuffer.position() + 7);
 
-    // 4. Safely verify and parse the TYPE_INFO
-    int typeInfoStart = peekBuffer.position();
-    if (!TypeInfoParser.canParse(peekBuffer)) {
-      return false; // Incomplete TypeInfo
+      // 4. Safely verify TypeInfo
+      return TypeInfoParser.canParse(peekBuffer);
+    } catch (Exception e) {
+      return false;
+    } finally {
+      // CRITICAL: Always rewind so parse() starts at the Ordinal
+      peekBuffer.position(startPos);
     }
-
-    // Since canParse advanced the position, we must rewind it to actually parse the TypeInfo
-    // object so we know how to calculate the length of the data value.
-    peekBuffer.position(typeInfoStart);
-    TypeInfo typeInfo = TypeInfoParser.parse(peekBuffer);
-
-    // 5. Calculate Required Bytes for Data Value
-    int dataBytesRequired = DataParser.getRequiredValueBytes(peekBuffer, typeInfo.getTdsType(), typeInfo.getMaxLength());
-
-    // Evaluate DataParser's native -1 boundary signal
-    return dataBytesRequired != -1;
   }
 }

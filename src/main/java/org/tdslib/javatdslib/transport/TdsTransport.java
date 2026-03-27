@@ -125,8 +125,7 @@ public class TdsTransport implements AutoCloseable {
 
         // 4. Setup Decoder & Transport Handlers
         StatefulTokenDecoder decoder = new StatefulTokenDecoder(
-            TokenParserRegistry.DEFAULT, context, tokenQueue, new ArrayList<>()
-        );
+            TokenParserRegistry.DEFAULT, context, tokenQueue);
 
         this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
           this.setStreamHandlers(null, null);
