@@ -175,6 +175,11 @@ public class AsyncWorkerSink {
           error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber()));
     } else if (token instanceof InfoToken info) {
       emitSegment(new TdsMessageSegment((int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
+
+      // --> ADD THIS BLOCK <--
+    } else if (token instanceof ReturnValueToken retVal) {
+      activeOutParams.add(retVal);
+
     } else if (token instanceof ReturnStatusToken || token instanceof OrderToken) {
       // Ignored
     }

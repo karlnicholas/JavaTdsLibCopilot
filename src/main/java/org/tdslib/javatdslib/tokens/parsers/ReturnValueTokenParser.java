@@ -1,5 +1,6 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
+import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.TokenParser;
 import org.tdslib.javatdslib.tokens.TokenType;
@@ -43,12 +44,24 @@ public class ReturnValueTokenParser implements TokenParser {
 
     // 5. TYPE_INFO (Robust Parsing)
     TypeInfo typeInfo = TypeInfoParser.parse(payload);
+    TdsType tdsType = typeInfo.getTdsType();
 
+    // 6. GUARDRAIL: Reject LOB OUT Parameters for Phase 1
+    boolean isPlp = tdsType.strategy == TdsType.LengthStrategy.PLP ||
+        (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && typeInfo.getMaxLength() == 65535);
+
+    if (isPlp) {
+      throw new UnsupportedOperationException(
+          "LOB OUT parameters (VARCHAR(MAX), VARBINARY(MAX), etc.) are not yet supported in this driver version."
+      );
+    }
+
+    // Since we rejected PLPs, we can now safely guarantee DataParser returns a byte[]
     byte[] value =
         (byte[])
             DataParser.getDataBytes(
                 payload,
-                typeInfo.getTdsType(),
+                tdsType,
                 typeInfo.getMaxLength(),
                 context.getEffectiveCharset());
 

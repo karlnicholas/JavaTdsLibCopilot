@@ -1,11 +1,8 @@
 package org.tdslib.javatdslib.tokens.parsers;
 
 import org.tdslib.javatdslib.protocol.TdsType;
-import org.tdslib.javatdslib.streaming.TdsBlob;
-import org.tdslib.javatdslib.streaming.TdsClob;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 /**
  * Parser for reading data values from a TDS stream based on the data type. This class handles the
@@ -50,10 +47,10 @@ public class DataParser {
         }
         break;
 
+// Inside getDataBytes() switch:
       case USHORTLEN:
         if (maxLength == 65535) {
-          // Pass the type parameter down
-          data = readPlp(payload, charset, type);
+          throw new UnsupportedOperationException("LOB data extraction is no longer supported in DataParser. Use RowDrainer.");
         } else {
           int varLen = Short.toUnsignedInt(payload.getShort());
           if (varLen != 0xFFFF) {
@@ -63,9 +60,7 @@ public class DataParser {
         break;
 
       case PLP:
-        // Pass the type parameter down
-        data = readPlp(payload, charset, type);
-        break;
+        throw new UnsupportedOperationException("LOB data extraction is no longer supported in DataParser. Use RowDrainer.");
 
       case LONGLEN:
         int textPtrLen = payload.get() & 0xFF;
@@ -100,34 +95,6 @@ public class DataParser {
     return b;
   }
 
-  private static Object readPlp(
-      ByteBuffer payload,
-      java.nio.charset.Charset charset,
-      TdsType type) {
-
-    long totalLength = payload.getLong();
-    if (totalLength == -1L && payload.remaining() == 0) return null;
-    if (totalLength == 0xFFFFFFFFFFFFFFFFL) return null;
-
-    // 1. Capture ONLY the leftover bytes in the CURRENT network packet.
-    // Do NOT loop and steal the whole stream!
-    ByteBuffer leftover = null;
-    if (payload.hasRemaining()) {
-      leftover = ByteBuffer.allocate(payload.remaining()).order(ByteOrder.LITTLE_ENDIAN);
-      leftover.put(payload);
-      leftover.flip();
-
-      // 2. Consume the payload buffer so the Row Parser knows we took these bytes
-      payload.position(payload.limit());
-    }
-
-    // 4. Return the streaming objects tied to the network
-    if (type == TdsType.BIGVARBIN || type == TdsType.BIGBINARY || type == TdsType.IMAGE) {
-      return new TdsBlob(leftover);
-    } else {
-      return new TdsClob(leftover, charset);
-    }
-  }
   /**
    * Safely calculates the number of bytes required to read the data value from the stream,
    * advancing the peekBuffer position if enough bytes are available.
@@ -166,9 +133,10 @@ public class DataParser {
         }
         break;
 
+// Inside getRequiredValueBytes() switch:
       case USHORTLEN:
-        if (maxLength == 65535) { // PLP stream
-          if (!checkPlpBytes(peekBuffer)) return -1;
+        if (maxLength == 65535) {
+          throw new UnsupportedOperationException("LOB size calculation is no longer supported in DataParser. Use RowDrainer.");
         } else {
           if (peekBuffer.remaining() < 2) return -1;
           int varLen = Short.toUnsignedInt(peekBuffer.getShort());
@@ -180,8 +148,7 @@ public class DataParser {
         break;
 
       case PLP:
-        if (!checkPlpBytes(peekBuffer)) return -1;
-        break;
+        throw new UnsupportedOperationException("LOB size calculation is no longer supported in DataParser. Use RowDrainer.");
 
       case LONGLEN:
         if (peekBuffer.remaining() < 1) return -1;
