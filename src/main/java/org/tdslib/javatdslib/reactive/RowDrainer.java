@@ -25,7 +25,9 @@ public class RowDrainer {
   private final Object[] assemblingRow; // Shifted from byte[][] to Object[]
   private final int totalColumns;
 
-  private boolean isReadyToYield = false;
+  private boolean isReadyToYield = false; // (Existing)
+  private boolean isRowEmitted = false;   // NEW: Tracks if we've handed the row to the user
+  private boolean isFullyComplete = false; // NEW: Tracks if the network stream for this row is 100% finished
 
   // ADD FIELD
   private final TdsTokenQueue tokenQueue;
@@ -69,11 +71,26 @@ public class RowDrainer {
 
   private void checkRowCompletion(int justFinishedColIndex) {
     if (justFinishedColIndex == totalColumns - 1) {
-      this.isReadyToYield = true;
+      isReadyToYield = true;
+      isFullyComplete = true; // NEW: Mark the absolute physical end of the row
     }
   }
 
-  public boolean isComplete() { return isReadyToYield; }
+  public boolean isReadyToYield() {
+    return isReadyToYield;
+  }
+
+  public boolean isRowEmitted() {
+    return isRowEmitted;
+  }
+
+  public void setRowEmitted(boolean rowEmitted) {
+    this.isRowEmitted = rowEmitted;
+  }
+
+  public boolean isFullyComplete() {
+    return isFullyComplete;
+  }
 
   public StatefulRow assembleRow() {
     return new StatefulRow(this.assemblingRow, this.metaData, this.context, this.tokenQueue);

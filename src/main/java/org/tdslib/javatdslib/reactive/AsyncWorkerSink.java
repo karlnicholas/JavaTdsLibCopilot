@@ -142,7 +142,8 @@ public class AsyncWorkerSink {
       this.activeMetaData = meta;
     } else if (token instanceof RowToken) {
 
-      if (activeRowDrainer != null && activeRowDrainer.isComplete()) {
+      // FIXED: Use the new two-phase lifecycle flags
+      if (activeRowDrainer != null && activeRowDrainer.isReadyToYield() && !activeRowDrainer.isRowEmitted()) {
         emitSegment(activeRowDrainer.assembleRow());
       }
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
@@ -150,7 +151,8 @@ public class AsyncWorkerSink {
     } else if (token instanceof DoneToken done) {
 
       if (activeRowDrainer != null) {
-        if (activeRowDrainer.isComplete()) {
+        // FIXED: Use the new two-phase lifecycle flags
+        if (activeRowDrainer.isReadyToYield() && !activeRowDrainer.isRowEmitted()) {
           emitSegment(activeRowDrainer.assembleRow());
         }
         activeRowDrainer = null;
@@ -190,7 +192,8 @@ public class AsyncWorkerSink {
 
     this.activeRowDrainer.processColumn(cd);
 
-    if (this.activeRowDrainer.isComplete()) {
+    // PHASE 1: Emit if the row is logically ready, but ONLY ONCE per row
+    if (this.activeRowDrainer.isReadyToYield() && !this.activeRowDrainer.isRowEmitted()) {
       StatefulRow row = this.activeRowDrainer.assembleRow();
 
       // Hand the pause/resume power directly to the Row
@@ -203,6 +206,11 @@ public class AsyncWorkerSink {
       );
 
       emitSegment(row); // User's map() executes here
+      this.activeRowDrainer.setRowEmitted(true); // Mark as emitted so we don't duplicate
+    }
+
+    // PHASE 2: Discard drainer ONLY when the final column completely finishes over the network
+    if (this.activeRowDrainer.isFullyComplete()) {
       this.activeRowDrainer = null;
     }
   }
