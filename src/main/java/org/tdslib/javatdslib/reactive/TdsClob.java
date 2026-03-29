@@ -11,7 +11,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.util.concurrent.locks.LockSupport;
 
 public class TdsClob implements Clob {
@@ -23,12 +27,21 @@ public class TdsClob implements Clob {
   private ColumnData firstChunk;
   private boolean isDiscardedOrCompleted = false;
 
+  // Production-ready stateful decoder to handle fragmented multibyte characters
+  private final CharsetDecoder decoder;
+  private byte[] leftoverBytes = null;
+
   public TdsClob(TdsTokenQueue tokenQueue, int columnIndex, Charset charset, ColumnData firstChunk, Runnable rowUnlockCallback) {
     this.tokenQueue = tokenQueue;
     this.columnIndex = columnIndex;
     this.charset = charset;
     this.firstChunk = firstChunk;
     this.rowUnlockCallback = rowUnlockCallback;
+
+    // Initialize stateful decoder
+    this.decoder = charset.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE);
   }
 
   @Override
@@ -43,9 +56,12 @@ public class TdsClob implements Clob {
         long emitted = 0;
 
         if (firstChunk != null && emitted < n && !sink.isCancelled()) {
-          sink.next(decode(firstChunk));
+          String decoded = decodeChunk(extractBytes(firstChunk));
+          if (!decoded.isEmpty()) {
+            sink.next(decoded);
+            emitted++;
+          }
           firstChunk = null;
-          emitted++;
         }
 
         while (emitted < n && !sink.isCancelled() && !isDiscardedOrCompleted) {
@@ -58,10 +74,20 @@ public class TdsClob implements Clob {
 
           if (event instanceof ColumnEvent ce && ce.data().getColumnIndex() == columnIndex) {
             tokenQueue.poll();
-            sink.next(decode(ce.data()));
-            emitted++;
+            String decoded = decodeChunk(extractBytes(ce.data()));
+            if (!decoded.isEmpty()) {
+              sink.next(decoded);
+              emitted++;
+            }
           } else {
             isDiscardedOrCompleted = true;
+
+            // Flush decoder on final boundary to process any genuinely malformed trailing bytes
+            String finalChars = flushDecoder();
+            if (!finalChars.isEmpty()) {
+              sink.next(finalChars);
+            }
+
             rowUnlockCallback.run(); // WAKES UP THE SINK
             sink.complete();
             break;
@@ -98,15 +124,69 @@ public class TdsClob implements Clob {
 
     isDiscardedOrCompleted = true;
     firstChunk = null;
+    leftoverBytes = null; // Clear state on discard
     rowUnlockCallback.run(); // WAKES UP THE SINK
   }
 
-  private String decode(ColumnData data) {
+  private byte[] extractBytes(ColumnData data) {
     if (data instanceof PartialDataColumn p && p.getChunk() != null) {
-      return new String(p.getChunk(), charset);
+      return p.getChunk();
     } else if (data instanceof CompleteDataColumn c && c.getData() != null) {
-      return new String(c.getData(), charset);
+      return c.getData();
     }
-    return "";
+    return new byte[0];
+  }
+
+  private String decodeChunk(byte[] rawBytes) {
+    if ((rawBytes == null || rawBytes.length == 0) && leftoverBytes == null) {
+      return "";
+    }
+
+    // 1. Merge any unread bytes from the previous chunk
+    byte[] mergedBytes;
+    if (leftoverBytes != null) {
+      int rawLen = rawBytes != null ? rawBytes.length : 0;
+      mergedBytes = new byte[leftoverBytes.length + rawLen];
+      System.arraycopy(leftoverBytes, 0, mergedBytes, 0, leftoverBytes.length);
+      if (rawLen > 0) {
+        System.arraycopy(rawBytes, 0, mergedBytes, leftoverBytes.length, rawLen);
+      }
+      leftoverBytes = null;
+    } else {
+      mergedBytes = rawBytes;
+    }
+
+    if (mergedBytes.length == 0) return "";
+
+    ByteBuffer in = ByteBuffer.wrap(mergedBytes);
+    int maxChars = (int) Math.ceil(mergedBytes.length * decoder.maxCharsPerByte());
+    CharBuffer out = CharBuffer.allocate(maxChars);
+
+    // 2. Decode continuously (endOfInput = false preserves severed multibyte sequences)
+    decoder.decode(in, out, false);
+
+    // 3. Save any incomplete characters for the next chunk
+    if (in.hasRemaining()) {
+      leftoverBytes = new byte[in.remaining()];
+      in.get(leftoverBytes);
+    }
+
+    out.flip();
+    return out.toString();
+  }
+
+  private String flushDecoder() {
+    ByteBuffer in = leftoverBytes != null ? ByteBuffer.wrap(leftoverBytes) : ByteBuffer.allocate(0);
+    leftoverBytes = null;
+
+    int maxChars = (int) Math.ceil(in.remaining() * decoder.maxCharsPerByte()) + 10;
+    CharBuffer out = CharBuffer.allocate(maxChars);
+
+    // Signal endOfInput = true to force processing of any genuinely malformed server data
+    decoder.decode(in, out, true);
+    decoder.flush(out);
+
+    out.flip();
+    return out.toString();
   }
 }

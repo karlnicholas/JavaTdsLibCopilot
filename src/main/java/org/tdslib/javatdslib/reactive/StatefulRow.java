@@ -27,9 +27,9 @@ import org.tdslib.javatdslib.transport.ConnectionContext;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -41,8 +41,8 @@ public class StatefulRow implements Row, Result.RowSegment {
   private Runnable pauseSinkCallback;
   private Runnable resumeSinkCallback;
 
-  public interface StreamDiscarder { void discardAbandonedStream(); }
-  private StreamDiscarder activeStreamLock = null;
+  // NEW: Reference counter to safely manage concurrent LOB extraction
+  private final AtomicInteger pendingLobCount = new AtomicInteger(0);
 
   public void setAsyncCallbacks(Runnable pauseCallback, Runnable resumeCallback) {
     this.pauseSinkCallback = pauseCallback;
@@ -62,7 +62,7 @@ public class StatefulRow implements Row, Result.RowSegment {
     this.payload = payload;
     this.metaData = metaData;
     this.context = context;
-    this.tokenQueue = tokenQueue; // ADDED
+    this.tokenQueue = tokenQueue;
 
     // Cache the R2DBC Metadata once upon creation to optimize Result.map() operations
     List<ColumnMetadata> columns = new ArrayList<>(metaData.getColumns().size());
@@ -83,26 +83,10 @@ public class StatefulRow implements Row, Result.RowSegment {
     throw new IllegalArgumentException("Column not found: " + name);
   }
 
-  // Replace the old activeStreamLock interface with these:
-  private boolean activeAsyncStream = false;
-
-  public void setResumeSinkCallback(Runnable callback) {
-    this.resumeSinkCallback = callback;
-  }
-
-  public boolean hasActiveAsyncStream() {
-    return activeAsyncStream;
-  }
-
-  // Update the get() method to enforce the stream lock
   @Override
+  @SuppressWarnings("unchecked")
   public <T> T get(int index, Class<T> type) {
-    // Force cleanup if the user abandons a stream and moves on to the next column
-    if (this.activeStreamLock != null && index > activeColumnIndex - 1) {
-      logger.debug("[StatefulRow] Forcefully discarding abandoned LOB stream.");
-      this.activeStreamLock.discardAbandonedStream();
-      this.activeStreamLock = null;
-    }
+
     if (index > activeColumnIndex) {
       throw new IllegalStateException(
           String.format("Forward-only violation. Expected col %d but requested %d.", activeColumnIndex, index));
@@ -121,7 +105,35 @@ public class StatefulRow implements Row, Result.RowSegment {
     ColumnMeta colMeta = metaData.getColumns().get(index);
     TdsType tdsType = TdsType.valueOf(colMeta.getDataType());
 
-    // 1. On-Demand Fetching for subsequent unfetched columns
+    // 1. Intercept Asynchronous Streams (LOBs) immediately before queue-advancement
+    if (type == Clob.class || type == Blob.class) {
+      ColumnData initialChunk = (rawData instanceof ColumnData cd) ? cd : null;
+
+      // Increment the reference counter since a new LOB publisher is being created
+      pendingLobCount.incrementAndGet();
+
+      // Pause the sink unconditionally to protect the queue for the Publisher
+      if (this.pauseSinkCallback != null) this.pauseSinkCallback.run();
+
+      // NEW: A mediator callback that only wakes the sink when ALL requested LOB streams are finished
+      Runnable mediatedResumeCallback = () -> {
+        if (pendingLobCount.decrementAndGet() == 0) {
+          logger.trace("[StatefulRow] All pending LOBs completed. Resuming network sink.");
+          if (this.resumeSinkCallback != null) this.resumeSinkCallback.run();
+        } else {
+          logger.trace("[StatefulRow] LOB completed, but others remain pending. Sink stays paused.");
+        }
+      };
+
+      if (type == Clob.class) {
+        Charset charset = getCharset(colMeta, tdsType);
+        return type.cast(new TdsClob(tokenQueue, index, charset, initialChunk, mediatedResumeCallback));
+      } else {
+        return type.cast(new TdsBlob(tokenQueue, index, initialChunk, mediatedResumeCallback));
+      }
+    }
+
+    // 2. On-Demand Fetching for subsequent unfetched standard columns
     if (rawData == RowDrainer.UNFETCHED) {
       rawData = advanceQueueToColumn(index);
       payload[index] = rawData; // Cache it
@@ -131,8 +143,7 @@ public class StatefulRow implements Row, Result.RowSegment {
       return null;
     }
 
-    // 2. Intercept Saved Chunks (LOBs or standard columns placed after LOBs)
-    // 2. Intercept Saved Chunks
+    // 3. Intercept Saved Chunks (Synchronous LOB extraction via String/byte[])
     if (rawData instanceof ColumnData chunk) {
       boolean isChunked = (chunk instanceof PartialDataColumn) ||
           (tdsType != null && (tdsType.strategy == TdsType.LengthStrategy.PLP || tdsType.strategy == TdsType.LengthStrategy.LONGLEN));
@@ -140,42 +151,6 @@ public class StatefulRow implements Row, Result.RowSegment {
       if (isChunked) {
         if (type == String.class || type == byte[].class || type == ByteBuffer.class || type == Object.class) {
           return (T) drainLobSynchronously(index, type, tdsType, colMeta, chunk);
-        } else if (type == Clob.class) {
-
-          Charset charset;
-          if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
-            charset = java.nio.charset.StandardCharsets.UTF_16LE;
-          } else {
-            byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
-            charset = collation != null
-                ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
-                : context.getVarcharCharset();
-          }
-
-          // PAUSE SINK SYNCHRONOUSLY
-          if (this.pauseSinkCallback != null) this.pauseSinkCallback.run();
-
-          TdsClob clob = new TdsClob(tokenQueue, index, charset, chunk, () -> {
-            this.activeStreamLock = null;
-            if (this.resumeSinkCallback != null) this.resumeSinkCallback.run(); // RESUME
-          });
-
-          this.activeStreamLock = clob::syncDiscard;
-          return (T) clob;
-
-        } else if (type == Blob.class) {
-
-          // PAUSE SINK SYNCHRONOUSLY
-          if (this.pauseSinkCallback != null) this.pauseSinkCallback.run();
-
-          TdsBlob blob = new TdsBlob(tokenQueue, index, chunk, () -> {
-            this.activeStreamLock = null;
-            if (this.resumeSinkCallback != null) this.resumeSinkCallback.run(); // RESUME
-          });
-
-          this.activeStreamLock = blob::syncDiscard;
-          return (T) blob;
-
         } else {
           throw new IllegalArgumentException("Cannot map chunked LOB data to requested type: " + type.getName());
         }
@@ -189,17 +164,10 @@ public class StatefulRow implements Row, Result.RowSegment {
         }
       }
     }
-    // 3. Process Standard Materialized Columns
+
+    // 4. Process Standard Materialized Columns
     if (rawData instanceof byte[] bytes) {
-      Charset charset;
-      if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
-        charset = java.nio.charset.StandardCharsets.UTF_16LE;
-      } else {
-        byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
-        charset = collation != null
-            ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
-            : context.getVarcharCharset();
-      }
+      Charset charset = getCharset(colMeta, tdsType);
       return DecoderRegistry.DEFAULT.decode(bytes, tdsType, type, colMeta.getScale(), charset);
     }
 
@@ -293,27 +261,27 @@ public class StatefulRow implements Row, Result.RowSegment {
       return null;
     }
 
-    Charset charset;
-    if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
-      charset = java.nio.charset.StandardCharsets.UTF_16LE;
-    } else {
-      byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
-      charset = collation != null
-          ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
-          : context.getVarcharCharset();
-    }
+    Charset charset = getCharset(colMeta, tdsType);
 
     try {
       return DecoderRegistry.DEFAULT.decode(rawBytes, tdsType, type, colMeta.getScale(), charset);
     } catch (OutOfMemoryError oom) {
-      // 1. Immediately drop the massive array reference so the Garbage Collector can recover
       rawBytes = null;
       buffer = null;
-
-      // 2. Wrap the fatal Error in a standard RuntimeException
       throw new IllegalStateException(
           "Driver ran out of memory materializing a large object. " +
               "Consider using streaming (Publisher.class) instead of synchronous get.", oom);
+    }
+  }
+
+  private Charset getCharset(ColumnMeta colMeta, TdsType tdsType) {
+    if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
+      return java.nio.charset.StandardCharsets.UTF_16LE;
+    } else {
+      byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
+      return collation != null
+          ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
+          : context.getVarcharCharset();
     }
   }
 
