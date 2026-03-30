@@ -1,6 +1,6 @@
 module org.tdslib.javatdslib {
   // 1. External dependencies mapped from your pom.xml
-  requires r2dbc.spi;
+  requires transitive r2dbc.spi;
   requires org.reactivestreams;
   requires org.slf4j;
   requires reactor.core;

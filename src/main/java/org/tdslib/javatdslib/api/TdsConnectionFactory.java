@@ -25,6 +25,9 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
 import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
+import static org.tdslib.javatdslib.api.TdsLibOptions.TRUST_SERVER_CERTIFICATE;
+import static org.tdslib.javatdslib.api.TdsLibOptions.TRUST_STORE;
+import static org.tdslib.javatdslib.api.TdsLibOptions.TRUST_STORE_PASSWORD;
 
 /**
  * An R2DBC {@link ConnectionFactory} for creating connections to a TDS-based database. This factory
@@ -33,12 +36,6 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
  */
 public class TdsConnectionFactory implements ConnectionFactory {
   private static final Logger logger = LoggerFactory.getLogger(TdsConnectionFactory.class);
-
-  // Moved Custom Options to the API boundary
-  public static final Option<Boolean> TRUST_SERVER_CERTIFICATE =
-      Option.valueOf("trustServerCertificate");
-  public static final Option<String> TRUST_STORE = Option.valueOf("trustStore");
-  public static final Option<String> TRUST_STORE_PASSWORD = Option.valueOf("trustStorePassword");
 
   private final ConnectionFactoryOptions options;
 
