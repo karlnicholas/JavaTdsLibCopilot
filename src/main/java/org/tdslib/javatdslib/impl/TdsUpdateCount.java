@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.internal;
+package org.tdslib.javatdslib.impl;
 
 import io.r2dbc.spi.Result;
 

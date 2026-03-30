@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.api;
+package org.tdslib.javatdslib.impl;
 
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;

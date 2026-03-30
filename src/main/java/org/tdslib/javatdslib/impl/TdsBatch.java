@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.api;
+package org.tdslib.javatdslib.impl;
 
 import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
@@ -69,7 +69,7 @@ public class TdsBatch implements Batch {
    * Determines if a segment marks the end of a specific SQL statement execution.
    */
   private boolean isBoundarySegment(Result.Segment segment) {
-    return segment instanceof org.tdslib.javatdslib.internal.TdsUpdateCount
+    return segment instanceof TdsUpdateCount
         || segment instanceof Result.OutSegment;
   }
 

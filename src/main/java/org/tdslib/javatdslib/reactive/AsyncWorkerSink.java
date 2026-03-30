@@ -3,7 +3,7 @@ package org.tdslib.javatdslib.reactive;
 import io.r2dbc.spi.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.internal.TdsUpdateCount;
+import org.tdslib.javatdslib.impl.TdsUpdateCount;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.ErrorEvent;
