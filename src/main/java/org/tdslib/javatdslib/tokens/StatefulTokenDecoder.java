@@ -2,7 +2,6 @@ package org.tdslib.javatdslib.tokens;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.ColumnMeta;
@@ -14,7 +13,6 @@ import org.tdslib.javatdslib.transport.TdsStreamHandler;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.List;
 
 public class StatefulTokenDecoder implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(StatefulTokenDecoder.class);
