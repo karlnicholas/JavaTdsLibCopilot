@@ -57,7 +57,7 @@ public class TdsOutSegment implements Result.OutSegment, OutParameters {
 
     TdsType tdsType = token.getTypeInfo().getTdsType();
 
-    // Leverage the exact same charset resolution logic you built for StatefulRow
+    // Leverage the exact same charset resolution logic you built for TdsRow
     Charset charset;
     if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT) {
       charset = java.nio.charset.StandardCharsets.UTF_16LE;

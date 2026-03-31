@@ -2,7 +2,7 @@ package org.tdslib.javatdslib.reactive;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.impl.StatefulRow;
+import org.tdslib.javatdslib.impl.TdsRow;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
@@ -58,7 +58,7 @@ public class RowDrainer {
 
     if (isPlp) {
       logger.trace("[RowDrainer] PLP/LOB detected at index {}. Yielding early.", colIndex);
-      // FIX: Do not drop the chunk! Save it in the array for StatefulRow to process.
+      // FIX: Do not drop the chunk! Save it in the array for TdsRow to process.
       assemblingRow[colIndex] = cd;
       isReadyToYield = true;
       return;
@@ -93,7 +93,7 @@ public class RowDrainer {
     return isFullyComplete;
   }
 
-  public StatefulRow assembleRow() {
-    return new StatefulRow(this.assemblingRow, this.metaData, this.context, this.tokenQueue);
+  public TdsRow assembleRow() {
+    return new TdsRow(this.assemblingRow, this.metaData, this.context, this.tokenQueue);
   }
 }

@@ -36,8 +36,8 @@ import java.util.concurrent.locks.LockSupport;
  * A highly performant, random-access Row and RowSegment implementation.
  * Modified to support hybrid materialized and deferred payload models.
  */
-public class StatefulRow implements Row, Result.RowSegment {
-  private static final Logger logger = LoggerFactory.getLogger(StatefulRow.class);
+public class TdsRow implements Row, Result.RowSegment {
+  private static final Logger logger = LoggerFactory.getLogger(TdsRow.class);
   private Runnable pauseSinkCallback;
   private Runnable resumeSinkCallback;
 
@@ -58,7 +58,7 @@ public class StatefulRow implements Row, Result.RowSegment {
 
   private final TdsTokenQueue tokenQueue;
 
-  public StatefulRow(Object[] payload, ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
+  public TdsRow(Object[] payload, ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
     this.payload = payload;
     this.metaData = metaData;
     this.context = context;
@@ -79,7 +79,7 @@ public class StatefulRow implements Row, Result.RowSegment {
         return get(i, type);
       }
     }
-    logger.debug("[StatefulRow] Column name '{}' not found in row metadata.", name);
+    logger.debug("[TdsRow] Column name '{}' not found in row metadata.", name);
     throw new IllegalArgumentException("Column not found: " + name);
   }
 
@@ -118,10 +118,10 @@ public class StatefulRow implements Row, Result.RowSegment {
       // NEW: A mediator callback that only wakes the sink when ALL requested LOB streams are finished
       Runnable mediatedResumeCallback = () -> {
         if (pendingLobCount.decrementAndGet() == 0) {
-          logger.trace("[StatefulRow] All pending LOBs completed. Resuming network sink.");
+          logger.trace("[TdsRow] All pending LOBs completed. Resuming network sink.");
           if (this.resumeSinkCallback != null) this.resumeSinkCallback.run();
         } else {
-          logger.trace("[StatefulRow] LOB completed, but others remain pending. Sink stays paused.");
+          logger.trace("[TdsRow] LOB completed, but others remain pending. Sink stays paused.");
         }
       };
 
@@ -203,7 +203,7 @@ public class StatefulRow implements Row, Result.RowSegment {
   }
 
   private Object drainLobSynchronously(int index, Class<?> type, TdsType tdsType, ColumnMeta colMeta, ColumnData firstChunk) {
-    logger.trace("[StatefulRow] Initiating Synchronous LOB Drain for column {}", index);
+    logger.trace("[TdsRow] Initiating Synchronous LOB Drain for column {}", index);
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     boolean isNullData = false;
 

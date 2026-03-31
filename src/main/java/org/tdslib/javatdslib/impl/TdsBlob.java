@@ -83,7 +83,7 @@ public class TdsBlob implements Blob {
     return Mono.fromRunnable(this::syncDiscard).subscribeOn(Schedulers.boundedElastic()).then();
   }
 
-  // This is called either by Publisher.discard(), Cancel, OR forcefully by StatefulRow
+  // This is called either by Publisher.discard(), Cancel, OR forcefully by TdsRow
   public void syncDiscard() {
     if (isDiscardedOrCompleted) return;
 
