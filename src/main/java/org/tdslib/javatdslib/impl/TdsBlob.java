@@ -1,7 +1,8 @@
-package org.tdslib.javatdslib.reactive;
+package org.tdslib.javatdslib.impl;
 
 import io.r2dbc.spi.Blob;
 import org.reactivestreams.Publisher;
+import org.tdslib.javatdslib.reactive.TdsTokenQueue;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.TdsStreamEvent;
 import org.tdslib.javatdslib.tokens.ColumnData;

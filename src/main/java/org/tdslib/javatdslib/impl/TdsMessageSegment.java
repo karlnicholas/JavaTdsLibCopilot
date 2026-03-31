@@ -1,4 +1,4 @@
-package org.tdslib.javatdslib.reactive;
+package org.tdslib.javatdslib.impl;
 
 import io.r2dbc.spi.R2dbcException;
 import io.r2dbc.spi.Result;

@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.reactive;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.impl.StatefulRow;
 import org.tdslib.javatdslib.protocol.TdsType;
 import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.CompleteDataColumn;
