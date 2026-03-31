@@ -52,6 +52,8 @@ public class AsyncWorkerSink {
   private RowDrainer activeRowDrainer;
   private final List<ReturnValueToken> activeOutParams = new java.util.ArrayList<>();
 
+  private Throwable pendingError = null;
+
   private Consumer<Result.Segment> onNext;
   private Consumer<Throwable> onError;
   private Runnable onComplete;
@@ -170,14 +172,17 @@ public class AsyncWorkerSink {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
 
-      if (!done.getStatus().hasMoreResults()) {
+      // --- NEW: Delayed Error Emission ---
+      if (this.pendingError != null) {
+        pushError(this.pendingError);
+        this.pendingError = null; // Clear it to be safe
+      } else if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
-
     } else if (token instanceof ErrorToken error) {
-      pushError(new TdsServerErrorException(
+      this.pendingError = new TdsServerErrorException(
           error.getMessage(), error.getNumber(), error.getState(),
-          error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber()));
+          error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber());
     } else if (token instanceof InfoToken info) {
       emitSegment(new TdsMessageSegment((int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
 
