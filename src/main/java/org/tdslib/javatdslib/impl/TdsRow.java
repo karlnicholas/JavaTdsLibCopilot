@@ -25,7 +25,6 @@ import org.tdslib.javatdslib.tokens.models.ColumnMeta;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
