@@ -38,10 +38,14 @@ import java.util.concurrent.locks.LockSupport;
  */
 public class TdsRow implements Row, Result.RowSegment {
   private static final Logger logger = LoggerFactory.getLogger(TdsRow.class);
+
+  // NEW: State marker for permanent network drops
+  private static final Object DISCARDED = new Object();
+
   private Runnable pauseSinkCallback;
   private Runnable resumeSinkCallback;
 
-  // NEW: Reference counter to safely manage concurrent LOB extraction
+  // Reference counter to safely manage concurrent LOB extraction
   private final AtomicInteger pendingLobCount = new AtomicInteger(0);
 
   public void setAsyncCallbacks(Runnable pauseCallback, Runnable resumeCallback) {
@@ -49,13 +53,10 @@ public class TdsRow implements Row, Result.RowSegment {
     this.resumeSinkCallback = resumeCallback;
   }
 
-  private final Object[] payload; // Shifted from byte[][] to Object[]
+  private final Object[] payload;
   private final ColMetaDataToken metaData;
   private final ConnectionContext context;
   private final TdsRowMetadata rowMetadata;
-
-  private int activeColumnIndex = 0; // State tracker for strict sequential access
-
   private final TdsTokenQueue tokenQueue;
 
   public TdsRow(Object[] payload, ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
@@ -86,42 +87,41 @@ public class TdsRow implements Row, Result.RowSegment {
   @Override
   @SuppressWarnings("unchecked")
   public <T> T get(int index, Class<T> type) {
-
-    if (index > activeColumnIndex) {
-      throw new IllegalStateException(
-          String.format("Forward-only violation. Expected col %d but requested %d.", activeColumnIndex, index));
-    } else if (index < activeColumnIndex) {
-      throw new IllegalStateException(
-          String.format("Forward-only violation. Column %d has already been consumed.", index));
-    }
-
     if (index < 0 || index >= payload.length) {
       throw new IllegalArgumentException("Invalid Column Index: " + index);
     }
 
     Object rawData = payload[index];
-    activeColumnIndex++;
+
+    // NEW: Block access if the network queue passed this column without reading it
+    if (rawData == DISCARDED) {
+      throw new IllegalStateException(String.format("Forward-only violation. Column %d has already been consumed or was skipped.", index));
+    }
 
     ColumnMeta colMeta = metaData.getColumns().get(index);
     TdsType tdsType = TdsType.valueOf(colMeta.getDataType());
 
-    // 1. Intercept Asynchronous Streams (LOBs) immediately before queue-advancement
+    // --- 1. Intercept Asynchronous Streams (LOBs) ---
     if (type == Clob.class || type == Blob.class) {
+      if (rawData == RowDrainer.UNFETCHED) {
+        rawData = advanceQueueToColumn(index);
+        discardUnfetchedColumnsBefore(index);
+      } else if (rawData instanceof byte[] bytes) {
+        // Edge case: User asked for a Clob on a tiny string already fully in memory
+        rawData = new CompleteDataColumn(index, bytes);
+      }
+
       ColumnData initialChunk = (rawData instanceof ColumnData cd) ? cd : null;
+      payload[index] = DISCARDED; // LOB Streams can only be consumed once!
+      discardUnfetchedColumnsBefore(index);
 
-      // Increment the reference counter since a new LOB publisher is being created
       pendingLobCount.incrementAndGet();
-
-      // Pause the sink unconditionally to protect the queue for the Publisher
       if (this.pauseSinkCallback != null) this.pauseSinkCallback.run();
 
-      // NEW: A mediator callback that only wakes the sink when ALL requested LOB streams are finished
       Runnable mediatedResumeCallback = () -> {
         if (pendingLobCount.decrementAndGet() == 0) {
           logger.trace("[TdsRow] All pending LOBs completed. Resuming network sink.");
           if (this.resumeSinkCallback != null) this.resumeSinkCallback.run();
-        } else {
-          logger.trace("[TdsRow] LOB completed, but others remain pending. Sink stays paused.");
         }
       };
 
@@ -133,41 +133,35 @@ public class TdsRow implements Row, Result.RowSegment {
       }
     }
 
-    // 2. On-Demand Fetching for subsequent unfetched standard columns
+    // --- 2. On-Demand Network Fetching for Standard Columns ---
     if (rawData == RowDrainer.UNFETCHED) {
       rawData = advanceQueueToColumn(index);
-      payload[index] = rawData; // Cache it
+      discardUnfetchedColumnsBefore(index);
+
+      // If it's a completely fetched standard column, unwrap it to byte[] so it can be cached and reused
+      if (rawData instanceof CompleteDataColumn c) {
+        if (!isPlp(tdsType, colMeta)) {
+          rawData = c.getData();
+          payload[index] = rawData; // Cache it in memory!
+        }
+      }
     }
+
+    // --- 3. Process the Extracted Data ---
 
     if (rawData == null) {
       return null;
     }
 
-    // 3. Intercept Saved Chunks (Synchronous LOB extraction via String/byte[])
     if (rawData instanceof ColumnData chunk) {
-      boolean isChunked = (chunk instanceof PartialDataColumn) ||
-          (tdsType != null && (tdsType.strategy == TdsType.LengthStrategy.PLP || tdsType.strategy == TdsType.LengthStrategy.LONGLEN));
-
-      if (isChunked) {
-        if (type == String.class || type == byte[].class || type == ByteBuffer.class || type == Object.class) {
-          return (T) drainLobSynchronously(index, type, tdsType, colMeta, chunk);
-        } else {
-          throw new IllegalArgumentException("Cannot map chunked LOB data to requested type: " + type.getName());
-        }
-      } else {
-        // It's a standard column that was fetched on-demand. Unpack it natively.
-        if (chunk instanceof CompleteDataColumn c) {
-          rawData = c.getData();
-          if (rawData == null) return null;
-        } else {
-          throw new IllegalStateException("Unexpected PartialDataColumn for standard type");
-        }
-      }
+      payload[index] = DISCARDED; // Consuming a LOB synchronously permanently consumes it
+      return (T) drainLobSynchronously(index, type, tdsType, colMeta, chunk);
     }
 
-    // 4. Process Standard Materialized Columns
     if (rawData instanceof byte[] bytes) {
       Charset charset = getCharset(colMeta, tdsType);
+      // NOTE: We do NOT discard it here! The byte array is safely in memory.
+      // The user can read this column natively as many times as they want.
       return DecoderRegistry.DEFAULT.decode(bytes, tdsType, type, colMeta.getScale(), charset);
     }
 
@@ -176,11 +170,10 @@ public class TdsRow implements Row, Result.RowSegment {
 
   /**
    * Fast-forwards the network queue to the requested column.
-   * Natively discards chunks for columns the user skipped, enforcing forward-only memory safety.
    */
   private ColumnData advanceQueueToColumn(int targetIndex) {
     while (true) {
-      TdsStreamEvent event = tokenQueue.peek(); // PEEK, do not poll yet!
+      TdsStreamEvent event = tokenQueue.peek();
       if (event == null) {
         LockSupport.parkNanos(100_000);
         continue;
@@ -202,12 +195,28 @@ public class TdsRow implements Row, Result.RowSegment {
     }
   }
 
+  /**
+   * Drops memory references to previous unread streaming columns to prevent leaks.
+   */
+  private void discardUnfetchedColumnsBefore(int index) {
+    for (int i = 0; i < index; i++) {
+      if (payload[i] == RowDrainer.UNFETCHED || payload[i] instanceof ColumnData) {
+        payload[i] = DISCARDED;
+      }
+    }
+  }
+
+  private boolean isPlp(TdsType tdsType, ColumnMeta colMeta) {
+    if (tdsType == null) return false;
+    return tdsType.strategy == TdsType.LengthStrategy.PLP ||
+        (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && colMeta.getMaxLength() == 65535);
+  }
+
   private Object drainLobSynchronously(int index, Class<?> type, TdsType tdsType, ColumnMeta colMeta, ColumnData firstChunk) {
     logger.trace("[TdsRow] Initiating Synchronous LOB Drain for column {}", index);
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     boolean isNullData = false;
 
-    // 1. Process the saved first chunk
     try {
       if (firstChunk instanceof PartialDataColumn p) {
         if (p.getChunk() != null) buffer.write(p.getChunk());
@@ -220,9 +229,8 @@ public class TdsRow implements Row, Result.RowSegment {
       throw new RuntimeException(e);
     }
 
-    // 2. Safely peek and drain remaining chunks
     while (true) {
-      TdsStreamEvent event = tokenQueue.peek(); // PEEK to detect boundaries
+      TdsStreamEvent event = tokenQueue.peek();
       if (event == null) {
         LockSupport.parkNanos(100_000);
         continue;
@@ -230,7 +238,6 @@ public class TdsRow implements Row, Result.RowSegment {
 
       if (event instanceof ColumnEvent ce) {
         if (ce.data().getColumnIndex() == index) {
-          // It's another chunk for our LOB. Consume it!
           tokenQueue.poll();
           try {
             if (ce.data() instanceof PartialDataColumn p && p.getChunk() != null) {
@@ -242,12 +249,10 @@ public class TdsRow implements Row, Result.RowSegment {
             throw new RuntimeException(e);
           }
         } else {
-          // Boundary Reached! Next column found.
-          break;
+          break; // Next column boundary Reached!
         }
       } else if (event instanceof org.tdslib.javatdslib.reactive.events.TokenEvent) {
-        // Boundary Reached! End of row.
-        break;
+        break; // End of row boundary Reached!
       } else if (event instanceof ErrorEvent ee) {
         tokenQueue.poll();
         throw new RuntimeException("Server Error during LOB streaming", ee.error());
@@ -300,10 +305,7 @@ public class TdsRow implements Row, Result.RowSegment {
     return "Result.RowSegment";
   }
 
-  /**
-   * Internal hook for Integration Testing
-   */
-  public Object[] getRowData() { // Shifted return type to Object[]
+  public Object[] getRowData() {
     return payload;
   }
 }
