@@ -9,6 +9,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.tdslib.javatdslib.tokens.TokenType.ORDER;
+
 /**
  * Parser for ORDER token (0xA9).
  *
@@ -16,13 +18,11 @@ import java.util.List;
  */
 public class OrderTokenParser implements TokenParser {
 
-  private static final byte ORDER_TOKEN_VALUE = (byte) 0xA9;
-
   @Override
   public Token parse(final ByteBuffer payload,
                      final byte tokenType,
                      final ConnectionContext context) {
-    if (tokenType != ORDER_TOKEN_VALUE) {
+    if (tokenType != ORDER.getValue()) {
       final String hex = Integer.toHexString(tokenType & 0xFF);
       throw new IllegalArgumentException(
           "Expected ORDER token (0xA9), got 0x" + hex);

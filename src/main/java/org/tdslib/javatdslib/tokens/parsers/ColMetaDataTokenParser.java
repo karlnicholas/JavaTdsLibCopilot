@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.tdslib.javatdslib.tokens.TokenType.COL_METADATA;
+
 /**
  * Parser for the COLMETADATA token (0x81). This token describes the result set metadata, including
  * column names, types, and lengths.
@@ -24,7 +26,7 @@ public class ColMetaDataTokenParser implements TokenParser {
   @Override
   public Token parse(
       final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
-    if (tokenType != (byte) 0x81) {
+    if (tokenType != COL_METADATA.getValue()) {
       throw new IllegalArgumentException(
           "Expected COL_METADATA token (0x81), but got 0x"
               + Integer.toHexString(tokenType & 0xFF));
