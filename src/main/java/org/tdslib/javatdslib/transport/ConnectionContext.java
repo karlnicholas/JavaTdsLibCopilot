@@ -136,19 +136,32 @@ public interface ConnectionContext {
 
   // === Transaction State (from BEGIN/COMMIT/ROLLBACK ENVCHANGE) ===
 
+// === Transaction State (from BEGIN/COMMIT/ROLLBACK ENVCHANGE) ===
+
   /**
-   * Indicates whether the session is currently inside a transaction.
+   * Returns the 8-byte Transaction Descriptor assigned by the server.
+   *
+   * @return the transaction descriptor bytes, or null if not in a transaction
+   */
+  byte[] getTransactionDescriptor();
+
+  /**
+   * Sets the 8-byte Transaction Descriptor for the session.
+   *
+   * @param descriptor the transaction descriptor bytes
+   */
+  void setTransactionDescriptor(byte[] descriptor);
+
+  /**
+   * Indicates whether the session is currently inside a transaction by checking
+   * if a transaction descriptor is present.
    *
    * @return true if in transaction
    */
-  boolean isInTransaction();
-
-  /**
-   * Sets the transaction state for the session.
-   *
-   * @param inTransaction true when inside a transaction
-   */
-  void setInTransaction(boolean inTransaction);
+  default boolean isInTransaction() {
+    byte[] desc = getTransactionDescriptor();
+    return desc != null && desc.length > 0;
+  }
 
   // === Server Info (from LOGINACK) ===
 

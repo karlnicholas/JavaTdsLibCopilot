@@ -109,11 +109,23 @@ public class EnvChangeApplier {
         break;
 
       case BEGIN_TRANSACTION:
-        context.setInTransaction(true);
+        // ENVCHANGE Type 8: New Value Length (1) + New Value + Old Value Length (1) + Old Value
+        int beginNewLen = buf.get() & 0xFF;
+        if (beginNewLen > 0) {
+          byte[] newDescriptor = new byte[beginNewLen];
+          buf.get(newDescriptor);
+          context.setTransactionDescriptor(newDescriptor);
+          logger.debug("Transaction started. Descriptor length: {}", beginNewLen);
+        }
+        // We can safely ignore reading the old value length/bytes here
         break;
+
       case COMMIT_TRANSACTION:
       case ROLLBACK_TRANSACTION:
-        context.setInTransaction(false);
+        // ENVCHANGE Types 9 & 10: Server signals the transaction has ended
+        // The payload contains the old descriptor, but we just need to clear our local state.
+        context.setTransactionDescriptor(null);
+        logger.debug("Transaction ended ({}). Cleared transaction descriptor.", type);
         break;
 
       default:

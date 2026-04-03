@@ -144,12 +144,10 @@ public class TdsStatement implements Statement {
 
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
-    byte[] headers = AllHeaders.forAutoCommit(1).toBytes();
-    ByteBuffer payload = ByteBuffer.allocate(headers.length + sqlBytes.length);
-    payload.put(headers);
-    payload.put(sqlBytes);
-    payload.flip();
-    return TdsMessage.createRequest(PacketType.SQL_BATCH.getValue(), payload);
+    ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
+    AllHeaders headers = AllHeaders.forAutoCommit(1);
+
+    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH.getValue(), headers, payload);
   }
 
   private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions) {

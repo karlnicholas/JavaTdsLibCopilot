@@ -10,11 +10,17 @@ import io.r2dbc.spi.ValidationDepth;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.packets.PacketType;
+import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 /**
@@ -31,6 +37,7 @@ public class TdsConnection implements Connection {
    * Create a new TdsConnection backed by a TCP transport to the given host/port.
    *
    * @param transport TdsTransport
+   * @param context The connection state context
    */
   public TdsConnection(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
@@ -39,17 +46,106 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> beginTransaction() {
-    return null;
+    return Mono.defer(() -> {
+      // Allocate 4 bytes instead of 5
+      ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+      payload.putShort((short) 5); // TM_BEGIN_XACT
+      payload.put((byte) 0x00);    // Isolation Level: 0x00 (Use session default)
+
+      // REMOVED the imaginary "Begin Options" byte here
+
+      payload.put((byte) 0x00);    // Transaction Name Length: 0 (Unnamed)
+      payload.flip();
+
+      AllHeaders headers = AllHeaders.forAutoCommit(1);
+      TdsMessage message = TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER.getValue(), headers, payload);
+
+      return Mono.from(transport.execute(message)).then();
+    });
   }
 
   @Override
   public Publisher<Void> beginTransaction(TransactionDefinition definition) {
-    return null;
+    return Mono.defer(() -> {
+      IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
+      String txName = definition.getAttribute(TransactionDefinition.NAME);
+
+      byte tdsIsolationLevel = mapIsolationLevel(level);
+
+      byte[] nameBytes = (txName != null && !txName.isEmpty())
+          ? txName.getBytes(StandardCharsets.UTF_16LE)
+          : new byte[0];
+
+      int nameLenChars = nameBytes.length / 2;
+
+      ByteBuffer payload = ByteBuffer.allocate(5 + nameBytes.length).order(ByteOrder.LITTLE_ENDIAN);
+      payload.putShort((short) 5);            // TM_BEGIN_XACT
+      payload.put(tdsIsolationLevel);
+      payload.put((byte) 0x00);
+      payload.put((byte) nameLenChars);
+      if (nameLenChars > 0) {
+        payload.put(nameBytes);
+      }
+      payload.flip();
+
+      AllHeaders headers = AllHeaders.forAutoCommit(1);
+      TdsMessage message = TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER.getValue(), headers, payload);
+
+      return Mono.from(transport.execute(message)).then();
+    });
+  }
+
+  @Override
+  public Publisher<Void> commitTransaction() {
+    return Mono.defer(() -> {
+      if (!context.isInTransaction()) {
+        return Mono.empty();
+      }
+
+      ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+      payload.putShort((short) 7); // TM_COMMIT_XACT
+      payload.put((byte) 0x00);
+      payload.put((byte) 0x00);
+      payload.flip();
+
+      AllHeaders headers = AllHeaders.forAutoCommit(1);
+      TdsMessage message = TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER.getValue(), headers, payload);
+
+      return Mono.from(transport.execute(message)).then();
+    });
+  }
+
+  @Override
+  public Publisher<Void> rollbackTransaction() {
+    return Mono.defer(() -> {
+      if (!context.isInTransaction()) {
+        return Mono.empty();
+      }
+
+      ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+      payload.putShort((short) 8); // TM_ROLLBACK_XACT
+      payload.put((byte) 0x00);
+      payload.put((byte) 0x00);
+      payload.flip();
+
+      AllHeaders headers = AllHeaders.forAutoCommit(1);
+      TdsMessage message = TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER.getValue(), headers, payload);
+
+      return Mono.from(transport.execute(message)).then();
+    });
+  }
+
+  private byte mapIsolationLevel(IsolationLevel level) {
+    if (level == null) return 0x00;
+    if (level == IsolationLevel.READ_UNCOMMITTED) return 0x01;
+    if (level == IsolationLevel.READ_COMMITTED) return 0x02;
+    if (level == IsolationLevel.REPEATABLE_READ) return 0x03;
+    if (level == IsolationLevel.SERIALIZABLE) return 0x04;
+    return 0x00; // Default fallback
   }
 
   @Override
   public Publisher<Void> close() {
-    // Replaces ~20 lines of manual Subscription/IOException handling
     return Mono.fromRunnable(() -> {
       try {
         transport.close();
@@ -60,35 +156,25 @@ public class TdsConnection implements Connection {
   }
 
   @Override
-  public Publisher<Void> commitTransaction() {
-    return null;
-  }
-
-  @Override
   public Batch createBatch() {
     return new TdsBatch(this.transport, this.context);
   }
 
   @Override
-  public Publisher<Void> createSavepoint(String name) {
-    return null;
-  }
-
-  /**
-   * Execute a SQL query and return the high-level QueryResponse.
-   *
-   * @param sql SQL text to execute
-   * @return QueryResponse containing results or errors
-   * @throws IOException on I/O or transport errors
-   */
-  @Override
   public Statement createStatement(String sql) {
     return new TdsStatement(this.transport, context, sql);
   }
 
+  // --- Unimplemented / Stub Methods below ---
+
+  @Override
+  public Publisher<Void> createSavepoint(String name) {
+    return Mono.error(new UnsupportedOperationException("Savepoints are not yet supported"));
+  }
+
   @Override
   public boolean isAutoCommit() {
-    return false;
+    return !context.isInTransaction();
   }
 
   @Override
@@ -98,46 +184,42 @@ public class TdsConnection implements Connection {
 
   @Override
   public IsolationLevel getTransactionIsolationLevel() {
-    return null;
+    return null; // Can be derived if you store it in ConnectionContext
   }
 
   @Override
   public Publisher<Void> releaseSavepoint(String name) {
-    return null;
-  }
-
-  @Override
-  public Publisher<Void> rollbackTransaction() {
-    return null;
+    return Mono.error(new UnsupportedOperationException("Savepoints are not yet supported"));
   }
 
   @Override
   public Publisher<Void> rollbackTransactionToSavepoint(String name) {
-    return null;
+    return Mono.error(new UnsupportedOperationException("Savepoints are not yet supported"));
   }
 
   @Override
   public Publisher<Void> setAutoCommit(boolean autoCommit) {
-    return null;
+    return Mono.error(new UnsupportedOperationException("setAutoCommit is not supported directly via R2DBC SPI"));
   }
 
   @Override
   public Publisher<Void> setLockWaitTimeout(Duration timeout) {
-    return null;
+    return Mono.empty();
   }
 
   @Override
   public Publisher<Void> setStatementTimeout(Duration timeout) {
-    return null;
+    return Mono.empty();
   }
 
   @Override
   public Publisher<Void> setTransactionIsolationLevel(IsolationLevel isolationLevel) {
-    return null;
+    // Optional: You can implement this by sending a 0x0E with Type 5 (Change Isolation Level)
+    return Mono.empty();
   }
 
   @Override
   public Publisher<Boolean> validate(ValidationDepth depth) {
-    return null;
+    return Mono.just(true); // Simplified stub
   }
 }

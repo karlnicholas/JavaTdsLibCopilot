@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.packets;
 
+import org.tdslib.javatdslib.headers.AllHeaders;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Instant;
@@ -82,6 +84,27 @@ public final class TdsMessage {
         0L,                           // No receive time for outgoing
         null                          // No trace for outgoing (can be set later)
     );
+  }
+
+  /**
+   * Helper factory to create a request message that includes an ALL_HEADERS block.
+   *
+   * @param packetType The TDS packet type (e.g., PacketType.TRANSACTION_MANAGER.getValue())
+   * @param headers    The AllHeaders block to prepend (can be null if none needed)
+   * @param payload    The actual request payload
+   * @return A constructed TdsMessage
+   */
+  public static TdsMessage createWithHeaders(byte packetType, AllHeaders headers, ByteBuffer payload) {
+    byte[] headerBytes = headers != null ? headers.toBytes() : new byte[0];
+
+    ByteBuffer fullPayload = ByteBuffer.allocate(headerBytes.length + payload.remaining());
+    if (headerBytes.length > 0) {
+      fullPayload.put(headerBytes);
+    }
+    fullPayload.put(payload);
+    fullPayload.flip();
+
+    return createRequest(packetType, fullPayload);
   }
 
   /**

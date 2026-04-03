@@ -24,7 +24,7 @@ public class DefaultConnectionContext implements ConnectionContext {
   private String currentCharset;
   private int packetSize = 4096;
   private byte[] currentCollationBytes = new byte[0];
-  private boolean inTransaction;
+  private byte[] transactionDescriptor = null;
   private String serverName;
   private String serverVersionString;
   private int spid;
@@ -38,7 +38,7 @@ public class DefaultConnectionContext implements ConnectionContext {
     this.currentCharset = null;
     this.packetSize = 4096;
     this.currentCollationBytes = new byte[0];
-    this.inTransaction = false;
+    this.transactionDescriptor = null;
     this.spid = 0;
   }
 
@@ -113,13 +113,13 @@ public class DefaultConnectionContext implements ConnectionContext {
   }
 
   @Override
-  public boolean isInTransaction() {
-    return inTransaction;
+  public byte[] getTransactionDescriptor() {
+    return transactionDescriptor != null ? transactionDescriptor.clone() : null;
   }
 
   @Override
-  public void setInTransaction(boolean inTransaction) {
-    this.inTransaction = inTransaction;
+  public void setTransactionDescriptor(byte[] descriptor) {
+    this.transactionDescriptor = descriptor != null ? descriptor.clone() : null;
   }
 
   @Override
