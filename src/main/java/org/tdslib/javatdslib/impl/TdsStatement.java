@@ -20,6 +20,7 @@ import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -119,15 +120,14 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    final TdsMessage message;
-    if (isSimpleBatch) {
-      message = createSqlBatchMessage(query);
-    } else {
-      message = createRpcMessage(query, executions);
-    }
-
-    // TdsStatement delegates entirely to the transport execution engine
-    return transport.execute(message)
+    // Pass the recipe, determining which builder to call at subscription time
+    return transport.execute(() -> {
+          if (isSimpleBatch) {
+            return createSqlBatchMessage(query);
+          } else {
+            return createRpcMessage(query, executions);
+          }
+        })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -145,9 +145,12 @@ public class TdsStatement implements Statement {
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-    AllHeaders headers = AllHeaders.forAutoCommit(1);
 
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH.getValue(), headers, payload);
+    AllHeaders headers = context.isInTransaction()
+        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
+        : AllHeaders.forAutoCommit(1);
+
+    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
   }
 
   private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions) {
@@ -158,7 +161,12 @@ public class TdsStatement implements Statement {
     RpcPacketBuilder builder =
         new RpcPacketBuilder(sql, executions, true, registry, encodingContext);
     ByteBuffer payload = builder.buildRpcPacket();
-    return TdsMessage.createRequest(PacketType.RPC_REQUEST.getValue(), payload);
+
+    AllHeaders headers = context.isInTransaction()
+        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
+        : AllHeaders.forAutoCommit(1);
+
+    return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, payload);
   }
 
   @Override

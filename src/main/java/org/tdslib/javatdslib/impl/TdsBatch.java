@@ -55,10 +55,9 @@ public class TdsBatch implements Batch {
     }
 
     String batchSql = String.join(";\n", statements);
-    TdsMessage message = createSqlBatchMessage(batchSql);
 
-    // TdsBatch delegates entirely to the transport execution engine
-    return transport.execute(message)
+    // Pass the recipe, not the result
+    return transport.execute(() -> createSqlBatchMessage(batchSql))
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -73,11 +72,15 @@ public class TdsBatch implements Batch {
         || segment instanceof Result.OutSegment;
   }
 
+  // Update this to fetch from context dynamically
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-    AllHeaders headers = AllHeaders.forAutoCommit(1);
 
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH.getValue(), headers, payload);
+    AllHeaders headers = context.isInTransaction()
+        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
+        : AllHeaders.forAutoCommit(1);
+
+    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
   }
 }

@@ -9,16 +9,20 @@ import java.nio.ByteOrder;
  */
 public class TransactionDescriptorHeader extends TdsHeader {
 
-  private final long transactionDescriptor;      // ULONGLONG (8 bytes)
-  private final int outstandingRequestCount;     // DWORD (4 bytes)
+  private final byte[] transactionDescriptor;      // ULONGLONG (8 bytes)
+  private final int outstandingRequestCount;       // DWORD (4 bytes)
 
   /**
-   * Constructor for auto-commit mode (typical for simple queries).
-   * - transactionDescriptor = 0 or 1 (server ignores in auto-commit)
-   * - outstandingRequestCount = 0 or 1
+   * Constructor supporting explicit transaction descriptors.
+   *
+   * @param transactionDescriptor   Exact 8-byte array from the server ENVCHANGE token (or 8 zeros for auto-commit)
+   * @param outstandingRequestCount Usually 1 for simple requests
    */
-  public TransactionDescriptorHeader(long transactionDescriptor, int outstandingRequestCount) {
+  public TransactionDescriptorHeader(byte[] transactionDescriptor, int outstandingRequestCount) {
     super((short) 0x0002);
+    if (transactionDescriptor == null || transactionDescriptor.length != 8) {
+      throw new IllegalArgumentException("Transaction descriptor must be exactly 8 bytes");
+    }
     this.transactionDescriptor = transactionDescriptor;
     this.outstandingRequestCount = outstandingRequestCount;
   }
@@ -33,8 +37,7 @@ public class TransactionDescriptorHeader extends TdsHeader {
     buffer.order(ByteOrder.LITTLE_ENDIAN);
     buffer.putInt(getLength());                    // HeaderLength
     buffer.putShort(type);                         // HeaderType
-    buffer.putLong(transactionDescriptor);         // ULONGLONG
+    buffer.put(transactionDescriptor);             // ULONGLONG (Byte array from server)
     buffer.putInt(outstandingRequestCount);        // DWORD
   }
 }
-

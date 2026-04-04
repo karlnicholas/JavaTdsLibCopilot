@@ -13,7 +13,7 @@ import java.util.Objects;
  */
 public final class TdsMessage {
 
-  private final byte packetType;
+  private final PacketType packetType;
   private final byte statusFlags;
   private final int packetLength;
   private final short spid;
@@ -38,7 +38,7 @@ public final class TdsMessage {
    * @param traceContext Optional trace context string
    */
   public TdsMessage(
-      byte packetType,
+      PacketType packetType,
       byte statusFlags,
       int packetLength,
       short spid,
@@ -73,7 +73,7 @@ public final class TdsMessage {
    * @param payload    The payload buffer (positioned at 0)
    * @return New TdsMessage instance ready to send
    */
-  public static TdsMessage createRequest(byte packetType, ByteBuffer payload) {
+  public static TdsMessage createRequest(PacketType packetType, ByteBuffer payload) {
     return new TdsMessage(
         packetType,
         (byte) 0x01,                  // EOM = true (single packet request)
@@ -94,7 +94,7 @@ public final class TdsMessage {
    * @param payload    The actual request payload
    * @return A constructed TdsMessage
    */
-  public static TdsMessage createWithHeaders(byte packetType, AllHeaders headers, ByteBuffer payload) {
+  public static TdsMessage createWithHeaders(PacketType packetType, AllHeaders headers, ByteBuffer payload) {
     byte[] headerBytes = headers != null ? headers.toBytes() : new byte[0];
 
     ByteBuffer fullPayload = ByteBuffer.allocate(headerBytes.length + payload.remaining());
@@ -113,7 +113,7 @@ public final class TdsMessage {
    * Usually used via TdsPacketWriter, not directly.
    */
   public static TdsMessage createMultiPacketPart(
-      byte packetType,
+      PacketType packetType,
       byte statusFlags,
       short packetNumber,
       ByteBuffer payload) {
@@ -132,7 +132,7 @@ public final class TdsMessage {
 
   // ── Getters ─────────────────────────────────────────────────────────────
 
-  public byte getPacketType() {
+  public PacketType getPacketType() {
     return packetType;
   }
 
@@ -199,33 +199,14 @@ public final class TdsMessage {
 
   // ── Utility ─────────────────────────────────────────────────────────────
 
-  /**
-   * Return a human-friendly packet type name for logging and diagnostics.
-   *
-   * @return descriptive packet type name
-   */
-  public String getPacketTypeName() {
-    return switch (packetType) {
-      case 0x01 -> "SQL Batch";
-      case 0x03 -> "Login";
-      case 0x04 -> "Tabular Result";
-      case 0x06 -> "Attention";
-      case 0x07 -> "RPC";
-      case 0x0F -> "Bulk Load";
-      case 0x10 -> "Login7";
-      case 0x12 -> "PreLogin";
-      default -> String.format("Unknown (0x%02X)", packetType & 0xFF);
-    };
-  }
-
   @Override
   public String toString() {
     String fmt = "TdsMessage{type=%s (0x%02X), packet=%d, length=%d, spid=%d,"
         + " last=%b, reset=%b, payload=%d bytes}";
     return String.format(
         fmt,
-        getPacketTypeName(),
-        packetType & 0xFF,
+        packetType.getName(),
+        packetType.getValue() & 0xFF,
         packetNumber,
         packetLength,
         spid,

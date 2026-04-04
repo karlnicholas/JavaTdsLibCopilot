@@ -3,12 +3,14 @@ package org.tdslib.javatdslib.transport;
 import io.r2dbc.spi.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.reactive.AsyncWorkerSink;
 import org.tdslib.javatdslib.reactive.TdsTokenQueue;
 import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
@@ -16,8 +18,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Orchestrates the TDS protocol layer.
@@ -38,7 +43,10 @@ public class TdsTransport implements AutoCloseable {
 
   private TdsStreamHandler currentStreamHandler;
   private Consumer<Throwable> currentErrorHandler;
-  private final AtomicBoolean isExecuting = new AtomicBoolean(false);
+
+  // --- Reactive Connection Queue ---
+  private final Queue<PendingRequest> requestQueue = new ConcurrentLinkedQueue<>();
+  private final AtomicBoolean isNetworkBusy = new AtomicBoolean(false);
 
   /**
    * Primary constructor utilizing Dependency Injection.
@@ -85,65 +93,104 @@ public class TdsTransport implements AutoCloseable {
 
   /**
    * Executes a TDS Message and returns a reactive stream of segments.
-   * Enforces strictly sequential query execution on the connection.
+   * Enforces strictly sequential query execution on the connection using a non-blocking queue.
    */
-  public Flux<Result.Segment> execute(TdsMessage message) {
-    // Lock the connection. If another query is running, fail fast.
-    if (!isExecuting.compareAndSet(false, true)) {
-      return Flux.error(new IllegalStateException(
-          "Connection is busy. Concurrent queries are not supported on a single TDS connection."));
-    }
-
-    return Flux.<Result.Segment>create(fluxSink -> {
-      try {
-        // 1. Setup Pipeline
-        TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
-        AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
-
-        // 2. Wire Callbacks cleanly - RELEASE LOCK BEFORE EMITTING
-        workerSink.setCallbacks(
-            fluxSink::next,
-            error -> {
-              this.setStreamHandlers(null, null);
-              this.isExecuting.set(false); // Unlock BEFORE error propagates
-              fluxSink.error(error);
-            },
-            () -> {
-              this.setStreamHandlers(null, null);
-              this.isExecuting.set(false); // Unlock BEFORE completion propagates
-              fluxSink.complete();
-            }
-        );
-
-        // 3. Wire Demand
-        fluxSink.onRequest(workerSink::request);
-        fluxSink.onCancel(() -> {
-          workerSink.cancel();
-          this.setStreamHandlers(null, null);
-          this.isExecuting.set(false); // Unlock if client cancels the stream early
-        });
-
-        // 4. Setup Decoder & Transport Handlers
-        StatefulTokenDecoder decoder = new StatefulTokenDecoder(
-            TokenParserRegistry.DEFAULT, context, tokenQueue);
-
-        this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
-          this.setStreamHandlers(null, null);
-          this.isExecuting.set(false);
-          fluxSink.error(error);
-        });
-
-        // 5. Send Request
-        this.sendQueryMessageAsync(message);
-
-      } catch (Exception e) {
-        this.setStreamHandlers(null, null);
-        this.isExecuting.set(false);
-        fluxSink.error(e);
-      }
-    }); // REMOVE the entire .doFinally block!
+  public Flux<Result.Segment> execute(Supplier<TdsMessage> messageSupplier) {
+    return Flux.create(sink -> {
+      // Package the request and drop it in the inbox
+      requestQueue.offer(new PendingRequest(messageSupplier, sink));
+      // Tell the background loop to check the inbox
+      drain();
+    });
   }
 
+  /**
+   * The non-blocking drain loop.
+   * Ensures only one query physically writes to the socket at a time.
+   */
+  private void drain() {
+    // 1. Acquire Lock
+    if (!isNetworkBusy.compareAndSet(false, true)) {
+      return;
+    }
+
+    // 2. Pop the Queue
+    PendingRequest request = requestQueue.poll();
+    if (request == null) {
+      isNetworkBusy.set(false);
+      return;
+    }
+
+    // Guarantee exactly-once termination and handoff
+    AtomicBoolean isFinished = new AtomicBoolean(false);
+
+    try {
+      TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
+      AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
+
+      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
+
+      // Wire Callbacks - ONLY the first terminal signal triggers the handoff
+      workerSink.setCallbacks(
+          request.sink()::next,
+          error -> {
+            if (isFinished.compareAndSet(false, true)) {
+              logger.trace("[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
+              this.setStreamHandlers(null, null);
+              request.sink().error(error);
+              isNetworkBusy.set(false);
+              drain();
+            }
+          },
+          () -> {
+            if (isFinished.compareAndSet(false, true)) {
+              logger.trace("[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
+              this.setStreamHandlers(null, null);
+              request.sink().complete();
+              isNetworkBusy.set(false);
+              drain();
+            }
+          }
+      );
+
+      request.sink().onRequest(workerSink::request);
+      request.sink().onCancel(() -> {
+        workerSink.cancel();
+        if (isFinished.compareAndSet(false, true)) {
+          logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
+          this.setStreamHandlers(null, null);
+          isNetworkBusy.set(false);
+          drain();
+        }
+      });
+
+      StatefulTokenDecoder decoder = new StatefulTokenDecoder(
+          TokenParserRegistry.DEFAULT, context, tokenQueue);
+
+      logger.trace("[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
+      this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
+        if (isFinished.compareAndSet(false, true)) {
+          logger.trace("[RACE-TRACE] 🔴 Network onError triggered. Releasing lock and draining!");
+          this.setStreamHandlers(null, null);
+          request.sink().error(error);
+          isNetworkBusy.set(false);
+          drain();
+        }
+      });
+
+      TdsMessage message = request.messageSupplier().get();
+      this.sendQueryMessageAsync(message);
+
+    } catch (Exception e) {
+      if (isFinished.compareAndSet(false, true)) {
+        logger.error("[RACE-TRACE] 💥 Exception during setup/supplier eval. Releasing lock and draining!", e);
+        this.setStreamHandlers(null, null);
+        request.sink().error(e);
+        isNetworkBusy.set(false);
+        drain();
+      }
+    }
+  }
   // --- Handshake & TLS Methods ---
 
   /**
@@ -241,7 +288,7 @@ public class TdsTransport implements AutoCloseable {
 
   private TdsMessage buildMessageFromPacket(ByteBuffer packet) {
     packet.position(0);
-    byte type = packet.get();
+    PacketType type = PacketType.valueOf(packet.get());
     byte status = packet.get();
     int length = Short.toUnsignedInt(packet.getShort());
     short spid = packet.getShort();
@@ -309,17 +356,6 @@ public class TdsTransport implements AutoCloseable {
     networkConnection.resumeRead();
   }
 
-  /** * Dynamically hot-swaps the active receiver of network bytes.
-   * Used to route traffic directly to LOB streams bypassing the token parser.
-   */
-  public void switchStreamHandler(org.tdslib.javatdslib.transport.TdsStreamHandler newHandler) {
-    if (newHandler != null) {
-      org.slf4j.LoggerFactory.getLogger(TdsTransport.class)
-          .trace("[TdsTransport] Dynamically switching active stream handler to: {}", newHandler.getClass().getSimpleName());
-      this.currentStreamHandler = newHandler;
-    }
-  }
-
   /**
    * Sends a query message asynchronously.
    *
@@ -344,4 +380,11 @@ public class TdsTransport implements AutoCloseable {
       networkConnection.close();
     }
   }
+  /**
+   * Holds the late-binding message recipe and the reactive sink for a queued request.
+   */
+  private record PendingRequest(
+      Supplier<TdsMessage> messageSupplier,
+      FluxSink<Result.Segment> sink
+  ) {}
 }

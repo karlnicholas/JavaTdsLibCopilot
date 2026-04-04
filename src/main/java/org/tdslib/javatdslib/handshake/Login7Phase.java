@@ -47,7 +47,7 @@ public class Login7Phase {
     login7Payload.username = username;
     login7Payload.password = password;
 
-    TdsMessage login7Msg = TdsMessage.createRequest(PacketType.LOGIN7.getValue(),
+    TdsMessage login7Msg = TdsMessage.createRequest(PacketType.LOGIN7,
         login7Payload.buildBuffer());
 
     if (transport.isTlsActive()) {

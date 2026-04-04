@@ -20,7 +20,7 @@ public class QueryPacketBuilder implements PacketEncoder {
   @Override
   public List<ByteBuffer> encodeMessage(TdsMessage message, int spid, int maxPacketSize) {
     return buildPackets(
-        message.getPacketType(),
+        message.getPacketType().getValue(),
         message.getStatusFlags(),
         spid,
         message.getPayload(),

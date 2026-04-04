@@ -7,6 +7,7 @@ import org.tdslib.javatdslib.impl.TdsMessageSegment;
 import org.tdslib.javatdslib.impl.TdsOutSegment;
 import org.tdslib.javatdslib.impl.TdsRow;
 import org.tdslib.javatdslib.impl.TdsUpdateCount;
+import org.tdslib.javatdslib.protocol.EnvChangeApplier;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.reactive.events.ColumnEvent;
 import org.tdslib.javatdslib.reactive.events.ErrorEvent;
@@ -16,6 +17,7 @@ import org.tdslib.javatdslib.tokens.ColumnData;
 import org.tdslib.javatdslib.tokens.Token;
 import org.tdslib.javatdslib.tokens.models.ColMetaDataToken;
 import org.tdslib.javatdslib.tokens.models.DoneToken;
+import org.tdslib.javatdslib.tokens.models.EnvChangeToken;
 import org.tdslib.javatdslib.tokens.models.ErrorToken;
 import org.tdslib.javatdslib.tokens.models.InfoToken;
 import org.tdslib.javatdslib.tokens.models.OrderToken;
@@ -192,6 +194,8 @@ public class AsyncWorkerSink {
 
     } else if (token instanceof ReturnStatusToken || token instanceof OrderToken) {
       // Ignored
+    } else if (token instanceof EnvChangeToken envChangeToken) {
+      EnvChangeApplier.apply(envChangeToken, context);
     }
   }
 

@@ -45,10 +45,22 @@ public class AllHeaders {
 
   /**
    * Convenience factory for the most common case: auto-commit simple query.
+   * Passes an array of 8 zeros since no transaction is active.
    */
   public static AllHeaders forAutoCommit(int outstandingRequestCount) {
     return new AllHeaders(
-        new TransactionDescriptorHeader(0L, outstandingRequestCount)  // or 1L, 1 – both work
+        new TransactionDescriptorHeader(new byte[8], outstandingRequestCount)
+    );
+  }
+
+  /**
+   * Convenience factory for an explicit, active transaction.
+   * * @param transactionDescriptor The 8-byte descriptor from ConnectionContext
+   * @param outstandingRequestCount Usually 1
+   */
+  public static AllHeaders forActiveTransaction(byte[] transactionDescriptor, int outstandingRequestCount) {
+    return new AllHeaders(
+        new TransactionDescriptorHeader(transactionDescriptor, outstandingRequestCount)
     );
   }
 }

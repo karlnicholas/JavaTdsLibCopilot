@@ -33,7 +33,7 @@ public class PreLoginPhase {
     PreLoginPayload preLoginPayload = new PreLoginPayload(false);
 
     TdsMessage preLoginMsg = TdsMessage.createRequest(
-        PacketType.PRE_LOGIN.getValue(),
+        PacketType.PRE_LOGIN,
         preLoginPayload.buildBuffer()
     );
     transport.sendMessageDirect(preLoginMsg);
