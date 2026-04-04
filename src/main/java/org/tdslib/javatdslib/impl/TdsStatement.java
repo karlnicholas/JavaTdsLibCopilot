@@ -159,7 +159,7 @@ public class TdsStatement implements Statement {
         new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
 
     RpcPacketBuilder builder =
-        new RpcPacketBuilder(sql, executions, true, registry, encodingContext);
+        new RpcPacketBuilder(sql, executions, registry, encodingContext);
     ByteBuffer payload = builder.buildRpcPacket();
 
     AllHeaders headers = context.isInTransaction()

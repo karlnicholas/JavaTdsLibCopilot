@@ -27,7 +27,6 @@ public class RpcPacketBuilder {
 
   private final String sql;
   private final List<List<TdsParameter>> batchParams; // CHANGED from ParamEntry
-  private final boolean update;
   private final EncoderRegistry encoderRegistry;
   private final RpcEncodingContext encodingContext;
 
@@ -36,19 +35,16 @@ public class RpcPacketBuilder {
    *
    * @param sql the SQL statement
    * @param batchParams the list of parameter sets for batch execution
-   * @param update whether this is an update operation
    * @param encoderRegistry the registry for parameter codecs
    * @param encodingContext the encoding context
    */
   public RpcPacketBuilder(
       String sql,
       List<List<TdsParameter>> batchParams,
-      boolean update,
       EncoderRegistry encoderRegistry,
       RpcEncodingContext encodingContext) {
     this.sql = sql;
     this.batchParams = batchParams;
-    this.update = update;
     this.encoderRegistry = encoderRegistry;
     this.encodingContext = encodingContext;
   }
@@ -98,15 +94,6 @@ public class RpcPacketBuilder {
     }
 
     buf.flip();
-    if (update) {
-      byte[] allHeadersBytes = AllHeaders.forAutoCommit(1).toBytes();
-      ByteBuffer fullPayload =
-          ByteBuffer.allocate(allHeadersBytes.length + buf.limit()).order(ByteOrder.LITTLE_ENDIAN);
-      fullPayload.put(allHeadersBytes);
-      fullPayload.put(buf);
-      fullPayload.flip();
-      return fullPayload;
-    }
     return buf;
   }
 
