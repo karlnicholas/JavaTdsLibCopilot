@@ -18,7 +18,9 @@ import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.time.Duration;
 
+import static io.r2dbc.spi.ConnectionFactoryOptions.CONNECT_TIMEOUT;
 import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
@@ -56,6 +58,10 @@ public class TdsConnectionFactory implements ConnectionFactory {
       String password = (String) options.getValue(PASSWORD);
       String database = (String) options.getValue(DATABASE);
 
+      // --- NEW: Extract the CONNECT_TIMEOUT option (Default to 15 seconds) ---
+      Duration timeoutOption = (Duration) options.getValue(CONNECT_TIMEOUT);
+      int connectTimeoutMs = timeoutOption != null ? (int) timeoutOption.toMillis() : 15_000;
+
       SslConfiguration sslConfig = new SslConfiguration(
           Boolean.parseBoolean(String.valueOf(options.getValue(TRUST_SERVER_CERTIFICATE))),
           (String) options.getValue(TRUST_STORE),
@@ -64,7 +70,9 @@ public class TdsConnectionFactory implements ConnectionFactory {
       try {
         SSLContext sslContext = SslContextBuilder.build(sslConfig);
         ConnectionContext context = new DefaultConnectionContext();
-        TdsTransport transport = new TdsTransport(hostname, port, context);
+
+        // --- NEW: Pass the timeout parameter to the transport ---
+        TdsTransport transport = new TdsTransport(hostname, port, connectTimeoutMs, context);
 
         HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
         orchestrator.performHandshake(transport, context, sslContext, hostname, username, password, database);

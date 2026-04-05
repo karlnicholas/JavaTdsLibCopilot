@@ -79,16 +79,17 @@ public class TdsTransport implements AutoCloseable {
    *
    * @param host The hostname of the server.
    * @param port The port number of the server.
+   * @param connectTimeoutMs The connection and read timeout in milliseconds.
    * @param context The connection context.
    * @throws IOException If an I/O error occurs.
    */
-  public TdsTransport(String host, int port, ConnectionContext context) throws IOException {
+  public TdsTransport(String host, int port, int connectTimeoutMs, ConnectionContext context) throws IOException {
     this(
         host,
         port,
         context,
-        new NioSocketConnection(host, port, 60_000),
-        new QueryPacketBuilder()); // FIX: Removed the hardcoded null
+        new NioSocketConnection(host, port, connectTimeoutMs), // Pass it dynamically here
+        new QueryPacketBuilder());
   }
 
   /**
@@ -138,6 +139,7 @@ public class TdsTransport implements AutoCloseable {
             if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
+              this.resumeNetworkRead();
               request.sink().error(error);
               isNetworkBusy.set(false);
               drain();
@@ -147,6 +149,7 @@ public class TdsTransport implements AutoCloseable {
             if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
+              this.resumeNetworkRead();
               request.sink().complete();
               isNetworkBusy.set(false);
               drain();
@@ -160,6 +163,7 @@ public class TdsTransport implements AutoCloseable {
         if (isFinished.compareAndSet(false, true)) {
           logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
           this.setStreamHandlers(null);
+          this.resumeNetworkRead();
           isNetworkBusy.set(false);
           drain();
         }

@@ -49,11 +49,11 @@ public class NioSocketConnection implements NetworkConnection {
     this.socketChannel.configureBlocking(true);
     this.socketChannel.socket().setSoTimeout(readTimeoutMs);
 
-    logger.debug("Initiating physical TCP connection to {}:{}", host, port);
+    logger.debug("Initiating physical TCP connection to {}:{} with timeout {}ms", host, port, readTimeoutMs);
     InetSocketAddress address = new InetSocketAddress(host, port);
-    if (!socketChannel.connect(address)) {
-      socketChannel.finishConnect();
-    }
+
+    // FIX: Enforce a strict connection timeout instead of infinite block
+    this.socketChannel.socket().connect(address, readTimeoutMs);
   }
 
   @Override
@@ -85,6 +85,11 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void writeAsync(ByteBuffer buffer) {
+    // Explode loudly if writing to a dead socket
+    if (!socketChannel.isOpen()) {
+      throw new IllegalStateException("Cannot write: Socket is closed");
+    }
+
     ByteBuffer copy = buffer.duplicate();
     boolean wasEmpty = writeQueue.isEmpty();
     writeQueue.offer(copy);
@@ -94,6 +99,9 @@ public class NioSocketConnection implements NetworkConnection {
       if (key != null && key.isValid()) {
         key.interestOpsOr(SelectionKey.OP_WRITE);
         selector.wakeup();
+      } else {
+        // Ensure failure cascades if the key was cancelled by a dropped connection
+        throw new IllegalStateException("Cannot write: SelectionKey is invalid (socket closed)");
       }
     }
   }

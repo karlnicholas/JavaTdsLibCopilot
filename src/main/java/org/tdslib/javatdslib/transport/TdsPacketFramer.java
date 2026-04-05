@@ -34,6 +34,18 @@ public class TdsPacketFramer {
       int headerStart = networkBuffer.position();
       int packetLength = Short.toUnsignedInt(networkBuffer.getShort(headerStart + 2));
 
+      // Prevent Infinite NIO Spin on corrupted headers
+      if (packetLength > networkBuffer.capacity()) {
+        throw new IllegalStateException("Protocol Desync: Packet length (" + packetLength +
+            " bytes) exceeds physical buffer capacity (" + networkBuffer.capacity() + " bytes).");
+      }
+
+      // 2. Check if the ENTIRE packet has arrived from the network
+      if (networkBuffer.remaining() < packetLength) {
+        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}", packetLength, networkBuffer.remaining());
+        return;
+      }
+
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
         logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}", packetLength, networkBuffer.remaining());
