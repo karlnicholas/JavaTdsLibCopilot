@@ -121,8 +121,8 @@ public class TdsTransport implements AutoCloseable {
       return;
     }
 
-    // Guarantee exactly-once termination and handoff
-    AtomicBoolean isFinished = new AtomicBoolean(false);
+//    // Guarantee exactly-once termination and handoff
+//    AtomicBoolean isFinished = new AtomicBoolean(false);
 
     try {
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
@@ -134,34 +134,34 @@ public class TdsTransport implements AutoCloseable {
       workerSink.setCallbacks(
           request.sink()::next,
           error -> {
-            if (isFinished.compareAndSet(false, true)) {
+//            if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
               this.setStreamHandlers(null, null);
               request.sink().error(error);
               isNetworkBusy.set(false);
               drain();
-            }
+//            }
           },
           () -> {
-            if (isFinished.compareAndSet(false, true)) {
+//            if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null, null);
               request.sink().complete();
               isNetworkBusy.set(false);
               drain();
-            }
+//            }
           }
       );
 
       request.sink().onRequest(workerSink::request);
       request.sink().onCancel(() -> {
         workerSink.cancel();
-        if (isFinished.compareAndSet(false, true)) {
+//        if (isFinished.compareAndSet(false, true)) {
           logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
           this.setStreamHandlers(null, null);
           isNetworkBusy.set(false);
           drain();
-        }
+//        }
       });
 
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
@@ -169,26 +169,26 @@ public class TdsTransport implements AutoCloseable {
 
       logger.trace("[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
       this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
-        if (isFinished.compareAndSet(false, true)) {
+//        if (isFinished.compareAndSet(false, true)) {
           logger.trace("[RACE-TRACE] 🔴 Network onError triggered. Releasing lock and draining!");
           this.setStreamHandlers(null, null);
           request.sink().error(error);
           isNetworkBusy.set(false);
           drain();
-        }
+//        }
       });
 
       TdsMessage message = request.messageSupplier().get();
       this.sendQueryMessageAsync(message);
 
     } catch (Exception e) {
-      if (isFinished.compareAndSet(false, true)) {
+//      if (isFinished.compareAndSet(false, true)) {
         logger.error("[RACE-TRACE] 💥 Exception during setup/supplier eval. Releasing lock and draining!", e);
         this.setStreamHandlers(null, null);
         request.sink().error(e);
         isNetworkBusy.set(false);
         drain();
-      }
+//      }
     }
   }
   // --- Handshake & TLS Methods ---
