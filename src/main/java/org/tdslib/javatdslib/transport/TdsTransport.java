@@ -42,7 +42,7 @@ public class TdsTransport implements AutoCloseable {
   private final PacketEncoder packetEncoder;
 
   private TdsStreamHandler currentStreamHandler;
-  private Consumer<Throwable> currentErrorHandler;
+  private volatile FluxSink<Result.Segment> activeSink;
 
   // --- Reactive Connection Queue ---
   private final Queue<PendingRequest> requestQueue = new ConcurrentLinkedQueue<>();
@@ -121,8 +121,9 @@ public class TdsTransport implements AutoCloseable {
       return;
     }
 
-//    // Guarantee exactly-once termination and handoff
-//    AtomicBoolean isFinished = new AtomicBoolean(false);
+    this.activeSink = request.sink();
+      // Guarantee exactly-once termination and handoff
+    AtomicBoolean isFinished = new AtomicBoolean(false);
 
     try {
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
@@ -134,61 +135,53 @@ public class TdsTransport implements AutoCloseable {
       workerSink.setCallbacks(
           request.sink()::next,
           error -> {
-//            if (isFinished.compareAndSet(false, true)) {
+            if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
-              this.setStreamHandlers(null, null);
+              this.setStreamHandlers(null);
               request.sink().error(error);
               isNetworkBusy.set(false);
               drain();
-//            }
+            }
           },
           () -> {
-//            if (isFinished.compareAndSet(false, true)) {
+            if (isFinished.compareAndSet(false, true)) {
               logger.trace("[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
-              this.setStreamHandlers(null, null);
+              this.setStreamHandlers(null);
               request.sink().complete();
               isNetworkBusy.set(false);
               drain();
-//            }
+            }
           }
       );
 
       request.sink().onRequest(workerSink::request);
       request.sink().onCancel(() -> {
         workerSink.cancel();
-//        if (isFinished.compareAndSet(false, true)) {
+        if (isFinished.compareAndSet(false, true)) {
           logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
-          this.setStreamHandlers(null, null);
+          this.setStreamHandlers(null);
           isNetworkBusy.set(false);
           drain();
-//        }
+        }
       });
 
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
           TokenParserRegistry.DEFAULT, context, tokenQueue);
 
       logger.trace("[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
-      this.setStreamHandlers(decoder::onPayloadAvailable, error -> {
-//        if (isFinished.compareAndSet(false, true)) {
-          logger.trace("[RACE-TRACE] 🔴 Network onError triggered. Releasing lock and draining!");
-          this.setStreamHandlers(null, null);
-          request.sink().error(error);
-          isNetworkBusy.set(false);
-          drain();
-//        }
-      });
+      this.setStreamHandlers(decoder::onPayloadAvailable);
 
       TdsMessage message = request.messageSupplier().get();
       this.sendQueryMessageAsync(message);
 
     } catch (Exception e) {
-//      if (isFinished.compareAndSet(false, true)) {
+      if (isFinished.compareAndSet(false, true)) {
         logger.error("[RACE-TRACE] 💥 Exception during setup/supplier eval. Releasing lock and draining!", e);
-        this.setStreamHandlers(null, null);
+        this.setStreamHandlers(null);
         request.sink().error(e);
         isNetworkBusy.set(false);
         drain();
-//      }
+      }
     }
   }
   // --- Handshake & TLS Methods ---
@@ -304,11 +297,9 @@ public class TdsTransport implements AutoCloseable {
    * Sets the handlers for asynchronous stream processing.
    *
    * @param streamHandler The handler for stream data.
-   * @param errorHandler The handler for errors.
    */
-  public void setStreamHandlers(TdsStreamHandler streamHandler, Consumer<Throwable> errorHandler) {
+  public void setStreamHandlers(TdsStreamHandler streamHandler) {
     this.currentStreamHandler = streamHandler;
-    this.currentErrorHandler = errorHandler;
   }
 
   /**
@@ -319,26 +310,24 @@ public class TdsTransport implements AutoCloseable {
   public void enterAsyncMode() throws IOException {
     networkConnection.enterAsyncMode(context.getCurrentPacketSize());
 
-    // FIX: Create a dynamic router lambda.
-    // This allows the TdsPacketFramer to always route bytes to the active query's decoder.
     TdsStreamHandler dynamicRouter =
         (payload, isEom) -> {
           if (currentStreamHandler != null) {
             currentStreamHandler.onPayloadAvailable(payload, isEom);
           } else {
-            logger.warn("Received TDS payload chunk but no active stream handler is registered.");
+            // NEW: Instantly trigger a fatal shutdown if bytes arrive without a handler
+            handleFatalConnectionError(new IllegalStateException(
+                "Protocol Desync: Received TDS payload chunk but no active stream handler is registered."));
           }
         };
 
-    // Instantiate the decoder with the dynamic router
     TdsPacketFramer decoder = new TdsPacketFramer(dynamicRouter);
 
     networkConnection.setHandlers(
         buffer -> decoder.decode(buffer),
         error -> {
-          if (currentErrorHandler != null) {
-            currentErrorHandler.accept(error);
-          }
+          // NEW: All unhandled network-level exceptions are fatal and must trigger a hard shutdown
+          handleFatalConnectionError(error);
         });
   }
 
@@ -380,6 +369,28 @@ public class TdsTransport implements AutoCloseable {
       networkConnection.close();
     }
   }
+
+  private void handleFatalConnectionError(Throwable error) {
+    logger.error("Fatal connection error. Aborting active query and draining queue.", error);
+
+    // 1. Close the physical connection so no more bytes arrive
+    try { close(); } catch (Exception ignored) {}
+
+    // 2. Send the error directly to the active sink, bypassing standard handlers
+    if (this.activeSink != null) {
+      this.activeSink.error(error);
+      this.activeSink = null;
+    }
+
+    // 3. Flush the queue and fail any pending queries
+    PendingRequest pending;
+    while ((pending = requestQueue.poll()) != null) {
+      pending.sink().error(error);
+    }
+
+    isNetworkBusy.set(false);
+  }
+
   /**
    * Holds the late-binding message recipe and the reactive sink for a queued request.
    */
