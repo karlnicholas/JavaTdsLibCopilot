@@ -15,7 +15,8 @@ public class TransactionDescriptorHeader extends TdsHeader {
   /**
    * Constructor supporting explicit transaction descriptors.
    *
-   * @param transactionDescriptor   Exact 8-byte array from the server ENVCHANGE token (or 8 zeros for auto-commit)
+   * @param transactionDescriptor   Exact 8-byte array from the server ENVCHANGE token
+   *                                (or 8 zeros for auto-commit)
    * @param outstandingRequestCount Usually 1 for simple requests
    */
   public TransactionDescriptorHeader(byte[] transactionDescriptor, int outstandingRequestCount) {

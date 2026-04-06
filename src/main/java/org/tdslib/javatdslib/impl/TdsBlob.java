@@ -15,6 +15,10 @@ import reactor.core.scheduler.Schedulers;
 import java.nio.ByteBuffer;
 import java.util.concurrent.locks.LockSupport;
 
+/**
+ * An implementation of the R2DBC {@link Blob} interface, capable of streaming large
+ * binary payload data directly from the TDS stream.
+ */
 public class TdsBlob implements Blob {
   private final TdsTokenQueue tokenQueue;
   private final int columnIndex;
@@ -23,7 +27,16 @@ public class TdsBlob implements Blob {
   private ColumnData firstChunk; // Holds the chunk passed from RowDrainer
   private boolean isDiscardedOrCompleted = false;
 
-  public TdsBlob(TdsTokenQueue tokenQueue, int columnIndex, ColumnData firstChunk, Runnable rowUnlockCallback) {
+  /**
+   * Creates a new instance of the {@code TdsBlob}.
+   *
+   * @param tokenQueue        The token queue for reading chunks.
+   * @param columnIndex       The column index of the BLOB data.
+   * @param firstChunk        The initial chunk of data.
+   * @param rowUnlockCallback Callback invoked when streaming completes or gets discarded.
+   */
+  public TdsBlob(
+      TdsTokenQueue tokenQueue, int columnIndex, ColumnData firstChunk, Runnable rowUnlockCallback) {
     this.tokenQueue = tokenQueue;
     this.columnIndex = columnIndex;
     this.firstChunk = firstChunk;
@@ -83,9 +96,13 @@ public class TdsBlob implements Blob {
     return Mono.fromRunnable(this::syncDiscard).subscribeOn(Schedulers.boundedElastic()).then();
   }
 
-  // This is called either by Publisher.discard(), Cancel, OR forcefully by TdsRow
+  /**
+   * Called either by Publisher.discard(), Cancel, OR forcefully by TdsRow.
+   */
   public void syncDiscard() {
-    if (isDiscardedOrCompleted) return;
+    if (isDiscardedOrCompleted) {
+      return;
+    }
 
     // Fast-forward the queue until we hit the next column boundary
     while (true) {

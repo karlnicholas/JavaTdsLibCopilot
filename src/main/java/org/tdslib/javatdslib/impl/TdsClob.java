@@ -19,6 +19,10 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.util.concurrent.locks.LockSupport;
 
+/**
+ * An implementation of the R2DBC {@link Clob} interface, capable of streaming large
+ * character payload data directly from the TDS stream.
+ */
 public class TdsClob implements Clob {
   private final TdsTokenQueue tokenQueue;
   private final int columnIndex;
@@ -32,7 +36,18 @@ public class TdsClob implements Clob {
   private final CharsetDecoder decoder;
   private byte[] leftoverBytes = null;
 
-  public TdsClob(TdsTokenQueue tokenQueue, int columnIndex, Charset charset, ColumnData firstChunk, Runnable rowUnlockCallback) {
+  /**
+   * Creates a new instance of the {@code TdsClob}.
+   *
+   * @param tokenQueue        The token queue for reading chunks.
+   * @param columnIndex       The column index of the CLOB data.
+   * @param charset           The charset used to decode the CLOB data.
+   * @param firstChunk        The initial chunk of data.
+   * @param rowUnlockCallback Callback invoked when streaming completes or gets discarded.
+   */
+  public TdsClob(
+      TdsTokenQueue tokenQueue, int columnIndex, Charset charset,
+      ColumnData firstChunk, Runnable rowUnlockCallback) {
     this.tokenQueue = tokenQueue;
     this.columnIndex = columnIndex;
     this.charset = charset;
@@ -106,8 +121,13 @@ public class TdsClob implements Clob {
     return Mono.fromRunnable(this::syncDiscard).subscribeOn(Schedulers.boundedElastic()).then();
   }
 
+  /**
+   * Called either by Publisher.discard(), Cancel, OR forcefully by TdsRow.
+   */
   public void syncDiscard() {
-    if (isDiscardedOrCompleted) return;
+    if (isDiscardedOrCompleted) {
+      return;
+    }
 
     while (true) {
       TdsStreamEvent event = tokenQueue.peek();
@@ -157,7 +177,9 @@ public class TdsClob implements Clob {
       mergedBytes = rawBytes;
     }
 
-    if (mergedBytes.length == 0) return "";
+    if (mergedBytes.length == 0) {
+      return "";
+    }
 
     ByteBuffer in = ByteBuffer.wrap(mergedBytes);
     int maxChars = (int) Math.ceil(mergedBytes.length * decoder.maxCharsPerByte());

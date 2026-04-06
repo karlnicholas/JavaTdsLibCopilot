@@ -37,7 +37,7 @@ public class TdsConnection implements Connection {
    * Create a new TdsConnection backed by a TCP transport to the given host/port.
    *
    * @param transport TdsTransport
-   * @param context The connection state context
+   * @param context   The connection state context
    */
   public TdsConnection(TdsTransport transport, ConnectionContext context) {
     this.transport = transport;
@@ -137,11 +137,21 @@ public class TdsConnection implements Connection {
   }
 
   private byte mapIsolationLevel(IsolationLevel level) {
-    if (level == null) return 0x00;
-    if (level == IsolationLevel.READ_UNCOMMITTED) return 0x01;
-    if (level == IsolationLevel.READ_COMMITTED) return 0x02;
-    if (level == IsolationLevel.REPEATABLE_READ) return 0x03;
-    if (level == IsolationLevel.SERIALIZABLE) return 0x04;
+    if (level == null) {
+      return 0x00;
+    }
+    if (level == IsolationLevel.READ_UNCOMMITTED) {
+      return 0x01;
+    }
+    if (level == IsolationLevel.READ_COMMITTED) {
+      return 0x02;
+    }
+    if (level == IsolationLevel.REPEATABLE_READ) {
+      return 0x03;
+    }
+    if (level == IsolationLevel.SERIALIZABLE) {
+      return 0x04;
+    }
     return 0x00; // Default fallback
   }
 
@@ -200,7 +210,8 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> setAutoCommit(boolean autoCommit) {
-    return Mono.error(new UnsupportedOperationException("setAutoCommit is not supported directly via R2DBC SPI"));
+    return Mono.error(new UnsupportedOperationException(
+        "setAutoCommit is not supported directly via R2DBC SPI"));
   }
 
   @Override

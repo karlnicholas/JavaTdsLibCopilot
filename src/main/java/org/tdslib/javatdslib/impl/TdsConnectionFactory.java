@@ -75,14 +75,19 @@ public class TdsConnectionFactory implements ConnectionFactory {
         TdsTransport transport = new TdsTransport(hostname, port, connectTimeoutMs, context);
 
         HandshakeOrchestrator orchestrator = new HandshakeOrchestrator();
-        orchestrator.performHandshake(transport, context, sslContext, hostname, username, password, database);
+        orchestrator.performHandshake(
+            transport, context, sslContext, hostname, username, password, database);
 
         transport.enterAsyncMode();
 
         // Emit the connection and handle cancellation
         TdsConnection connection = new TdsConnection(transport, context);
         sink.onCancel(() -> {
-          try { transport.close(); } catch (IOException ignored) {}
+          try {
+            transport.close();
+          } catch (IOException ignored) {
+            // Ignored
+          }
         });
         sink.success(connection);
 

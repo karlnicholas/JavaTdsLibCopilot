@@ -55,10 +55,12 @@ public class AllHeaders {
 
   /**
    * Convenience factory for an explicit, active transaction.
-   * * @param transactionDescriptor The 8-byte descriptor from ConnectionContext
+   *
+   * @param transactionDescriptor   The 8-byte descriptor from ConnectionContext
    * @param outstandingRequestCount Usually 1
    */
-  public static AllHeaders forActiveTransaction(byte[] transactionDescriptor, int outstandingRequestCount) {
+  public static AllHeaders forActiveTransaction(
+      byte[] transactionDescriptor, int outstandingRequestCount) {
     return new AllHeaders(
         new TransactionDescriptorHeader(transactionDescriptor, outstandingRequestCount)
     );

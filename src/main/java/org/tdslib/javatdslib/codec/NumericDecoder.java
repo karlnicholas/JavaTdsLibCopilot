@@ -46,23 +46,29 @@ public class NumericDecoder implements ResultDecoder {
       case INT1:
         return convertSimple(data[0] & 0xFF, 1, targetType);
       case INT2:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
+        return convertSimple(
+            ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
       case INT4:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
+        return convertSimple(
+            ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
       case INT8:
-        return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
+        return convertSimple(
+            ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
       case INTN:
         if (data.length == 1) {
           return convertSimple(data[0] & 0xFF, 1, targetType);
         }
         if (data.length == 2) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
+          return convertSimple(
+              ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getShort(), 2, targetType);
         }
         if (data.length == 4) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
+          return convertSimple(
+              ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getInt(), 4, targetType);
         }
         if (data.length == 8) {
-          return convertSimple(ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
+          return convertSimple(
+              ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(), 8, targetType);
         }
         throw new IllegalStateException("Unexpected INTN length");
 
