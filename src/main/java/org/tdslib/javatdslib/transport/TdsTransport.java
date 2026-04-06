@@ -52,11 +52,11 @@ public class TdsTransport implements AutoCloseable {
    * Allows injecting mock connections for testing
    * without hitting a real database.
    *
-   * @param host The hostname of the server.
-   * @param port The port number of the server.
-   * @param context The connection context.
+   * @param host              The hostname of the server.
+   * @param port              The port number of the server.
+   * @param context           The connection context.
    * @param networkConnection The network connection to use.
-   * @param packetEncoder The packet encoder to use.
+   * @param packetEncoder     The packet encoder to use.
    */
   public TdsTransport(
       String host,
@@ -76,13 +76,14 @@ public class TdsTransport implements AutoCloseable {
   /**
    * Overloaded constructor for backwards compatibility.
    *
-   * @param host The hostname of the server.
-   * @param port The port number of the server.
+   * @param host             The hostname of the server.
+   * @param port             The port number of the server.
    * @param connectTimeoutMs The connection and read timeout in milliseconds.
-   * @param context The connection context.
+   * @param context          The connection context.
    * @throws IOException If an I/O error occurs.
    */
-  public TdsTransport(String host, int port, int connectTimeoutMs, ConnectionContext context) throws IOException {
+  public TdsTransport(String host, int port, int connectTimeoutMs, ConnectionContext context)
+      throws IOException {
     this(
         host,
         port,
@@ -122,7 +123,7 @@ public class TdsTransport implements AutoCloseable {
     }
 
     this.activeSink = request.sink();
-      // Guarantee exactly-once termination and handoff
+    // Guarantee exactly-once termination and handoff
     AtomicBoolean isFinished = new AtomicBoolean(false);
 
     try {
@@ -136,7 +137,8 @@ public class TdsTransport implements AutoCloseable {
           request.sink()::next,
           error -> {
             if (isFinished.compareAndSet(false, true)) {
-              logger.trace("[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
+              logger.trace(
+                  "[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
               request.sink().error(error);
@@ -146,7 +148,8 @@ public class TdsTransport implements AutoCloseable {
           },
           () -> {
             if (isFinished.compareAndSet(false, true)) {
-              logger.trace("[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
+              logger.trace(
+                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
               request.sink().complete();
@@ -160,7 +163,8 @@ public class TdsTransport implements AutoCloseable {
       request.sink().onCancel(() -> {
         workerSink.cancel();
         if (isFinished.compareAndSet(false, true)) {
-          logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
+          logger.trace(
+              "[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
           this.setStreamHandlers(null);
           this.resumeNetworkRead();
           isNetworkBusy.set(false);
@@ -171,7 +175,8 @@ public class TdsTransport implements AutoCloseable {
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
           TokenParserRegistry.DEFAULT, context, tokenQueue);
 
-      logger.trace("[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
+      logger.trace(
+          "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
       this.setStreamHandlers(decoder::onPayloadAvailable);
 
       TdsMessage message = request.messageSupplier().get();
@@ -179,7 +184,8 @@ public class TdsTransport implements AutoCloseable {
 
     } catch (Exception e) {
       if (isFinished.compareAndSet(false, true)) {
-        logger.error("[RACE-TRACE] 💥 Exception during setup/supplier eval. Releasing lock and draining!", e);
+        logger.error(
+            "[RACE-TRACE] 💥 Exception during setup/supplier eval. Releasing lock and draining!", e);
         this.setStreamHandlers(null);
         request.sink().error(e);
         isNetworkBusy.set(false);
@@ -199,7 +205,9 @@ public class TdsTransport implements AutoCloseable {
     tlsHandshake.tlsHandshake(host, port, networkConnection, sslContext);
   }
 
-  /** Completes the TLS handshake and cleans up resources. */
+  /**
+   * Completes the TLS handshake and cleans up resources.
+   */
   public void tlsComplete() {
     tlsHandshake.close();
   }
@@ -222,8 +230,8 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException If an I/O error occurs.
    */
   public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers =
-        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
     for (ByteBuffer buf : packetBuffers) {
       networkConnection.writeDirect(buf);
@@ -237,8 +245,8 @@ public class TdsTransport implements AutoCloseable {
    * @throws IOException If an I/O error occurs.
    */
   public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
-    List<ByteBuffer> packetBuffers =
-        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
     for (ByteBuffer buffer : packetBuffers) {
       if (isTlsActive()) {
@@ -320,29 +328,31 @@ public class TdsTransport implements AutoCloseable {
           } else {
             // NEW: Instantly trigger a fatal shutdown if bytes arrive without a handler
             handleFatalConnectionError(new IllegalStateException(
-                "Protocol Desync: Received TDS payload chunk but no active stream handler is registered."));
+                "Protocol Desync: Received TDS payload chunk "
+                    + "but no active stream handler is registered."));
           }
         };
 
     TdsPacketFramer decoder = new TdsPacketFramer(dynamicRouter);
 
     networkConnection.setHandlers(
-        buffer -> decoder.decode(buffer),
-        error -> {
-          // NEW: All unhandled network-level exceptions are fatal and must trigger a hard shutdown
-          handleFatalConnectionError(error);
-        });
+        decoder::decode,
+        this::handleFatalConnectionError);
   }
 
   // Expose the backpressure controls to the higher-level Stateful Parser
 
-  /** Suspends reading from the network. */
+  /**
+   * Suspends reading from the network.
+   */
   public void suspendNetworkRead() {
     logger.trace("[TdsTransport] Propagating suspendNetworkRead() to NioSocketConnection.");
     networkConnection.suspendRead();
   }
 
-  /** Resumes reading from the network. */
+  /**
+   * Resumes reading from the network.
+   */
   public void resumeNetworkRead() {
     logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
     networkConnection.resumeRead();
@@ -354,14 +364,16 @@ public class TdsTransport implements AutoCloseable {
    * @param tdsMessage The message to send.
    */
   public void sendQueryMessageAsync(TdsMessage tdsMessage) {
-    List<ByteBuffer> packetBuffers =
-        packetEncoder.encodeMessage(tdsMessage, context.getSpid(), context.getCurrentPacketSize());
+    List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
+        tdsMessage, context.getSpid(), context.getCurrentPacketSize());
     for (ByteBuffer buf : packetBuffers) {
       networkConnection.writeAsync(buf);
     }
   }
 
-  /** Cancels the current operation. */
+  /**
+   * Cancels the current operation.
+   */
   public void cancelCurrent() {
     logger.debug("Cancel requested");
   }
@@ -377,7 +389,11 @@ public class TdsTransport implements AutoCloseable {
     logger.error("Fatal connection error. Aborting active query and draining queue.", error);
 
     // 1. Close the physical connection so no more bytes arrive
-    try { close(); } catch (Exception ignored) {}
+    try {
+      close();
+    } catch (Exception ignored) {
+      // Ignored
+    }
 
     // 2. Send the error directly to the active sink, bypassing standard handlers
     if (this.activeSink != null) {
@@ -400,5 +416,6 @@ public class TdsTransport implements AutoCloseable {
   private record PendingRequest(
       Supplier<TdsMessage> messageSupplier,
       FluxSink<Result.Segment> sink
-  ) {}
+  ) {
+  }
 }

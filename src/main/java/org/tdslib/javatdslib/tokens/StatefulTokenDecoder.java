@@ -14,6 +14,9 @@ import org.tdslib.javatdslib.transport.TdsStreamHandler;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * StatefulTokenDecoder parses raw bytes into TDS tokens.
+ */
 public class StatefulTokenDecoder implements TdsStreamHandler {
   private static final Logger logger = LoggerFactory.getLogger(StatefulTokenDecoder.class);
 
@@ -35,6 +38,13 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
   // Flag to track if we've read the 8-byte PLP total length header yet
   private boolean expectingPlpTotalLengthHeader = false;
 
+  /**
+   * Constructs a new StatefulTokenDecoder.
+   *
+   * @param registry The registry.
+   * @param context  The connection context.
+   * @param sink     The sink.
+   */
   public StatefulTokenDecoder(
       TokenParserRegistry registry,
       ConnectionContext context,
@@ -70,7 +80,7 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
             expectingNewToken = false;
           }
 
-// Inside the onPayloadAvailable while loop:
+          // Inside the onPayloadAvailable while loop:
           if (currentTokenType == TokenType.RETURN_VALUE.getValue()) {
 
             // STEP 1: Parse the Metadata Header
@@ -79,7 +89,8 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
               if (!parser.canParse(accumulator, context)) {
                 return; // Yield safely
               }
-              activeReturnHeader = (ReturnValueToken) parser.parse(accumulator, currentTokenType, context);
+              activeReturnHeader = (ReturnValueToken) parser.parse(
+                  accumulator, currentTokenType, context);
             }
 
             // STEP 2: Resolve Data Length and Extract
@@ -151,7 +162,8 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
             TokenParser parser = registry.getParser(currentTokenType);
             if (parser == null) {
               logger.error(generateCrashDump(accumulator, currentTokenType));
-              throw new IllegalStateException(String.format("Unknown token type: 0x%02X", currentTokenType));
+              throw new IllegalStateException(
+                  String.format("Unknown token type: 0x%02X", currentTokenType));
             }
 
             // Create a read-only peek buffer to check boundaries safely
@@ -193,8 +205,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       TdsType tdsType = colMeta.getTypeInfo().getTdsType();
 
       // 1. Determine if this column requires PLP chunking
-      boolean isPlp = tdsType.strategy == TdsType.LengthStrategy.PLP ||
-          (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && colMeta.getMaxLength() == 65535);
+      boolean isPlp = tdsType.strategy == TdsType.LengthStrategy.PLP
+          || (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN
+          && colMeta.getMaxLength() == 65535);
 
       if (isPlp) {
         // PLP tracks its own byte consumption incrementally.
@@ -226,7 +239,8 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
 
   private boolean parseStandardColumn(ColumnMeta colMeta, TdsType tdsType) {
     // 1. Resolve length using extracted utility
-    int length = ColumnLengthResolver.resolveStandardLength(accumulator, tdsType, colMeta.getMaxLength());
+    int length = ColumnLengthResolver.resolveStandardLength(
+        accumulator, tdsType, colMeta.getMaxLength());
 
     // NEW: Check for the incomplete header signal
     if (length == ColumnLengthResolver.INCOMPLETE_HEADER) {
@@ -255,7 +269,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
   private boolean parsePlpColumn(ColumnMeta colMeta) {
     // 1. Check for the initial 8-byte total length header if starting a new PLP column
     if (expectingPlpTotalLengthHeader) {
-      if (accumulator.remaining() < 8) return false;
+      if (accumulator.remaining() < 8) {
+        return false;
+      }
 
       long totalLength = accumulator.getLong();
       expectingPlpTotalLengthHeader = false;
@@ -270,7 +286,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
     // 2. Drain as many chunks as possible from the current buffer
     while (true) {
       if (expectingPlpChunkLength || pendingPlpChunkBytes == 0) {
-        if (accumulator.remaining() < 4) return false; // Need more data for the length header
+        if (accumulator.remaining() < 4) {
+          return false; // Need more data for the length header
+        }
 
         pendingPlpChunkBytes = accumulator.getInt();
         expectingPlpChunkLength = false;
@@ -284,7 +302,9 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       }
 
       int bytesToRead = (int) Math.min(accumulator.remaining(), pendingPlpChunkBytes);
-      if (bytesToRead == 0) return false; // Need more data for the chunk payload
+      if (bytesToRead == 0) {
+        return false; // Need more data for the chunk payload
+      }
 
       byte[] chunkData = new byte[bytesToRead];
       accumulator.get(chunkData);
@@ -294,14 +314,16 @@ public class StatefulTokenDecoder implements TdsStreamHandler {
       sink.onColumnData(new PartialDataColumn(currentRowColIndex, chunkData));
 
       if (pendingPlpChunkBytes == 0) {
-        expectingPlpChunkLength = true; // Ready to read the next chunk length on the next iteration
+        // Ready to read the next chunk length on the next iteration
+        expectingPlpChunkLength = true;
       }
     }
   }
 
   private void ensureCapacity(int neededBytes) {
     if (accumulator.remaining() < neededBytes) {
-      ByteBuffer expanded = ByteBuffer.allocate(accumulator.capacity() + neededBytes + 8192).order(ByteOrder.LITTLE_ENDIAN);
+      ByteBuffer expanded = ByteBuffer.allocate(
+          accumulator.capacity() + neededBytes + 8192).order(ByteOrder.LITTLE_ENDIAN);
       accumulator.flip();
       expanded.put(accumulator);
       accumulator = expanded;

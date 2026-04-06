@@ -136,8 +136,6 @@ public interface ConnectionContext {
 
   // === Transaction State (from BEGIN/COMMIT/ROLLBACK ENVCHANGE) ===
 
-// === Transaction State (from BEGIN/COMMIT/ROLLBACK ENVCHANGE) ===
-
   /**
    * Returns the 8-byte Transaction Descriptor assigned by the server.
    *
@@ -221,12 +219,16 @@ public interface ConnectionContext {
    * Returns the Java Charset most appropriate for decoding non-Unicode (varchar/char) data based on
    * the current server collation (ENVCHANGE type 7). Returns empty if unknown, Unicode-only, or no
    * collation set.
+   *
+   * @return An Optional containing the Charset if determined.
    */
   Optional<Charset> getNonUnicodeCharset();
 
   /**
    * Returns UTF-16LE if Unicode is enabled (TDS 7.0+), otherwise falls back to non-Unicode charset.
    * This is usually what you want for reading strings from the server.
+   *
+   * @return The effective Charset.
    */
   default Charset getEffectiveCharset() {
     if (isUnicodeEnabled()) {
@@ -235,7 +237,11 @@ public interface ConnectionContext {
     return getNonUnicodeCharset().orElse(StandardCharsets.ISO_8859_1); // fallback
   }
 
-  /** Returns UTF-8 if negotiated, otherwise falls back to the Server Collation Code Page. */
+  /**
+   * Returns UTF-8 if negotiated, otherwise falls back to the Server Collation Code Page.
+   *
+   * @return The varchar Charset.
+   */
   default Charset getVarcharCharset() {
     if (isUtf8Negotiated()) {
       return StandardCharsets.UTF_8;

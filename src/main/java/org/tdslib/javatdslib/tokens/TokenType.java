@@ -96,7 +96,6 @@ public enum TokenType {
       }
     }
   }
-// ... existing enum definitions ...
 
   /**
    * Returns the exact byte length of the token's payload if it is strictly fixed,

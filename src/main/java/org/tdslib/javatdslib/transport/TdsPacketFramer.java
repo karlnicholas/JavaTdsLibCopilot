@@ -17,10 +17,20 @@ public class TdsPacketFramer {
 
   private final TdsStreamHandler streamHandler;
 
+  /**
+   * Constructs a new TdsPacketFramer.
+   *
+   * @param streamHandler The stream handler.
+   */
   public TdsPacketFramer(TdsStreamHandler streamHandler) {
     this.streamHandler = streamHandler;
   }
 
+  /**
+   * Decodes a ByteBuffer containing TDS packets.
+   *
+   * @param networkBuffer The buffer to decode.
+   */
   public void decode(ByteBuffer networkBuffer) {
     logger.trace(">>> [Framer] ENTER: Analyzing {} bytes", networkBuffer.remaining());
 
@@ -36,19 +46,22 @@ public class TdsPacketFramer {
 
       // Prevent Infinite NIO Spin on corrupted headers
       if (packetLength > networkBuffer.capacity()) {
-        throw new IllegalStateException("Protocol Desync: Packet length (" + packetLength +
-            " bytes) exceeds physical buffer capacity (" + networkBuffer.capacity() + " bytes).");
+        throw new IllegalStateException("Protocol Desync: Packet length ("
+            + packetLength + " bytes) exceeds physical buffer capacity ("
+            + networkBuffer.capacity() + " bytes).");
       }
 
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
-        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}", packetLength, networkBuffer.remaining());
+        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}",
+            packetLength, networkBuffer.remaining());
         return;
       }
 
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
-        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}", packetLength, networkBuffer.remaining());
+        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}",
+            packetLength, networkBuffer.remaining());
         return;
       }
 
@@ -61,11 +74,12 @@ public class TdsPacketFramer {
       networkBuffer.position(headerStart + TDS_HEADER_LENGTH);
 
       // 4. Create a strict slice for the payload
-      int originalLimit = networkBuffer.limit();
+      final int originalLimit = networkBuffer.limit();
       networkBuffer.limit(networkBuffer.position() + payloadLength);
       ByteBuffer payloadSlice = networkBuffer.slice();
 
-      logger.trace(">>> [Framer] HANDOFF: Sliced {} byte payload. (isEom: {})", payloadLength, isEom);
+      logger.trace(">>> [Framer] HANDOFF: Sliced {} byte payload. (isEom: {})",
+          payloadLength, isEom);
 
       // 5. Fire and forget. We assume the handler fully processes this discrete frame.
       if (isEom) {

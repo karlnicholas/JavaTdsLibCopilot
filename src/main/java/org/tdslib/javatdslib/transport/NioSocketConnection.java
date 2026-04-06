@@ -39,8 +39,8 @@ public class NioSocketConnection implements NetworkConnection {
   /**
    * Constructs a new NioSocketConnection.
    *
-   * @param host The hostname to connect to.
-   * @param port The port to connect to.
+   * @param host          The hostname to connect to.
+   * @param port          The port to connect to.
    * @param readTimeoutMs The read timeout in milliseconds for synchronous operations.
    * @throws IOException If an I/O error occurs during connection establishment.
    */
@@ -49,7 +49,9 @@ public class NioSocketConnection implements NetworkConnection {
     this.socketChannel.configureBlocking(true);
     this.socketChannel.socket().setSoTimeout(readTimeoutMs);
 
-    logger.debug("Initiating physical TCP connection to {}:{} with timeout {}ms", host, port, readTimeoutMs);
+    logger.debug(
+        "Initiating physical TCP connection to {}:{} with timeout {}ms",
+        host, port, readTimeoutMs);
     InetSocketAddress address = new InetSocketAddress(host, port);
 
     // FIX: Enforce a strict connection timeout instead of infinite block
@@ -75,7 +77,8 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void enterAsyncMode(int bufferSize) throws IOException {
-    logger.debug("Entering asynchronous mode. Starting NIO event loop (Buffer: {} bytes)", bufferSize);
+    logger.debug(
+        "Entering asynchronous mode. Starting NIO event loop (Buffer: {} bytes)", bufferSize);
     this.readBuffer = ByteBuffer.allocate(bufferSize);
     this.selector = Selector.open();
     this.socketChannel.configureBlocking(false);
