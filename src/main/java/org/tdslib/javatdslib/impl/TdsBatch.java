@@ -4,6 +4,8 @@ import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
 import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.headers.TraceActivityHeader;
+import org.tdslib.javatdslib.headers.TransactionDescriptorHeader;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
@@ -16,6 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * An implementation of the R2DBC {@link Batch} interface for executing multiple SQL statements as a
@@ -56,8 +59,8 @@ public class TdsBatch implements Batch {
 
     String batchSql = String.join(";\n", statements);
 
-    // Pass the recipe, not the result
-    return transport.execute(() -> createSqlBatchMessage(batchSql))
+    // Transport injects the headers into our lambda
+    return transport.execute(headers -> createSqlBatchMessage(batchSql, headers))
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -72,15 +75,9 @@ public class TdsBatch implements Batch {
         || segment instanceof Result.OutSegment;
   }
 
-  // Update this to fetch from context dynamically
-  private TdsMessage createSqlBatchMessage(String sql) {
+  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-
-    AllHeaders headers = context.isInTransaction()
-        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
-        : AllHeaders.forAutoCommit(1);
-
     return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
   }
 }

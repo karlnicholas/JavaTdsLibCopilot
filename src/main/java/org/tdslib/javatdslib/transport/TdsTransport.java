@@ -3,6 +3,9 @@ package org.tdslib.javatdslib.transport;
 import io.r2dbc.spi.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.headers.TraceActivityHeader;
+import org.tdslib.javatdslib.headers.TransactionDescriptorHeader;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.reactive.AsyncWorkerSink;
@@ -19,8 +22,10 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -94,15 +99,42 @@ public class TdsTransport implements AutoCloseable {
 
   /**
    * Executes a TDS Message and returns a reactive stream of segments.
-   * Enforces strictly sequential query execution on the connection using a non-blocking queue.
+   * Centralizes the building of TDS headers and reactive context extraction.
+   * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
-  public Flux<Result.Segment> execute(Supplier<TdsMessage> messageSupplier) {
-    return Flux.create(sink -> {
-      // Package the request and drop it in the inbox
-      requestQueue.offer(new PendingRequest(messageSupplier, sink));
-      // Tell the background loop to check the inbox
-      drain();
+  public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
+
+    // 1. Extract the trace ID from the reactive pipeline once
+    return Flux.deferContextual(contextView -> {
+      UUID traceId = contextView.getOrDefault("trace-id", null);
+
+      return Flux.create(sink -> {
+        // 2. Queue the request, deferring the actual header/message construction
+        // until the background worker polls it from the queue.
+        requestQueue.offer(new PendingRequest(() -> {
+          AllHeaders headers = buildHeaders(traceId);
+          return messageFactory.apply(headers);
+        }, sink));
+
+        // Tell the background loop to check the inbox
+        drain();
+      });
     });
+  }
+
+  /**
+   * Centralized header builder for all outgoing transport messages.
+   */
+  private AllHeaders buildHeaders(UUID traceId) {
+    TransactionDescriptorHeader txHeader = context.isInTransaction()
+        ? new TransactionDescriptorHeader(context.getTransactionDescriptor(), 1)
+        : new TransactionDescriptorHeader(new byte[8], 1);
+
+    if (traceId != null) {
+      TraceActivityHeader traceHeader = new TraceActivityHeader(traceId, 1);
+      return new AllHeaders(txHeader, traceHeader);
+    }
+    return new AllHeaders(txHeader);
   }
 
   /**

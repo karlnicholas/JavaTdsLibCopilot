@@ -9,6 +9,8 @@ import io.r2dbc.spi.Type;
 import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.headers.TraceActivityHeader;
+import org.tdslib.javatdslib.headers.TransactionDescriptorHeader;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsParameter;
@@ -20,12 +22,14 @@ import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Implementation of {@link Statement} for the TDS protocol. This class allows for the execution of
@@ -171,14 +175,14 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    // Pass the recipe, determining which builder to call at subscription time
-    return transport.execute(() -> {
-      if (isSimpleBatch) {
-        return createSqlBatchMessage(query);
-      } else {
-        return createRpcMessage(query, executions);
-      }
-    })
+    // Clean, standard Flux execution. Transport handles the headers!
+    return transport.execute(headers -> {
+          if (isSimpleBatch) {
+            return createSqlBatchMessage(query, headers);
+          } else {
+            return createRpcMessage(query, executions, headers);
+          }
+        })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -199,14 +203,9 @@ public class TdsStatement implements Statement {
    * @param sql The SQL query string.
    * @return A {@link TdsMessage} ready for transport.
    */
-  private TdsMessage createSqlBatchMessage(String sql) {
+  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-
-    AllHeaders headers = context.isInTransaction()
-        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
-        : AllHeaders.forAutoCommit(1);
-
     return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
   }
 
@@ -217,7 +216,8 @@ public class TdsStatement implements Statement {
    * @param executions The list of parameter sets to execute.
    * @return A {@link TdsMessage} ready for transport.
    */
-  private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions) {
+  // Modified in TdsStatement.java
+  private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
     RpcEncodingContext encodingContext =
         new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
@@ -225,11 +225,6 @@ public class TdsStatement implements Statement {
     RpcPacketBuilder builder =
         new RpcPacketBuilder(sql, executions, registry, encodingContext);
     ByteBuffer payload = builder.buildRpcPacket();
-
-    AllHeaders headers = context.isInTransaction()
-        ? AllHeaders.forActiveTransaction(context.getTransactionDescriptor(), 1)
-        : AllHeaders.forAutoCommit(1);
-
     return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, payload);
   }
 

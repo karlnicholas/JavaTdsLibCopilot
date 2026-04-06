@@ -28,8 +28,6 @@ import java.time.Duration;
  * Provides a simple connect + execute interface, hiding protocol details.
  */
 public class TdsConnection implements Connection {
-  private static final Logger logger = LoggerFactory.getLogger(TdsConnection.class);
-
   private final TdsTransport transport;
   private final ConnectionContext context;
 
@@ -46,22 +44,23 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> beginTransaction() {
-    return Mono.from(transport.execute(() -> {
-      // Allocate 4 bytes instead of 5
+    // Change to accept the headers from the Transport
+    return Mono.from(transport.execute(headers -> {
       ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
       payload.putShort((short) 5); // TM_BEGIN_XACT
       payload.put((byte) 0x00);    // Isolation Level: 0x00 (Use session default)
       payload.put((byte) 0x00);    // Transaction Name Length: 0 (Unnamed)
       payload.flip();
 
-      AllHeaders headers = AllHeaders.forAutoCommit(1);
+      // Transport automatically provides the correct headers!
       return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
     })).then();
   }
 
   @Override
   public Publisher<Void> beginTransaction(TransactionDefinition definition) {
-    return Mono.from(transport.execute(() -> {
+    // Change to accept the headers from the Transport
+    return Mono.from(transport.execute(headers -> {
       IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
       String txName = definition.getAttribute(TransactionDefinition.NAME);
 
@@ -83,29 +82,24 @@ public class TdsConnection implements Connection {
       }
       payload.flip();
 
-      AllHeaders headers = AllHeaders.forAutoCommit(1);
       return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
     })).then();
   }
 
   @Override
   public Publisher<Void> commitTransaction() {
-    // We must defer the branch check so it evaluates at Subscription Time
     return Mono.defer(() -> {
       if (!context.isInTransaction()) {
         return Mono.empty();
       }
 
-      return Mono.from(transport.execute(() -> {
+      // Change to accept the headers from the Transport
+      return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         payload.putShort((short) 7); // TM_COMMIT_XACT
         payload.put((byte) 0x00);
         payload.put((byte) 0x00);
         payload.flip();
-
-        // Safe: Extracted exactly when the transport is ready to send
-        byte[] activeDescriptor = context.getTransactionDescriptor();
-        AllHeaders headers = AllHeaders.forActiveTransaction(activeDescriptor, 1);
 
         return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
       })).then();
@@ -114,22 +108,18 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> rollbackTransaction() {
-    // We must defer the branch check so it evaluates at Subscription Time
     return Mono.defer(() -> {
       if (!context.isInTransaction()) {
         return Mono.empty();
       }
 
-      return Mono.from(transport.execute(() -> {
+      // Change to accept the headers from the Transport
+      return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         payload.putShort((short) 8); // TM_ROLLBACK_XACT
         payload.put((byte) 0x00);
         payload.put((byte) 0x00);
         payload.flip();
-
-        // Safe: Extracted exactly when the transport is ready to send
-        byte[] activeDescriptor = context.getTransactionDescriptor();
-        AllHeaders headers = AllHeaders.forActiveTransaction(activeDescriptor, 1);
 
         return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
       })).then();
