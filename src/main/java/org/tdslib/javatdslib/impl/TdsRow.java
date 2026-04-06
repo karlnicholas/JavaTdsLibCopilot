@@ -47,6 +47,12 @@ public class TdsRow implements Row, Result.RowSegment {
   // Reference counter to safely manage concurrent LOB extraction
   private final AtomicInteger pendingLobCount = new AtomicInteger(0);
 
+  /**
+   * Sets callbacks to pause and resume the network sink.
+   *
+   * @param pauseCallback  Runnable to pause the sink.
+   * @param resumeCallback Runnable to resume the sink.
+   */
   public void setAsyncCallbacks(Runnable pauseCallback, Runnable resumeCallback) {
     this.pauseSinkCallback = pauseCallback;
     this.resumeSinkCallback = resumeCallback;
@@ -58,7 +64,17 @@ public class TdsRow implements Row, Result.RowSegment {
   private final TdsRowMetadata rowMetadata;
   private final TdsTokenQueue tokenQueue;
 
-  public TdsRow(Object[] payload, ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
+  /**
+   * Creates a new TdsRow instance.
+   *
+   * @param payload    The row payload data array.
+   * @param metaData   The column metadata token.
+   * @param context    The connection context.
+   * @param tokenQueue The token queue.
+   */
+  public TdsRow(
+      Object[] payload, ColMetaDataToken metaData,
+      ConnectionContext context, TdsTokenQueue tokenQueue) {
     this.payload = payload;
     this.metaData = metaData;
     this.context = context;
@@ -94,7 +110,8 @@ public class TdsRow implements Row, Result.RowSegment {
 
     // NEW: Block access if the network queue passed this column without reading it
     if (rawData == DISCARDED) {
-      throw new IllegalStateException(String.format("Forward-only violation. Column %d has already been consumed or was skipped.", index));
+      throw new IllegalStateException(String.format(
+          "Forward-only violation. Column %d has already been consumed or was skipped.", index));
     }
 
     ColumnMeta colMeta = metaData.getColumns().get(index);
@@ -115,18 +132,23 @@ public class TdsRow implements Row, Result.RowSegment {
       discardUnfetchedColumnsBefore(index);
 
       pendingLobCount.incrementAndGet();
-      if (this.pauseSinkCallback != null) this.pauseSinkCallback.run();
+      if (this.pauseSinkCallback != null) {
+        this.pauseSinkCallback.run();
+      }
 
       Runnable mediatedResumeCallback = () -> {
         if (pendingLobCount.decrementAndGet() == 0) {
           logger.trace("[TdsRow] All pending LOBs completed. Resuming network sink.");
-          if (this.resumeSinkCallback != null) this.resumeSinkCallback.run();
+          if (this.resumeSinkCallback != null) {
+            this.resumeSinkCallback.run();
+          }
         }
       };
 
       if (type == Clob.class) {
         Charset charset = getCharset(colMeta, tdsType);
-        return type.cast(new TdsClob(tokenQueue, index, charset, initialChunk, mediatedResumeCallback));
+        return type.cast(new TdsClob(
+            tokenQueue, index, charset, initialChunk, mediatedResumeCallback));
       } else {
         return type.cast(new TdsBlob(tokenQueue, index, initialChunk, mediatedResumeCallback));
       }
@@ -137,7 +159,8 @@ public class TdsRow implements Row, Result.RowSegment {
       rawData = advanceQueueToColumn(index);
       discardUnfetchedColumnsBefore(index);
 
-      // If it's a completely fetched standard column, unwrap it to byte[] so it can be cached and reused
+      // If it's a completely fetched standard column, unwrap it to byte[]
+      // so it can be cached and reused
       if (rawData instanceof CompleteDataColumn c) {
         if (!isPlp(tdsType, colMeta)) {
           rawData = c.getData();
@@ -183,7 +206,8 @@ public class TdsRow implements Row, Result.RowSegment {
         } else if (ce.data().getColumnIndex() == targetIndex) {
           return ((ColumnEvent) tokenQueue.poll()).data(); // Found it! Consume and return.
         } else {
-          throw new IllegalStateException("Desync: Expected col " + targetIndex + " but got " + ce.data().getColumnIndex());
+          throw new IllegalStateException(
+              "Desync: Expected col " + targetIndex + " but got " + ce.data().getColumnIndex());
         }
       } else if (event instanceof TokenEvent) {
         return null; // End of row reached without finding the column
@@ -206,23 +230,33 @@ public class TdsRow implements Row, Result.RowSegment {
   }
 
   private boolean isPlp(TdsType tdsType, ColumnMeta colMeta) {
-    if (tdsType == null) return false;
-    return tdsType.strategy == TdsType.LengthStrategy.PLP ||
-        (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN && colMeta.getMaxLength() == 65535);
+    if (tdsType == null) {
+      return false;
+    }
+    return tdsType.strategy == TdsType.LengthStrategy.PLP
+        || (tdsType.strategy == TdsType.LengthStrategy.USHORTLEN
+        && colMeta.getMaxLength() == 65535);
   }
 
-  private Object drainLobSynchronously(int index, Class<?> type, TdsType tdsType, ColumnMeta colMeta, ColumnData firstChunk) {
+  private Object drainLobSynchronously(
+      int index, Class<?> type, TdsType tdsType, ColumnMeta colMeta, ColumnData firstChunk) {
     logger.trace("[TdsRow] Initiating Synchronous LOB Drain for column {}", index);
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     boolean isNullData = false;
 
     try {
       if (firstChunk instanceof PartialDataColumn p) {
-        if (p.getChunk() != null) buffer.write(p.getChunk());
-        else isNullData = true;
+        if (p.getChunk() != null) {
+          buffer.write(p.getChunk());
+        } else {
+          isNullData = true;
+        }
       } else if (firstChunk instanceof CompleteDataColumn c) {
-        if (c.getData() != null) buffer.write(c.getData());
-        else isNullData = true;
+        if (c.getData() != null) {
+          buffer.write(c.getData());
+        } else {
+          isNullData = true;
+        }
       }
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -273,16 +307,19 @@ public class TdsRow implements Row, Result.RowSegment {
       rawBytes = null;
       buffer = null;
       throw new IllegalStateException(
-          "Driver ran out of memory materializing a large object. " +
-              "Consider using streaming (Publisher.class) instead of synchronous get.", oom);
+          "Driver ran out of memory materializing a large object. "
+              + "Consider using streaming (Publisher.class) instead of synchronous get.", oom);
     }
   }
 
   private Charset getCharset(ColumnMeta colMeta, TdsType tdsType) {
-    if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
+    if (tdsType == TdsType.NVARCHAR || tdsType == TdsType.NCHAR
+        || tdsType == TdsType.NTEXT || tdsType == TdsType.XML) {
       return java.nio.charset.StandardCharsets.UTF_16LE;
     } else {
-      byte[] collation = colMeta.getTypeInfo() != null ? colMeta.getTypeInfo().getCollation() : null;
+      byte[] collation = colMeta.getTypeInfo() != null
+          ? colMeta.getTypeInfo().getCollation()
+          : null;
       return collation != null
           ? CollationUtils.getCharsetFromCollation(collation).orElse(context.getVarcharCharset())
           : context.getVarcharCharset();

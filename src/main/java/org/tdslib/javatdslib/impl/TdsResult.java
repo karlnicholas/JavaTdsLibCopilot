@@ -21,13 +21,10 @@ public class TdsResult implements Result {
   private final Publisher<Result.Segment> source;
 
   /**
-   * Primary constructor used by the networking layer.
-   * Bridges the mechanical queue drainer into a standard Reactive Streams Publisher.
-   * * (Note: To be updated in the future to connect directly to AsyncWorkerSink)
-   */
-  /**
    * Primary constructor.
    * Accepts a standard Reactive Publisher stream of Result.Segments.
+   *
+   * @param source A publisher of Result.Segment.
    */
   public TdsResult(Publisher<Result.Segment> source) {
     this.source = source;
@@ -43,7 +40,9 @@ public class TdsResult implements Result {
 
   @Override
   public <T> Publisher<T> map(BiFunction<Row, RowMetadata, ? extends T> mappingFunction) {
-    if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
+    if (mappingFunction == null) {
+      throw new IllegalArgumentException("mappingFunction must not be null");
+    }
     logger.debug("[TdsResult] User initiated row mapping (Result.map).");
     // R2DBC Spec: map only applies to RowSegments. UpdateCounts are ignored.
     return Flux.from(source)
@@ -53,15 +52,20 @@ public class TdsResult implements Result {
 
   @Override
   public Result filter(Predicate<Result.Segment> predicate) {
-    if (predicate == null) throw new IllegalArgumentException("predicate must not be null");
+    if (predicate == null) {
+      throw new IllegalArgumentException("predicate must not be null");
+    }
     logger.debug("[TdsResult] Applying filter predicate to segment stream.");
     // R2DBC Spec: filter applies to the entire segment stream, returning a new Result
     return new TdsResult(Flux.from(source).filter(predicate));
   }
 
   @Override
-  public <T> Publisher<T> flatMap(Function<Result.Segment, ? extends Publisher<? extends T>> mappingFunction) {
-    if (mappingFunction == null) throw new IllegalArgumentException("mappingFunction must not be null");
+  public <T> Publisher<T> flatMap(
+      Function<Result.Segment, ? extends Publisher<? extends T>> mappingFunction) {
+    if (mappingFunction == null) {
+      throw new IllegalArgumentException("mappingFunction must not be null");
+    }
     logger.debug("[TdsResult] User initiated flatMap on segments (typically for OutParameters).");
     // R2DBC Spec: flatMap applies to all segments (Rows, OutParameters, UpdateCounts)
     return Flux.from(source).flatMap(mappingFunction);

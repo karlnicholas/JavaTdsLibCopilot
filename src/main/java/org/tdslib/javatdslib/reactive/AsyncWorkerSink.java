@@ -35,6 +35,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
+/**
+ * Handles processing of TDS tokens from the token queue, emitting results downstream.
+ */
 public class AsyncWorkerSink {
   private static final Logger logger = LoggerFactory.getLogger(AsyncWorkerSink.class);
 
@@ -60,19 +63,40 @@ public class AsyncWorkerSink {
   private Consumer<Throwable> onError;
   private Runnable onComplete;
 
-  public AsyncWorkerSink(TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
+  /**
+   * Constructs a new AsyncWorkerSink.
+   *
+   * @param tokenQueue      The token queue from which to read events.
+   * @param context         The connection context.
+   * @param workerScheduler The scheduler for asynchronous work.
+   */
+  public AsyncWorkerSink(
+      TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
     this.tokenQueue = tokenQueue;
     this.context = context;
     this.workerScheduler = workerScheduler;
     this.tokenQueue.setOnEventAvailableCallback(this::scheduleDrain);
   }
 
-  public void setCallbacks(Consumer<Result.Segment> onNext, Consumer<Throwable> onError, Runnable onComplete) {
+  /**
+   * Sets the callbacks for successful next events, errors, and completion.
+   *
+   * @param onNext     Consumer called with each new Segment.
+   * @param onError    Consumer called if an error occurs.
+   * @param onComplete Runnable called when processing finishes.
+   */
+  public void setCallbacks(
+      Consumer<Result.Segment> onNext, Consumer<Throwable> onError, Runnable onComplete) {
     this.onNext = onNext;
     this.onError = onError;
     this.onComplete = onComplete;
   }
 
+  /**
+   * Requests processing of {@code n} additional events.
+   *
+   * @param n The amount of events requested.
+   */
   public void request(long n) {
     if (n > 0) {
       demand.addAndGet(n);
@@ -80,6 +104,9 @@ public class AsyncWorkerSink {
     }
   }
 
+  /**
+   * Cancels processing and clears the token queue.
+   */
   public void cancel() {
     isCancelled.set(true);
     tokenQueue.clear();
@@ -111,7 +138,9 @@ public class AsyncWorkerSink {
           int segmentsBefore = receivedSegments.size();
 
           TdsStreamEvent event = tokenQueue.poll();
-          if (event == null) break;
+          if (event == null) {
+            break;
+          }
 
           if (event instanceof ErrorEvent err) {
             pushError(err.error());
@@ -150,7 +179,8 @@ public class AsyncWorkerSink {
     } else if (token instanceof RowToken) {
 
       // FIXED: Use the new two-phase lifecycle flags
-      if (activeRowDrainer != null && activeRowDrainer.isReadyToYield() && !activeRowDrainer.isRowEmitted()) {
+      if (activeRowDrainer != null && activeRowDrainer.isReadyToYield()
+          && !activeRowDrainer.isRowEmitted()) {
         emitSegment(activeRowDrainer.assembleRow());
       }
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
@@ -186,7 +216,8 @@ public class AsyncWorkerSink {
           error.getMessage(), error.getNumber(), error.getState(),
           error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber());
     } else if (token instanceof InfoToken info) {
-      emitSegment(new TdsMessageSegment((int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
+      emitSegment(new TdsMessageSegment(
+          (int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
 
       // --> ADD THIS BLOCK <--
     } else if (token instanceof ReturnValueToken retVal) {
@@ -200,7 +231,9 @@ public class AsyncWorkerSink {
   }
 
   private void processColumn(ColumnData cd) {
-    if (this.activeRowDrainer == null) return;
+    if (this.activeRowDrainer == null) {
+      return;
+    }
 
     this.activeRowDrainer.processColumn(cd);
 
@@ -230,7 +263,9 @@ public class AsyncWorkerSink {
   private void emitSegment(Result.Segment segment) {
     receivedSegments.add(segment);
     try {
-      if (onNext != null) onNext.accept(segment);
+      if (onNext != null) {
+        onNext.accept(segment);
+      }
     } catch (Throwable t) {
       pushError(t);
       throw t;
@@ -240,14 +275,23 @@ public class AsyncWorkerSink {
   private void pushError(Throwable error) {
     logger.debug("Stream Error: {}", error.getMessage());
     completionLatch.countDown();
-    if (onError != null) onError.accept(error);
+    if (onError != null) {
+      onError.accept(error);
+    }
   }
 
   private void pushComplete() {
     completionLatch.countDown();
-    if (onComplete != null) onComplete.run();
+    if (onComplete != null) {
+      onComplete.run();
+    }
   }
 
-  public void awaitCompletion() throws InterruptedException { completionLatch.await(); }
-  public List<Result.Segment> getReceivedSegments() { return receivedSegments; }
+  public void awaitCompletion() throws InterruptedException {
+    completionLatch.await();
+  }
+
+  public List<Result.Segment> getReceivedSegments() {
+    return receivedSegments;
+  }
 }

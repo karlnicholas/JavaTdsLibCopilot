@@ -14,12 +14,21 @@ import org.tdslib.javatdslib.transport.ConnectionContext;
 import java.nio.charset.Charset;
 import java.util.List;
 
+/**
+ * An implementation of the R2DBC {@link Result.OutSegment} and {@link OutParameters} interfaces.
+ */
 public class TdsOutSegment implements Result.OutSegment, OutParameters {
   private static final Logger logger = LoggerFactory.getLogger(TdsOutSegment.class);
 
   private final List<ReturnValueToken> parameters;
   private final ConnectionContext context;
 
+  /**
+   * Constructs a new TdsOutSegment.
+   *
+   * @param parameters The list of return value tokens.
+   * @param context    The connection context.
+   */
   public TdsOutSegment(List<ReturnValueToken> parameters, ConnectionContext context) {
     this.parameters = parameters;
     this.context = context;
@@ -42,8 +51,8 @@ public class TdsOutSegment implements Result.OutSegment, OutParameters {
   public <T> T get(String name, Class<T> type) {
     for (ReturnValueToken param : parameters) {
       // Handle SQL Server's '@' prefix gracefully
-      if (param.getParamName().equalsIgnoreCase(name) ||
-          param.getParamName().equalsIgnoreCase("@" + name)) {
+      if (param.getParamName().equalsIgnoreCase(name)
+          || param.getParamName().equalsIgnoreCase("@" + name)) {
         return decodeValue(param, type);
       }
     }

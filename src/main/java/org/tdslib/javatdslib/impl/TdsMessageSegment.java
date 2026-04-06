@@ -13,6 +13,13 @@ public class TdsMessageSegment implements Result.Message {
   private final String message;
   private final R2dbcException exception;
 
+  /**
+   * Constructs a new TdsMessageSegment.
+   *
+   * @param errorCode The server-specific error code.
+   * @param sqlState  The standard SQL state string.
+   * @param message   The descriptive error or info message.
+   */
   public TdsMessageSegment(int errorCode, String sqlState, String message) {
     this.errorCode = errorCode;
     this.sqlState = sqlState;

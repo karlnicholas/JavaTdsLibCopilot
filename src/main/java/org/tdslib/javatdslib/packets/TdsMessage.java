@@ -94,7 +94,8 @@ public final class TdsMessage {
    * @param payload    The actual request payload
    * @return A constructed TdsMessage
    */
-  public static TdsMessage createWithHeaders(PacketType packetType, AllHeaders headers, ByteBuffer payload) {
+  public static TdsMessage createWithHeaders(
+      PacketType packetType, AllHeaders headers, ByteBuffer payload) {
     byte[] headerBytes = headers != null ? headers.toBytes() : new byte[0];
 
     ByteBuffer fullPayload = ByteBuffer.allocate(headerBytes.length + payload.remaining());

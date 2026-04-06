@@ -40,12 +40,24 @@ public class TdsStatement implements Statement {
   private List<TdsParameter> currentParams = new ArrayList<>();
   private int fetchSize = 0;
 
+  /**
+   * Constructs a new TdsStatement.
+   *
+   * @param transport The TDS transport.
+   * @param context   The connection context.
+   * @param query     The SQL query string.
+   */
   public TdsStatement(TdsTransport transport, ConnectionContext context, String query) {
     this.transport = transport;
     this.context = context;
     this.query = query;
   }
 
+  /**
+   * Adds the current set of bound parameters to the batch and clears the current parameters for the next set.
+   *
+   * @return This statement.
+   */
   @Override
   public Statement add() {
     if (!currentParams.isEmpty()) {
@@ -55,11 +67,25 @@ public class TdsStatement implements Statement {
     return this;
   }
 
+  /**
+   * Binds a value to a parameter by its 0-indexed position.
+   *
+   * @param index The 0-based index.
+   * @param value The value to bind.
+   * @return This statement.
+   */
   @Override
   public Statement bind(int index, Object value) {
     return bind("@p" + index, value);
   }
 
+  /**
+   * Binds a value to a named parameter.
+   *
+   * @param name  The name of the parameter.
+   * @param value The value to bind.
+   * @return This statement.
+   */
   @Override
   public Statement bind(String name, Object value) {
     if (value == null) {
@@ -77,11 +103,25 @@ public class TdsStatement implements Statement {
     return this;
   }
 
+  /**
+   * Binds a null value to a parameter by its 0-indexed position.
+   *
+   * @param index The 0-based index.
+   * @param type  The expected Java type of the parameter.
+   * @return This statement.
+   */
   @Override
   public Statement bindNull(int index, Class<?> type) {
     return bindNull("@p" + index, type);
   }
 
+  /**
+   * Binds a null value to a named parameter.
+   *
+   * @param name The name of the parameter.
+   * @param type  The expected Java type of the parameter.
+   * @return This statement.
+   */
   @Override
   public Statement bindNull(String name, Class<?> type) {
     if (type == null) {
@@ -96,11 +136,22 @@ public class TdsStatement implements Statement {
     return this;
   }
 
+  /**
+   * Configures the statement to return generated values. (Currently a no-op implementation).
+   *
+   * @param columns The names of the columns for which to return generated values.
+   * @return This statement.
+   */
   @Override
   public Statement returnGeneratedValues(String... columns) {
     return this;
   }
 
+  /**
+   * Executes the statement and returns a publisher for the results.
+   *
+   * @return A publisher of {@link Result} objects.
+   */
   @Override
   public Publisher<? extends Result> execute() {
     if (batchParams.isEmpty() && !currentParams.isEmpty()) {
@@ -121,12 +172,12 @@ public class TdsStatement implements Statement {
 
     // Pass the recipe, determining which builder to call at subscription time
     return transport.execute(() -> {
-          if (isSimpleBatch) {
-            return createSqlBatchMessage(query);
-          } else {
-            return createRpcMessage(query, executions);
-          }
-        })
+      if (isSimpleBatch) {
+        return createSqlBatchMessage(query);
+      } else {
+        return createRpcMessage(query, executions);
+      }
+    })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -141,6 +192,12 @@ public class TdsStatement implements Statement {
         || segment instanceof Result.OutSegment;
   }
 
+  /**
+   * Creates a TDS SQL Batch message for simple, non-parameterized execution.
+   *
+   * @param sql The SQL query string.
+   * @return A {@link TdsMessage} ready for transport.
+   */
   private TdsMessage createSqlBatchMessage(String sql) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
@@ -152,6 +209,13 @@ public class TdsStatement implements Statement {
     return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
   }
 
+  /**
+   * Creates a TDS RPC Request message for parameterized or batched execution.
+   *
+   * @param sql        The SQL query string.
+   * @param executions The list of parameter sets to execute.
+   * @return A {@link TdsMessage} ready for transport.
+   */
   private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
     RpcEncodingContext encodingContext =
@@ -168,12 +232,24 @@ public class TdsStatement implements Statement {
     return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, payload);
   }
 
+  /**
+   * Configures the fetch size for the statement.
+   *
+   * @param rows The number of rows to fetch.
+   * @return This statement.
+   */
   @Override
   public Statement fetchSize(int rows) {
     this.fetchSize = rows;
     return this;
   }
 
+  /**
+   * Resolves the appropriate {@link TdsType} for a given R2DBC {@link Parameter}.
+   *
+   * @param p The parameter to resolve.
+   * @return The corresponding TDS type, or {@code null} if it cannot be resolved.
+   */
   private TdsType resolveTdsType(Parameter p) {
     Type t = p.getType();
     if (t instanceof R2dbcType rdbcType) {
