@@ -10,6 +10,11 @@ import org.tdslib.javatdslib.tokens.TokenType;
 public class RowToken extends Token {
   private final ColMetaDataToken metaData;
 
+  /**
+   * Constructs a new RowToken.
+   *
+   * @param metaData The metadata for the row.
+   */
   public RowToken(ColMetaDataToken metaData) {
     super(TokenType.ROW);
     this.metaData = metaData;

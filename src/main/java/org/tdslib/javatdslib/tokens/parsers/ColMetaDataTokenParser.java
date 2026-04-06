@@ -63,7 +63,9 @@ public class ColMetaDataTokenParser implements TokenParser {
   @Override
   public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
     // 1. Check for columnCount (2 bytes)
-    if (peekBuffer.remaining() < 2) return false;
+    if (peekBuffer.remaining() < 2) {
+      return false;
+    }
     short columnCount = peekBuffer.getShort();
 
     if (columnCount == (short) 0xFFFF) {
@@ -72,7 +74,9 @@ public class ColMetaDataTokenParser implements TokenParser {
 
     for (int i = 0; i < columnCount; i++) {
       // 2. Check for userType (4 bytes) and flags (2 bytes) = 6 total bytes
-      if (peekBuffer.remaining() < 6) return false;
+      if (peekBuffer.remaining() < 6) {
+        return false;
+      }
       peekBuffer.getInt();   // userType
       peekBuffer.getShort(); // flags
 
@@ -82,12 +86,16 @@ public class ColMetaDataTokenParser implements TokenParser {
       }
 
       // 4. Check for nameLengthInChars (1 byte)
-      if (peekBuffer.remaining() < 1) return false;
+      if (peekBuffer.remaining() < 1) {
+        return false;
+      }
       byte nameLengthInChars = peekBuffer.get();
       int nameBytes = nameLengthInChars * 2;
 
       // 5. Check for the string payload
-      if (peekBuffer.remaining() < nameBytes) return false;
+      if (peekBuffer.remaining() < nameBytes) {
+        return false;
+      }
       peekBuffer.position(peekBuffer.position() + nameBytes);
     }
 

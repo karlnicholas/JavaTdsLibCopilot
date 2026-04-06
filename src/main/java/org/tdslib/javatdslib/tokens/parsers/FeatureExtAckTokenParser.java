@@ -53,17 +53,25 @@ public class FeatureExtAckTokenParser implements TokenParser {
 
     while (true) {
       // 1. Check if we have enough bytes to read the featureId (1 byte)
-      if (peekBuffer.remaining() < 1) return false;
+      if (peekBuffer.remaining() < 1) {
+        return false;
+      }
 
       byte featureId = peekBuffer.get();
-      if (featureId == (byte) 0xFF) return true; // Terminator reached successfully
+      if (featureId == (byte) 0xFF) {
+        return true; // Terminator reached successfully
+      }
 
       // 2. Check if we have enough bytes to read the featureLen (4 bytes)
-      if (peekBuffer.remaining() < 4) return false;
+      if (peekBuffer.remaining() < 4) {
+        return false;
+      }
       int featureLen = peekBuffer.getInt();
 
       // 3. Check if we have enough bytes to skip the feature data
-      if (peekBuffer.remaining() < featureLen) return false;
+      if (peekBuffer.remaining() < featureLen) {
+        return false;
+      }
 
       // Skip past this feature's data to check the next one
       peekBuffer.position(peekBuffer.position() + featureLen);

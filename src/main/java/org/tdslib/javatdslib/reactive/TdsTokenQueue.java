@@ -24,7 +24,7 @@ public class TdsTokenQueue implements TdsDecoderSink {
   private static final Logger logger = LoggerFactory.getLogger(TdsTokenQueue.class);
 
   private static final int HIGH_WATERMARK = 5 * 1024 * 1024; // 5 MB
-  private static final int LOW_WATERMARK = 1 * 1024 * 1024;  // 1 MB
+  private static final int LOW_WATERMARK = 1024 * 1024;  // 1 MB
 
   private final TdsTransport transport;
   private final Queue<TdsStreamEvent> queue = new ConcurrentLinkedQueue<>();
@@ -33,10 +33,20 @@ public class TdsTokenQueue implements TdsDecoderSink {
 
   private Runnable onEventAvailableCallback;
 
+  /**
+   * Constructs a new TdsTokenQueue.
+   *
+   * @param transport The TDS transport.
+   */
   public TdsTokenQueue(TdsTransport transport) {
     this.transport = transport;
   }
 
+  /**
+   * Sets the callback to invoke when an event is available.
+   *
+   * @param callback The callback to invoke.
+   */
   public void setOnEventAvailableCallback(Runnable callback) {
     this.onEventAvailableCallback = callback;
   }
@@ -46,23 +56,32 @@ public class TdsTokenQueue implements TdsDecoderSink {
   // ====================================================================================
 
   @Override
-  public void onToken(Token token) { offer(new TokenEvent(token)); }
+  public void onToken(Token token) {
+    offer(new TokenEvent(token));
+  }
 
   @Override
-  public void onColumnData(ColumnData data) { offer(new ColumnEvent(data)); }
+  public void onColumnData(ColumnData data) {
+    offer(new ColumnEvent(data));
+  }
 
   @Override
-  public void onError(Throwable error) { offer(new ErrorEvent(error)); }
+  public void onError(Throwable error) {
+    offer(new ErrorEvent(error));
+  }
 
   private void offer(TdsStreamEvent event) {
-    //TODO:check offer, paranoid code.
+    // TODO: check offer, paranoid code.
     queue.offer(event);
     int currentWeight = queueByteWeight.addAndGet(event.getByteWeight());
-    logger.trace("[TokenQueue] Enqueued {}. Current weight: {} bytes", event.getClass().getSimpleName(), currentWeight);
+    logger.trace("[TokenQueue] Enqueued {}. Current weight: {} bytes",
+        event.getClass().getSimpleName(), currentWeight);
 
     // 1. Manage High Watermark (Suspend)
     if (currentWeight > HIGH_WATERMARK && isNetworkSuspended.compareAndSet(false, true)) {
-      logger.debug("[TokenQueue] HIGH WATERMARK BREACHED ({} bytes). Triggering network suspension.", currentWeight);
+      logger.debug(
+          "[TokenQueue] HIGH WATERMARK BREACHED ({} bytes). Triggering network suspension.",
+          currentWeight);
       transport.suspendNetworkRead();
     }
 
@@ -76,25 +95,40 @@ public class TdsTokenQueue implements TdsDecoderSink {
   // CONSUMER: WORKER THREAD (AsyncWorkerSink pulls from here)
   // ====================================================================================
 
+  /**
+   * Polls the next event from the queue.
+   *
+   * @return The next event, or null if the queue is empty.
+   */
   public TdsStreamEvent poll() {
     TdsStreamEvent event = queue.poll();
     if (event != null) {
       int weight = queueByteWeight.addAndGet(-event.getByteWeight());
-      logger.trace("[TokenQueue] Dequeued {}. Current weight: {} bytes", event.getClass().getSimpleName(), weight);
+      logger.trace("[TokenQueue] Dequeued {}. Current weight: {} bytes",
+          event.getClass().getSimpleName(), weight);
 
       // Manage Low Watermark (Resume)
       if (weight < LOW_WATERMARK && isNetworkSuspended.compareAndSet(true, false)) {
-        logger.debug("[TokenQueue] LOW WATERMARK REACHED ({} bytes). Triggering network resumption.", weight);
+        logger.debug("[TokenQueue] LOW WATERMARK REACHED ({} bytes). Triggering network resumption.",
+            weight);
         transport.resumeNetworkRead();
       }
     }
     return event;
   }
 
+  /**
+   * Peeks the next event from the queue.
+   *
+   * @return The next event, or null if the queue is empty.
+   */
   public TdsStreamEvent peek() {
     return queue.peek();
   }
 
+  /**
+   * Clears the queue.
+   */
   public void clear() {
     queue.clear();
     queueByteWeight.set(0);

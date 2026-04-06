@@ -54,7 +54,9 @@ public class LoginAckTokenParser implements TokenParser {
 
   @Override
   public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
-    if (peekBuffer.remaining() < 2) return false;
+    if (peekBuffer.remaining() < 2) {
+      return false;
+    }
     int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
     return peekBuffer.remaining() >= tokenLen;
   }

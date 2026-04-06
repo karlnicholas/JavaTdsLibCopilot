@@ -23,14 +23,16 @@ public class R2dbcErrorTranslator {
 
     return switch ((int) errorCode) {
       case 208, 2812 -> new R2dbcBadGrammarException(msg, sqlState, (int) errorCode);
-      case 547, 2601, 2627 -> new R2dbcDataIntegrityViolationException(msg, sqlState, (int) errorCode);
+      case 547, 2601, 2627 -> new R2dbcDataIntegrityViolationException(
+          msg, sqlState, (int) errorCode);
       case 229, 230 -> new R2dbcPermissionDeniedException(msg, sqlState, (int) errorCode);
       case 1205 -> new R2dbcTransientResourceException(msg, sqlState, (int) errorCode);
       default -> {
         if (tdsError.getSeverity() >= 20) {
           yield new R2dbcNonTransientResourceException(msg, sqlState, (int) errorCode);
         }
-        yield new R2dbcException(msg, sqlState, (int) errorCode) {};
+        yield new R2dbcException(msg, sqlState, (int) errorCode) {
+        };
       }
     };
   }

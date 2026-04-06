@@ -8,6 +8,12 @@ import java.nio.ByteBuffer;
 /** Shared parser for the TYPE_INFO stream structure. */
 public class TypeInfoParser {
 
+  /**
+   * Parses the TYPE_INFO structure from the provided payload buffer.
+   *
+   * @param payload The buffer containing the payload data.
+   * @return A parsed TypeInfo object.
+   */
   public static TypeInfo parse(ByteBuffer payload) {
     int dataTypeByte = payload.get() & 0xFF;
     TdsType tdsType = TdsType.valueOf((byte) dataTypeByte);
@@ -93,9 +99,14 @@ public class TypeInfoParser {
   /**
    * Safely calculates if there are enough bytes for the TYPE_INFO structure and advances
    * the peekBuffer position if enough bytes are available.
+   *
+   * @param peekBuffer The buffer to check.
+   * @return true if enough bytes are available, false otherwise.
    */
   public static boolean canParse(ByteBuffer peekBuffer) {
-    if (peekBuffer.remaining() < 1) return false;
+    if (peekBuffer.remaining() < 1) {
+      return false;
+    }
 
     int dataTypeByte = peekBuffer.get() & 0xFF;
     TdsType tdsType = TdsType.valueOf((byte) dataTypeByte);
@@ -110,16 +121,22 @@ public class TypeInfoParser {
 
       case BYTELEN:
         if (tdsType == TdsType.DECIMALN || tdsType == TdsType.NUMERICN) {
-          if (peekBuffer.remaining() < 3) return false;
+          if (peekBuffer.remaining() < 3) {
+            return false;
+          }
           peekBuffer.position(peekBuffer.position() + 3);
         } else {
-          if (peekBuffer.remaining() < 1) return false;
+          if (peekBuffer.remaining() < 1) {
+            return false;
+          }
           peekBuffer.position(peekBuffer.position() + 1);
         }
         break;
 
       case PREC_SCALE:
-        if (peekBuffer.remaining() < 3) return false;
+        if (peekBuffer.remaining() < 3) {
+          return false;
+        }
         peekBuffer.position(peekBuffer.position() + 3);
         break;
 
@@ -128,7 +145,9 @@ public class TypeInfoParser {
         if (isTextType(tdsType)) {
           bytesRequiredUshort += 5;
         }
-        if (peekBuffer.remaining() < bytesRequiredUshort) return false;
+        if (peekBuffer.remaining() < bytesRequiredUshort) {
+          return false;
+        }
         peekBuffer.position(peekBuffer.position() + bytesRequiredUshort);
         break;
 
@@ -137,19 +156,27 @@ public class TypeInfoParser {
         if (tdsType == TdsType.TEXT || tdsType == TdsType.NTEXT) {
           bytesRequiredLong += 5;
         }
-        if (peekBuffer.remaining() < bytesRequiredLong) return false;
+        if (peekBuffer.remaining() < bytesRequiredLong) {
+          return false;
+        }
         peekBuffer.position(peekBuffer.position() + bytesRequiredLong);
 
-        if (!skipTableNames(peekBuffer)) return false;
+        if (!skipTableNames(peekBuffer)) {
+          return false;
+        }
         break;
 
       case PLP:
-        if (peekBuffer.remaining() < 1) return false;
+        if (peekBuffer.remaining() < 1) {
+          return false;
+        }
         peekBuffer.position(peekBuffer.position() + 1);
         break;
 
       case SCALE_LEN:
-        if (peekBuffer.remaining() < 1) return false;
+        if (peekBuffer.remaining() < 1) {
+          return false;
+        }
         peekBuffer.position(peekBuffer.position() + 1);
         break;
 
@@ -161,15 +188,21 @@ public class TypeInfoParser {
   }
 
   private static boolean skipTableNames(ByteBuffer peekBuffer) {
-    if (peekBuffer.remaining() < 1) return false;
+    if (peekBuffer.remaining() < 1) {
+      return false;
+    }
     int numParts = peekBuffer.get() & 0xFF;
 
     for (int i = 0; i < numParts; i++) {
-      if (peekBuffer.remaining() < 2) return false;
+      if (peekBuffer.remaining() < 2) {
+        return false;
+      }
       int len = peekBuffer.getShort() & 0xFFFF;
       int byteLen = len * 2;
 
-      if (peekBuffer.remaining() < byteLen) return false;
+      if (peekBuffer.remaining() < byteLen) {
+        return false;
+      }
       peekBuffer.position(peekBuffer.position() + byteLen);
     }
     return true;

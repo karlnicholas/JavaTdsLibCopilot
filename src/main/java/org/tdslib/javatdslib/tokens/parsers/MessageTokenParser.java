@@ -90,7 +90,9 @@ public class MessageTokenParser implements TokenParser {
 
   private String readUsVarChar(final ByteBuffer buf) {
     final int charCount = Short.toUnsignedInt(buf.getShort());
-    if (charCount == 0) return "";
+    if (charCount == 0) {
+      return "";
+    }
     final int byteCount = charCount * 2;
     final byte[] bytes = new byte[byteCount];
     buf.get(bytes);
@@ -99,7 +101,9 @@ public class MessageTokenParser implements TokenParser {
 
   private String readBvarChar(final ByteBuffer buf) {
     final int charCount = Byte.toUnsignedInt(buf.get());
-    if (charCount == 0) return "";
+    if (charCount == 0) {
+      return "";
+    }
     final int byteCount = charCount * 2;
     final byte[] bytes = new byte[byteCount];
     buf.get(bytes);
@@ -108,7 +112,9 @@ public class MessageTokenParser implements TokenParser {
 
   @Override
   public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
-    if (peekBuffer.remaining() < 2) return false;
+    if (peekBuffer.remaining() < 2) {
+      return false;
+    }
     int tokenLen = Short.toUnsignedInt(peekBuffer.getShort());
     return peekBuffer.remaining() >= tokenLen;
   }

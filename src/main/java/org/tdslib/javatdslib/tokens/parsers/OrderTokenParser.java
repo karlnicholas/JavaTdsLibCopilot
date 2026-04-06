@@ -44,7 +44,9 @@ public class OrderTokenParser implements TokenParser {
 
   @Override
   public boolean canParse(ByteBuffer peekBuffer, ConnectionContext context) {
-    if (peekBuffer.remaining() < 2) return false;
+    if (peekBuffer.remaining() < 2) {
+      return false;
+    }
     int length = Short.toUnsignedInt(peekBuffer.getShort());
     return peekBuffer.remaining() >= length;
   }

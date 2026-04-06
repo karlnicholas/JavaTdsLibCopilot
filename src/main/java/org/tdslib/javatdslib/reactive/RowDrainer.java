@@ -18,7 +18,9 @@ import org.tdslib.javatdslib.transport.ConnectionContext;
 public class RowDrainer {
   private static final Logger logger = LoggerFactory.getLogger(RowDrainer.class);
 
-  // ADDED: Marker for columns we haven't read from the network yet
+  /**
+   * Marker for columns we haven't read from the network yet.
+   */
   public static final Object UNFETCHED = new Object();
 
   private final ColMetaDataToken metaData;
@@ -33,19 +35,29 @@ public class RowDrainer {
   // ADD FIELD
   private final TdsTokenQueue tokenQueue;
 
-  public RowDrainer(ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
+  /**
+   * Constructs a new RowDrainer instance.
+   *
+   * @param metaData   The column metadata token for the row.
+   * @param context    The connection context.
+   * @param tokenQueue The token queue.
+   */
+  public RowDrainer(
+      ColMetaDataToken metaData, ConnectionContext context, TdsTokenQueue tokenQueue) {
     this.metaData = metaData;
     this.context = context;
     this.tokenQueue = tokenQueue;
     this.totalColumns = metaData.getColumns().size();
     this.assemblingRow = new Object[totalColumns];
-// Initialize the row to UNFETCHED
+    // Initialize the row to UNFETCHED
     java.util.Arrays.fill(this.assemblingRow, UNFETCHED);
   }
 
   /**
    * Phase B: The Asynchronous Drain
    * Called by AsyncWorkerSink every time a chunk arrives from the network.
+   *
+   * @param cd The column data chunk.
    */
   public void processColumn(ColumnData cd) {
     int colIndex = cd.getColumnIndex();
@@ -53,8 +65,8 @@ public class RowDrainer {
     TdsType tdsType = TdsType.valueOf(colMeta.getDataType());
 
     // FIX: A column is PLP if the strategy is PLP, OR if the Framer chunked it as PartialData
-    boolean isPlp = (cd instanceof PartialDataColumn) ||
-        (tdsType != null && tdsType.strategy == TdsType.LengthStrategy.PLP);
+    boolean isPlp = (cd instanceof PartialDataColumn)
+        || (tdsType != null && tdsType.strategy == TdsType.LengthStrategy.PLP);
 
     if (isPlp) {
       logger.trace("[RowDrainer] PLP/LOB detected at index {}. Yielding early.", colIndex);
@@ -93,6 +105,11 @@ public class RowDrainer {
     return isFullyComplete;
   }
 
+  /**
+   * Assembles the populated columns into a TdsRow instance.
+   *
+   * @return A complete TdsRow.
+   */
   public TdsRow assembleRow() {
     return new TdsRow(this.assemblingRow, this.metaData, this.context, this.tokenQueue);
   }

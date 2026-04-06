@@ -16,13 +16,14 @@ import java.nio.ByteBuffer;
 public class ReturnValueTokenParser implements TokenParser {
 
   @Override
-  public Token parse(final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
+  public Token parse(
+      final ByteBuffer payload, final byte tokenType, final ConnectionContext context) {
     if (tokenType != TokenType.RETURN_VALUE.getValue()) {
       throw new IllegalArgumentException("Expected RETURNVALUE token (0xAC)");
     }
 
     // 1. Ordinal & Parameter Name
-    short ordinal = payload.getShort();
+    final short ordinal = payload.getShort();
     int nameLen = payload.get() & 0xFF;
     String paramName = "";
     if (nameLen > 0) {
@@ -48,17 +49,23 @@ public class ReturnValueTokenParser implements TokenParser {
     int startPos = peekBuffer.position();
     try {
       // 1. Ordinal (2 bytes) + Param Name Length (1 byte)
-      if (peekBuffer.remaining() < 3) return false;
+      if (peekBuffer.remaining() < 3) {
+        return false;
+      }
       peekBuffer.getShort(); // skip ordinal
       int nameLen = peekBuffer.get() & 0xFF;
 
       // 2. Param Name Bytes (Unicode = nameLen * 2)
       int nameBytesLen = nameLen * 2;
-      if (peekBuffer.remaining() < nameBytesLen) return false;
+      if (peekBuffer.remaining() < nameBytesLen) {
+        return false;
+      }
       peekBuffer.position(peekBuffer.position() + nameBytesLen);
 
       // 3. Status Flags (1) + User Type (4) + Flags (2) = 7 bytes
-      if (peekBuffer.remaining() < 7) return false;
+      if (peekBuffer.remaining() < 7) {
+        return false;
+      }
       peekBuffer.position(peekBuffer.position() + 7);
 
       // 4. Safely verify TypeInfo

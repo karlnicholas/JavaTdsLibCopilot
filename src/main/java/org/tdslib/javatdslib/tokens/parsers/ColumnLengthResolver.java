@@ -4,6 +4,9 @@ import org.tdslib.javatdslib.protocol.TdsType;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Resolves the byte length of standard columns based on their TdsType.
+ */
 public class ColumnLengthResolver {
 
   // NEW: Signal that the network cut off the length header itself
@@ -12,13 +15,19 @@ public class ColumnLengthResolver {
   /**
    * Calculates the expected byte length of a standard column based on its TdsType.
    * Does NOT handle PLP chunks (strategy == PLP).
+   *
+   * @param payload   The payload buffer.
+   * @param type      The TDS type.
+   * @param maxLength The max length.
    * @return The length in bytes to read, -1 if the value is SQL NULL, or INCOMPLETE_HEADER (-2)
    */
   public static int resolveStandardLength(ByteBuffer payload, TdsType type, int maxLength) {
     switch (type.strategy) {
       case FIXED:
         if (type == TdsType.DATE) {
-          if (payload.remaining() < 1) return INCOMPLETE_HEADER;
+          if (payload.remaining() < 1) {
+            return INCOMPLETE_HEADER;
+          }
           int len = payload.get() & 0xFF;
           return len == 0 ? -1 : len;
         }
@@ -27,27 +36,34 @@ public class ColumnLengthResolver {
       case SCALE_LEN:
       case PREC_SCALE:
       case BYTELEN:
-        if (payload.remaining() < 1) return INCOMPLETE_HEADER;
-        int bLen = payload.get() & 0xFF;
-        return bLen == 0 ? -1 : bLen;
+        if (payload.remaining() < 1) {
+          return INCOMPLETE_HEADER;
+        }
+        int byteLen = payload.get() & 0xFF;
+        return byteLen == 0 ? -1 : byteLen;
 
       case USHORTLEN:
         // Note: 65535 (0xFFFF) typically signals PLP or NULL depending on the context.
         // Assuming standard VarLen for this branch.
-        if (payload.remaining() < 2) return INCOMPLETE_HEADER;
+        if (payload.remaining() < 2) {
+          return INCOMPLETE_HEADER;
+        }
         int varLen = Short.toUnsignedInt(payload.getShort());
         return varLen == 0xFFFF ? -1 : varLen;
 
       case LONGLEN:
         // TEXT/IMAGE/NTEXT headers
-        if (payload.remaining() < 1) return INCOMPLETE_HEADER;
+        if (payload.remaining() < 1) {
+          return INCOMPLETE_HEADER;
+        }
         int textPtrLen = payload.get() & 0xFF;
 
         if (textPtrLen == 0) {
           return -1; // Null
         }
 
-        // We need (textPtrLen) + 8 (timestamp) + 4 (data length) bytes to determine the actual data length
+        // We need (textPtrLen) + 8 (timestamp) + 4 (data length) bytes to determine the actual
+        // data length
         int requiredHeaderBytes = textPtrLen + 8 + 4;
         if (payload.remaining() < requiredHeaderBytes) {
           return INCOMPLETE_HEADER;
@@ -60,7 +76,8 @@ public class ColumnLengthResolver {
         return payload.getInt();
 
       default:
-        throw new IllegalArgumentException("Unsupported or PLP length strategy in standard parser: " + type.strategy);
+        throw new IllegalArgumentException(
+            "Unsupported or PLP length strategy in standard parser: " + type.strategy);
     }
   }
 }
