@@ -25,12 +25,12 @@ public class RowDrainer {
 
   private final ColMetaDataToken metaData;
   private final ConnectionContext context;
-  private final Object[] assemblingRow; // Shifted from byte[][] to Object[]
+  private final Object[] assemblingRow;
   private final int totalColumns;
 
-  private boolean isReadyToYield = false; // (Existing)
-  private boolean isRowEmitted = false;   // NEW: Tracks if we've handed the row to the user
-  private boolean isFullyComplete = false; // NEW: Tracks if the network stream for this row is 100% finished
+  private boolean isReadyToYield = false;
+  private boolean isRowEmitted = false;
+  private boolean isFullyComplete = false;
 
   // ADD FIELD
   private final TdsTokenQueue tokenQueue;

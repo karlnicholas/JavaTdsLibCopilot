@@ -36,7 +36,8 @@ public class TdsBlob implements Blob {
    * @param rowUnlockCallback Callback invoked when streaming completes or gets discarded.
    */
   public TdsBlob(
-      TdsTokenQueue tokenQueue, int columnIndex, ColumnData firstChunk, Runnable rowUnlockCallback) {
+      TdsTokenQueue tokenQueue, int columnIndex,
+      ColumnData firstChunk, Runnable rowUnlockCallback) {
     this.tokenQueue = tokenQueue;
     this.columnIndex = columnIndex;
     this.firstChunk = firstChunk;
@@ -88,7 +89,7 @@ public class TdsBlob implements Blob {
 
       sink.onCancel(this::syncDiscard);
 
-    }).subscribeOn(Schedulers.boundedElastic()); // CRITICAL: Protects the Netty thread from parkNanos
+    }).subscribeOn(Schedulers.boundedElastic());
   }
 
   @Override

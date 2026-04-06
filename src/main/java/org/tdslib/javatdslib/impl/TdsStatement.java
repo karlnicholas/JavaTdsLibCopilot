@@ -54,7 +54,8 @@ public class TdsStatement implements Statement {
   }
 
   /**
-   * Adds the current set of bound parameters to the batch and clears the current parameters for the next set.
+   * Adds the current set of bound parameters to the
+   * batch and clears the current parameters for the next set.
    *
    * @return This statement.
    */

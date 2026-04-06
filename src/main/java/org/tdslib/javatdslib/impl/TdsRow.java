@@ -127,7 +127,6 @@ public class TdsRow implements Row, Result.RowSegment {
         rawData = new CompleteDataColumn(index, bytes);
       }
 
-      ColumnData initialChunk = (rawData instanceof ColumnData cd) ? cd : null;
       payload[index] = DISCARDED; // LOB Streams can only be consumed once!
       discardUnfetchedColumnsBefore(index);
 
@@ -145,6 +144,7 @@ public class TdsRow implements Row, Result.RowSegment {
         }
       };
 
+      ColumnData initialChunk = (rawData instanceof ColumnData cd) ? cd : null;
       if (type == Clob.class) {
         Charset charset = getCharset(colMeta, tdsType);
         return type.cast(new TdsClob(

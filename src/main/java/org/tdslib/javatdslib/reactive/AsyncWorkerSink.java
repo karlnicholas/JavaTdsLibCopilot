@@ -50,7 +50,6 @@ public class AsyncWorkerSink {
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
   private final AtomicBoolean isPaused = new AtomicBoolean(false); // Stream Lock
 
-  private final CountDownLatch completionLatch = new CountDownLatch(1);
   private final List<Result.Segment> receivedSegments = new CopyOnWriteArrayList<>();
 
   private ColMetaDataToken activeMetaData;
@@ -274,24 +273,14 @@ public class AsyncWorkerSink {
 
   private void pushError(Throwable error) {
     logger.debug("Stream Error: {}", error.getMessage());
-    completionLatch.countDown();
     if (onError != null) {
       onError.accept(error);
     }
   }
 
   private void pushComplete() {
-    completionLatch.countDown();
     if (onComplete != null) {
       onComplete.run();
     }
-  }
-
-  public void awaitCompletion() throws InterruptedException {
-    completionLatch.await();
-  }
-
-  public List<Result.Segment> getReceivedSegments() {
-    return receivedSegments;
   }
 }
