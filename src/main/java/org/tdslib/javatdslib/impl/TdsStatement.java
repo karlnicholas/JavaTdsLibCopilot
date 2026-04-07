@@ -9,8 +9,6 @@ import io.r2dbc.spi.Type;
 import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
-import org.tdslib.javatdslib.headers.TraceActivityHeader;
-import org.tdslib.javatdslib.headers.TransactionDescriptorHeader;
 import org.tdslib.javatdslib.packets.PacketType;
 import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsParameter;
@@ -22,14 +20,12 @@ import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
-import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Implementation of {@link Statement} for the TDS protocol. This class allows for the execution of
