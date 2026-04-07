@@ -13,6 +13,12 @@ public class TraceActivityHeader extends TdsHeader {
   private final UUID activityId;
   private final int activitySequence;
 
+  /**
+   * Constructs a new TraceActivityHeader.
+   *
+   * @param activityId       The UUID of the activity.
+   * @param activitySequence The sequence number of the activity.
+   */
   public TraceActivityHeader(UUID activityId, int activitySequence) {
     super((short) 0x0003);
     if (activityId == null) {
@@ -45,7 +51,6 @@ public class TraceActivityHeader extends TdsHeader {
    */
   private void writeMicrosoftGuid(ByteBuffer buffer, UUID uuid) {
     long msb = uuid.getMostSignificantBits();
-    long lsb = uuid.getLeastSignificantBits();
 
     // Data1: 32-bit (Little Endian)
     buffer.putInt((int) (msb >>> 32));
@@ -57,6 +62,7 @@ public class TraceActivityHeader extends TdsHeader {
     // Data4: 64-bit (Big Endian sequence of bytes)
     // Since the ByteBuffer is currently LITTLE_ENDIAN, we must write
     // these remaining 8 bytes one by one to preserve network byte order.
+    long lsb = uuid.getLeastSignificantBits();
     for (int i = 7; i >= 0; i--) {
       buffer.put((byte) (lsb >>> (8 * i)));
     }

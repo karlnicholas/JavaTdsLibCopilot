@@ -173,12 +173,12 @@ public class TdsStatement implements Statement {
 
     // Clean, standard Flux execution. Transport handles the headers!
     return transport.execute(headers -> {
-          if (isSimpleBatch) {
-            return createSqlBatchMessage(query, headers);
-          } else {
-            return createRpcMessage(query, executions, headers);
-          }
-        })
+      if (isSimpleBatch) {
+        return createSqlBatchMessage(query, headers);
+      } else {
+        return createRpcMessage(query, executions, headers);
+      }
+    })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
@@ -213,7 +213,8 @@ public class TdsStatement implements Statement {
    * @return A {@link TdsMessage} ready for transport.
    */
   // Modified in TdsStatement.java
-  private TdsMessage createRpcMessage(String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
+  private TdsMessage createRpcMessage(
+      String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
     RpcEncodingContext encodingContext =
         new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
