@@ -70,14 +70,13 @@ public class TdsConnection implements Connection {
           ? txName.getBytes(StandardCharsets.UTF_16LE)
           : new byte[0];
 
-      int nameLenChars = nameBytes.length / 2;
+      int nameLenBytes = nameBytes.length;
 
-      ByteBuffer payload = ByteBuffer.allocate(5 + nameBytes.length).order(ByteOrder.LITTLE_ENDIAN);
-      payload.putShort((short) 5);            // TM_BEGIN_XACT
+      ByteBuffer payload = ByteBuffer.allocate(4 + nameBytes.length).order(ByteOrder.LITTLE_ENDIAN);
+      payload.putShort((short) 5);
       payload.put(tdsIsolationLevel);
-      payload.put((byte) 0x00);
-      payload.put((byte) nameLenChars);
-      if (nameLenChars > 0) {
+      payload.put((byte) nameLenBytes);
+      if (nameLenBytes > 0) {
         payload.put(nameBytes);
       }
       payload.flip();
