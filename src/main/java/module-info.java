@@ -1,4 +1,4 @@
-import org.tdslib.javatdslib.impl.TdsConnectionFactoryProvider;
+import org.tdslib.javatdslib.TdsConnectionFactoryProvider;
 
 module org.tdslib.javatdslib {
   // 1. External dependencies mapped from your pom.xml
@@ -10,8 +10,9 @@ module org.tdslib.javatdslib {
   // 2. Export ONLY your clean public API
   exports org.tdslib.javatdslib.api;
   exports org.tdslib.javatdslib.impl;
+  exports org.tdslib.javatdslib;
 
   // 3. Register the R2DBC Service Provider
   provides io.r2dbc.spi.ConnectionFactoryProvider
-      with org.tdslib.javatdslib.impl.TdsConnectionFactoryProvider;
+      with TdsConnectionFactoryProvider;
 }
