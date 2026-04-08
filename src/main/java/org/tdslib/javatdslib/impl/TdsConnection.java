@@ -61,14 +61,8 @@ public class TdsConnection implements Connection {
       IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
       String txName = definition.getAttribute(TransactionDefinition.NAME);
 
-      // --- ADD THIS TRUNCATION BLOCK ---
-      // SQL Server enforces a strict 32-character limit on transaction names.
-      // Spring often passes fully qualified method names (e.g., org.example.service...)
-      // which easily exceed this limit.
-      if (txName != null && txName.length() > 32) {
-        txName = txName.substring(0, 32);
-      }
-      // ---------------------------------
+      // Compress fully qualified Spring method names to fit SQL Server's limit
+      txName = compressTransactionName(txName);
 
       byte tdsIsolationLevel = mapIsolationLevel(level);
 
@@ -89,6 +83,54 @@ public class TdsConnection implements Connection {
 
       return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
     })).then();
+  }
+
+  /**
+   * Compresses a fully qualified method name to fit within SQL Server's 32-character
+   * transaction name limit, mimicking SLF4J logger name compression.
+   * Example: "org.example.service.CourseService.getAllCourses"
+   * -> "o.e.s.CourseService.getAllCourses"
+   */
+  private String compressTransactionName(String txName) {
+    if (txName == null || txName.length() <= 32) {
+      return txName;
+    }
+
+    String[] parts = txName.split("\\.");
+
+    // We only want to compress the package names, leaving the Class and Method
+    // (the last two parts) intact if possible.
+    int packagePartsToCompress = parts.length - 2;
+
+    for (int i = 0; i < packagePartsToCompress; i++) {
+      if (parts[i].length() > 1) {
+        // Compress this package part to just its first letter
+        parts[i] = parts[i].substring(0, 1);
+      }
+
+      // Re-calculate the current total length
+      int currentLen = parts.length - 1; // Account for the dots
+      for (String p : parts) {
+        currentLen += p.length();
+      }
+
+      // Stop compressing if we've successfully shrunk it under the limit
+      if (currentLen <= 32) {
+        break;
+      }
+    }
+
+    String compressed = String.join(".", parts);
+
+    // If it is STILL over 32 characters (e.g., very long class or method name),
+    // apply a hard truncation. We take the LAST 32 characters because the end
+    // of the string contains the method name, which is the most critical
+    // part for debugging active sessions in SQL Server.
+    if (compressed.length() > 32) {
+      return compressed.substring(compressed.length() - 32);
+    }
+
+    return compressed;
   }
 
   @Override
