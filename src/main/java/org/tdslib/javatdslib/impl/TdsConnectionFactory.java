@@ -100,6 +100,6 @@ public class TdsConnectionFactory implements ConnectionFactory {
 
   @Override
   public ConnectionFactoryMetadata getMetadata() {
-    return null;
+    return () -> "Microsoft SQL Server";
   }
 }

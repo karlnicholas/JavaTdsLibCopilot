@@ -100,7 +100,10 @@ public class TdsStatement implements Statement {
       throw new IllegalArgumentException("Unsupported parameter type: " + p.getType());
     }
 
-    currentParams.add(new TdsParameter(tdsType, name, p.getValue(), p instanceof Parameter.Out));
+    // --- FIX: Ensure the parameter name always starts with '@' ---
+    String safeName = name.startsWith("@") ? name : "@" + name;
+
+    currentParams.add(new TdsParameter(tdsType, safeName, p.getValue(), p instanceof Parameter.Out));
     return this;
   }
 
@@ -133,7 +136,10 @@ public class TdsStatement implements Statement {
       throw new IllegalArgumentException("Unsupported type for NULL: " + type.getName());
     }
 
-    currentParams.add(new TdsParameter(tdsType, name, null, false));
+    // --- FIX: Ensure the parameter name always starts with '@' ---
+    String safeName = name.startsWith("@") ? name : "@" + name;
+
+    currentParams.add(new TdsParameter(tdsType, safeName, null, false));
     return this;
   }
 

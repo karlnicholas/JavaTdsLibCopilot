@@ -61,6 +61,15 @@ public class TdsConnection implements Connection {
       IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
       String txName = definition.getAttribute(TransactionDefinition.NAME);
 
+      // --- ADD THIS TRUNCATION BLOCK ---
+      // SQL Server enforces a strict 32-character limit on transaction names.
+      // Spring often passes fully qualified method names (e.g., org.example.service...)
+      // which easily exceed this limit.
+      if (txName != null && txName.length() > 32) {
+        txName = txName.substring(0, 32);
+      }
+      // ---------------------------------
+
       byte tdsIsolationLevel = mapIsolationLevel(level);
 
       byte[] nameBytes = (txName != null && !txName.isEmpty())
