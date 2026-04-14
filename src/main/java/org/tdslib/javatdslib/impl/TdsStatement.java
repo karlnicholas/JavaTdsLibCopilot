@@ -100,10 +100,12 @@ public class TdsStatement implements Statement {
       throw new IllegalArgumentException("Unsupported parameter type: " + p.getType());
     }
 
-    // --- FIX: Ensure the parameter name always starts with '@' ---
+    // Ensure the parameter name always starts with '@' ---
     String safeName = name.startsWith("@") ? name : "@" + name;
 
-    currentParams.add(new TdsParameter(tdsType, safeName, p.getValue(), p instanceof Parameter.Out));
+    currentParams.add(
+        new TdsParameter(tdsType, safeName, p.getValue(), p instanceof Parameter.Out)
+    );
     return this;
   }
 
