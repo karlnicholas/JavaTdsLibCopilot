@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 /**
  * Decodes TDS date and time types into Java Time objects.
@@ -48,7 +49,11 @@ public class DateTimeDecoder implements ResultDecoder {
         result = readDateTime2(data, scale);
         break;
       case DATETIMEOFFSET:
-        result = readDateTimeOffset(data, scale);
+        OffsetDateTime odt = readDateTimeOffset(data, scale);
+        if (targetType == ZonedDateTime.class) {
+          return targetType.cast(odt.toZonedDateTime());
+        }
+        result = odt;
         break;
       case DATETIMN:
       case DATETIME:

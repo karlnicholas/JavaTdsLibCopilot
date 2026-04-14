@@ -113,7 +113,11 @@ public class NumericDecoder implements ResultDecoder {
       case DECIMAL:
       case NUMERICN:
       case DECIMALN:
-        return targetType.cast(readDecimal(data, scale));
+        BigDecimal decimalValue = readDecimal(data, scale);
+        if (targetType == BigInteger.class) {
+          return targetType.cast(decimalValue.toBigInteger());
+        }
+        return targetType.cast(decimalValue);
 
       case MONEY:
       case MONEYN:
@@ -157,6 +161,13 @@ public class NumericDecoder implements ResultDecoder {
     }
     if (type == Boolean.class) {
       return (T) Boolean.valueOf(val != 0);
+    }
+    // 3. Numeric types
+    if (type == BigInteger.class) {
+      return type.cast(BigInteger.valueOf(val));
+    }
+    if (type == BigDecimal.class) {
+      return type.cast(BigDecimal.valueOf(val));
     }
 
     // Safest ultimate fallback
