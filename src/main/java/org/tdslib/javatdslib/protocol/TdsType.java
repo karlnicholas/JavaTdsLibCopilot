@@ -135,6 +135,9 @@ public enum TdsType {
     if (java.math.BigDecimal.class.isAssignableFrom(clazz)) {
       return DECIMALN;
     }
+    if (java.math.BigInteger.class.isAssignableFrom(clazz)) {
+      return DECIMALN;
+    }
     if (clazz == Double.class || clazz == double.class) {
       return FLTN;
     }
@@ -154,6 +157,9 @@ public enum TdsType {
       return DATETIME2;
     }
     if (clazz == java.time.OffsetDateTime.class) {
+      return DATETIMEOFFSET;
+    }
+    if (clazz == java.time.ZonedDateTime.class) {
       return DATETIMEOFFSET;
     }
     if (clazz == String.class) {

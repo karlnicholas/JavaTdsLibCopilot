@@ -107,7 +107,9 @@ public class AsyncWorkerSink {
    */
   public void cancel() {
     isCancelled.set(true);
-    tokenQueue.clear();
+    // FIX: Do not immediately clear the token queue.
+    // We must allow the drain loop to process any fatal ErrorTokens
+    // that arrived during the cancellation race condition.
   }
 
   private void scheduleDrain() {
@@ -129,9 +131,13 @@ public class AsyncWorkerSink {
 
         while (emitted != requested) {
           // CRITICAL FIX: Use 'break' to gracefully exit and decrement WIP
-          if (isCancelled.get() || isPaused.get()) {
+          // FIX: Do not instantly break on cancel. We must drain to look for ErrorTokens.
+          if (isPaused.get()) {
             break;
           }
+//          if (isCancelled.get() || isPaused.get()) {
+//            break;
+//          }
 
           int segmentsBefore = receivedSegments.size();
 
@@ -145,9 +151,16 @@ public class AsyncWorkerSink {
             isCancelled.set(true);
             break; // Break instead of return to close out WIP safely
           } else if (event instanceof TokenEvent te) {
+            // ERROR TRAP: If cancelled, drop normal tokens but explicitly catch ErrorTokens
+            if (isCancelled.get() && !(te.token() instanceof ErrorToken)) {
+              continue;
+            }
             processToken(te.token());
           } else if (event instanceof ColumnEvent ce) {
-            processColumn(ce.data());
+            // Drop columns if we are cancelled
+            if (!isCancelled.get()) {
+              processColumn(ce.data());
+            }
           }
 
           if (receivedSegments.size() > segmentsBefore) {
@@ -202,17 +215,26 @@ public class AsyncWorkerSink {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
 
-      // --- NEW: Delayed Error Emission ---
-      if (this.pendingError != null) {
-        pushError(this.pendingError);
-        this.pendingError = null; // Clear it to be safe
-      } else if (!done.getStatus().hasMoreResults()) {
+//      // --- NEW: Delayed Error Emission ---
+//      if (this.pendingError != null) {
+//        pushError(this.pendingError);
+//        this.pendingError = null; // Clear it to be safe
+//      } else if (!done.getStatus().hasMoreResults()) {
+//        pushComplete();
+//      }
+      // REMOVED the pendingError logic from here.
+      if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
     } else if (token instanceof ErrorToken error) {
-      this.pendingError = new TdsServerErrorException(
+      // FIX 1: The Result-Level Error Trap
+      // Immediately construct and push the error. Do not wait for a DoneToken
+      // that might get dropped or trapped due to premature cancellation.
+      TdsServerErrorException sqlError = new TdsServerErrorException(
           error.getMessage(), error.getNumber(), error.getState(),
           error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber());
+      pushError(sqlError);
+      isCancelled.set(true); // Force termination of this sink pipeline
     } else if (token instanceof InfoToken info) {
       emitSegment(new TdsMessageSegment(
           (int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));

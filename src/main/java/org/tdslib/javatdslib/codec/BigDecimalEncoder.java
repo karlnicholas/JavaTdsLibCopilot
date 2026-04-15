@@ -44,7 +44,12 @@ public class BigDecimalEncoder implements ParameterEncoder {
       return;
     }
 
-    BigDecimal bd = (BigDecimal) value;
+    BigDecimal bd;
+    if (value instanceof BigInteger bigInt) {
+      bd = new BigDecimal(bigInt);
+    } else {
+      bd = (BigDecimal) value;
+    }
     int scale = getDecimalScale(entry);
 
     byte[] decBytes = convertToDecimalBytes(bd, scale);

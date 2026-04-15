@@ -86,9 +86,15 @@ public class DateTimeEncoder implements ParameterEncoder {
     } else if (type == TdsType.TIME && value instanceof LocalTime) {
       buf.put((byte) 5);
       writeTimeBytes(buf, (LocalTime) value);
-    } else if (type == TdsType.DATETIMEOFFSET && value instanceof OffsetDateTime) {
+    } else if (type == TdsType.DATETIMEOFFSET && (value instanceof OffsetDateTime || value instanceof java.time.ZonedDateTime)) {
       buf.put((byte) 10);
-      OffsetDateTime odt = (OffsetDateTime) value;
+
+      OffsetDateTime odt;
+      if (value instanceof java.time.ZonedDateTime zdt) {
+        odt = zdt.toOffsetDateTime();
+      } else {
+        odt = (OffsetDateTime) value;
+      }
 
       // FIX: MS-TDS requires the binary date/time payload to be in UTC
       OffsetDateTime utc = odt.withOffsetSameInstant(java.time.ZoneOffset.UTC);
