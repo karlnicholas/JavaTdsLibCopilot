@@ -53,6 +53,8 @@ public class TdsTransport implements AutoCloseable {
   private final Queue<PendingRequest> requestQueue = new ConcurrentLinkedQueue<>();
   private final AtomicBoolean isNetworkBusy = new AtomicBoolean(false);
 
+  public DebuggingInformation debuggingInformation;
+
   /**
    * Primary constructor utilizing Dependency Injection.
    * Allows injecting mock connections for testing
@@ -77,6 +79,8 @@ public class TdsTransport implements AutoCloseable {
 
     this.tlsHandshake = new TlsHandshake();
     this.packetEncoder = packetEncoder;
+
+    debuggingInformation = new DebuggingInformation();
   }
 
   /**
@@ -98,16 +102,12 @@ public class TdsTransport implements AutoCloseable {
         new QueryPacketBuilder());
   }
 
-  // ADD THIS at the top of TdsTransport class
-  public static final java.util.concurrent.ConcurrentHashMap<String, String> queryStates =
-      new java.util.concurrent.ConcurrentHashMap<>();
   /**
    * Executes a TDS Message and returns a reactive stream of segments.
    * Centralizes the building of TDS headers and reactive context extraction.
    * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
 // UPDATE the execute method signature to accept the SQL string tracker
-  AtomicLong count = new AtomicLong();
   public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
     return Flux.deferContextual(contextView -> {
       UUID traceId = contextView.getOrDefault("trace-id", null);
@@ -117,10 +117,10 @@ public class TdsTransport implements AutoCloseable {
         // 1. Create a key based purely on the Connection SPID (Channel)
         String connectionKey = "Channel_" + context.getSpid();
 
-        long queued = count.incrementAndGet();
-        queryStates.put(connectionKey, "1_QUEUED: " + context.getSpid() + ":" + queued + ":" + requestQueue.size());
+        debuggingInformation.spid = context.getSpid();
+        debuggingInformation.queuedCount.getAndIncrement();
 
-        requestQueue.offer(new PendingRequest(connectionKey, () -> {
+        requestQueue.offer(new PendingRequest(() -> {
           AllHeaders headers = buildHeaders(traceId);
           return messageFactory.apply(headers);
         }, sink));
@@ -151,14 +151,25 @@ public class TdsTransport implements AutoCloseable {
    */
   private void drain() {
     // 1. Acquire Lock
+    debuggingInformation.drainEntry.getAndIncrement();
     if (!isNetworkBusy.compareAndSet(false, true)) {
+      debuggingInformation.drainLocked.getAndIncrement();
       return;
     }
 
     // 2. Pop the Queue
     PendingRequest request = requestQueue.poll();
     if (request == null) {
+      // 1. Release the lock first
       isNetworkBusy.set(false);
+
+      // 2. The Double Check: Did a new query sneak into the queue
+      // during the nanoseconds between poll() and set(false)?
+      if (!requestQueue.isEmpty()) {
+        // A query sneaked in and its thread was denied the lock.
+        // Re-trigger the drain cycle to pick it up.
+        drain();
+      }
       return;
     }
 
@@ -169,7 +180,7 @@ public class TdsTransport implements AutoCloseable {
     try {
       // UPDATE THIS LINE to pass the sqlTracker down to the sink
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
-      AsyncWorkerSink workerSink = new AsyncWorkerSink(request.sqlTracker(), tokenQueue, context, Schedulers.parallel());
+      AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
 
 //      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
 
@@ -184,6 +195,7 @@ public class TdsTransport implements AutoCloseable {
               this.resumeNetworkRead();
               request.sink().error(error);
               isNetworkBusy.set(false);
+              debuggingInformation.errorCallback.getAndIncrement();
               drain();
             }
           },
@@ -195,6 +207,7 @@ public class TdsTransport implements AutoCloseable {
               this.resumeNetworkRead();
               request.sink().complete();
               isNetworkBusy.set(false);
+              debuggingInformation.completeCallback.getAndIncrement();
               drain();
             }
           }
@@ -209,6 +222,7 @@ public class TdsTransport implements AutoCloseable {
           this.setStreamHandlers(null);
           this.resumeNetworkRead();
           isNetworkBusy.set(false);
+          debuggingInformation.cancelCallback.getAndIncrement();
           drain();
         }
       });
@@ -219,9 +233,6 @@ public class TdsTransport implements AutoCloseable {
       logger.trace(
           "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline. spid = {}", context.getSpid());
       this.setStreamHandlers(decoder::onPayloadAvailable);
-
-      // ADD BREADCRUMB 2 right before sending the bytes
-      queryStates.put(request.sqlTracker(), "2_SENT_TO_DB");
 
       TdsMessage message = request.messageSupplier().get();
       this.sendQueryMessageAsync(message);
@@ -422,10 +433,6 @@ public class TdsTransport implements AutoCloseable {
     logger.debug("Cancel requested");
   }
 
-  public ConnectionContext getContext() {
-    return context;
-  }
-
 
   @Override
   public void close() throws IOException {
@@ -459,13 +466,40 @@ public class TdsTransport implements AutoCloseable {
     isNetworkBusy.set(false);
   }
 
+  public ConnectionContext getContext() {
+    return context;
+  }
+
   /**
    * Holds the late-binding message recipe and the reactive sink for a queued request.
    */
   private record PendingRequest(
-      String sqlTracker,
       Supplier<TdsMessage> messageSupplier,
       FluxSink<Result.Segment> sink
   ) {
+  }
+
+  public static class DebuggingInformation {
+    public int spid;
+    public AtomicLong queuedCount = new AtomicLong();
+    public AtomicLong drainEntry = new AtomicLong();
+    public AtomicLong drainLocked = new AtomicLong();
+    public AtomicLong completeCallback = new AtomicLong();
+    public AtomicLong errorCallback = new AtomicLong();
+    public AtomicLong cancelCallback = new AtomicLong();
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder();
+      sb.append("\n--- TdsTransport Debugging Snapshot ---\n");
+      sb.append("  SPID:              " + spid + "\n");
+      sb.append(String.format("  Queued Total:      %d\n", queuedCount.get()));
+      sb.append(String.format("  Drain Entries:     %d\n", drainEntry.get()));
+      sb.append(String.format("  Drain Lock Denied: %d\n", drainLocked.get()));
+      sb.append(String.format("  Callbacks - Complete: %d | Error: %d | Cancel: %d\n",
+          completeCallback.get(), errorCallback.get(), cancelCallback.get()));
+      sb.append("---------------------------------------");
+      return sb.toString();
+    }
   }
 }

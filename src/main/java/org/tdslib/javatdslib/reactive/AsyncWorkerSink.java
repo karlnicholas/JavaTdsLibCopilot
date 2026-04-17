@@ -40,8 +40,6 @@ import java.util.function.Consumer;
  */
 public class AsyncWorkerSink {
   private static final Logger logger = LoggerFactory.getLogger(AsyncWorkerSink.class);
-  // ADD field near the top
-  private final String sqlTracker;
 
   private final TdsTokenQueue tokenQueue;
   private final ConnectionContext context;
@@ -73,8 +71,7 @@ public class AsyncWorkerSink {
    */
 // UPDATE constructor
   public AsyncWorkerSink(
-      String sqlTracker, TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
-    this.sqlTracker = sqlTracker;
+      TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
     this.tokenQueue = tokenQueue;
     this.context = context;
     this.workerScheduler = workerScheduler;
@@ -190,9 +187,6 @@ public class AsyncWorkerSink {
 
     } else if (token instanceof DoneToken done) {
 
-      // BREADCRUMB 3: Network transmission completed and parsed successfully
-      org.tdslib.javatdslib.transport.TdsTransport.queryStates.put(sqlTracker, "3_DONE_TOKEN_PARSED");
-
       if (activeRowDrainer != null) {
         // FIXED: Use the new two-phase lifecycle flags
         if (activeRowDrainer.isReadyToYield() && !activeRowDrainer.isRowEmitted()) {
@@ -287,7 +281,6 @@ public class AsyncWorkerSink {
 
   private void pushComplete() {
     if (onComplete != null) {
-      TdsTransport.queryStates.put(sqlTracker, "4_ON_COMPLETE_FIRED");
       onComplete.run();
     }
   }

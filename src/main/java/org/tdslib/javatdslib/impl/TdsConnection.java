@@ -269,7 +269,7 @@ public class TdsConnection implements Connection {
     return Mono.just(true); // Simplified stub
   }
 
-  public ConnectionContext getContext() {
-    return  context;
+  public TdsTransport getTransport() {
+    return  transport;
   }
 }
