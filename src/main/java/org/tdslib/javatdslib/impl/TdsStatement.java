@@ -179,8 +179,7 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    // UPDATE THIS to pass 'query' as the first argument
-    return transport.execute(this.query, headers -> {
+    return transport.execute(headers -> {
           if (isSimpleBatch) {
             return createSqlBatchMessage(query, headers);
           } else {

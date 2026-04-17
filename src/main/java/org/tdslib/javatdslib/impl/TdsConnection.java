@@ -42,7 +42,7 @@ public class TdsConnection implements Connection {
   @Override
   public Publisher<Void> beginTransaction() {
     // FIX: Pass "BEGIN_TRANSACTION"
-    return Mono.from(transport.execute("BEGIN_TRANSACTION", headers -> {
+    return Mono.from(transport.execute(headers -> {
       ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
       payload.putShort((short) 5); // TM_BEGIN_XACT
       payload.put((byte) 0x00);    // Isolation Level: 0x00 (Use session default)
@@ -56,7 +56,7 @@ public class TdsConnection implements Connection {
   @Override
   public Publisher<Void> beginTransaction(TransactionDefinition definition) {
     // FIX: Pass "BEGIN_TRANSACTION"
-    return Mono.from(transport.execute("BEGIN_TRANSACTION", headers -> {
+    return Mono.from(transport.execute(headers -> {
       IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
       String txName = definition.getAttribute(TransactionDefinition.NAME);
 
@@ -138,7 +138,7 @@ public class TdsConnection implements Connection {
       }
 
       // FIX: Added "COMMIT_TRANSACTION" tracking string
-      return Mono.from(transport.execute("COMMIT_TRANSACTION", headers -> {
+      return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         payload.putShort((short) 7); // TM_COMMIT_XACT
         payload.put((byte) 0x00);
@@ -158,7 +158,7 @@ public class TdsConnection implements Connection {
       }
 
       // FIX: Added "ROLLBACK_TRANSACTION" tracking string
-      return Mono.from(transport.execute("ROLLBACK_TRANSACTION", headers -> {
+      return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         payload.putShort((short) 8); // TM_ROLLBACK_XACT
         payload.put((byte) 0x00);
@@ -267,5 +267,9 @@ public class TdsConnection implements Connection {
   @Override
   public Publisher<Boolean> validate(ValidationDepth depth) {
     return Mono.just(true); // Simplified stub
+  }
+
+  public ConnectionContext getContext() {
+    return  context;
   }
 }

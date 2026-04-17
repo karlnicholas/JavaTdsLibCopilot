@@ -25,6 +25,7 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -106,15 +107,20 @@ public class TdsTransport implements AutoCloseable {
    * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
 // UPDATE the execute method signature to accept the SQL string tracker
-  public Flux<Result.Segment> execute(String sqlTracker, Function<AllHeaders, TdsMessage> messageFactory) {
+  AtomicLong count = new AtomicLong();
+  public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
     return Flux.deferContextual(contextView -> {
       UUID traceId = contextView.getOrDefault("trace-id", null);
 
       return Flux.create(sink -> {
         // BREADCRUMB 1: Query entered the transport queue
-        queryStates.put(sqlTracker, "1_QUEUED");
+        // 1. Create a key based purely on the Connection SPID (Channel)
+        String connectionKey = "Channel_" + context.getSpid();
 
-        requestQueue.offer(new PendingRequest(sqlTracker, () -> {
+        long queued = count.incrementAndGet();
+        queryStates.put(connectionKey, "1_QUEUED: " + context.getSpid() + ":" + queued + ":" + requestQueue.size());
+
+        requestQueue.offer(new PendingRequest(connectionKey, () -> {
           AllHeaders headers = buildHeaders(traceId);
           return messageFactory.apply(headers);
         }, sink));
@@ -161,11 +167,11 @@ public class TdsTransport implements AutoCloseable {
     AtomicBoolean isFinished = new AtomicBoolean(false);
 
     try {
-// UPDATE THIS LINE to pass the sqlTracker down to the sink
+      // UPDATE THIS LINE to pass the sqlTracker down to the sink
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
       AsyncWorkerSink workerSink = new AsyncWorkerSink(request.sqlTracker(), tokenQueue, context, Schedulers.parallel());
 
-      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
+//      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
 
       // Wire Callbacks - ONLY the first terminal signal triggers the handoff
       workerSink.setCallbacks(
@@ -183,8 +189,8 @@ public class TdsTransport implements AutoCloseable {
           },
           () -> {
             if (isFinished.compareAndSet(false, true)) {
-              logger.trace(
-                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
+//              logger.trace(
+//                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
               request.sink().complete();
@@ -211,7 +217,7 @@ public class TdsTransport implements AutoCloseable {
           TokenParserRegistry.DEFAULT, context, tokenQueue);
 
       logger.trace(
-          "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
+          "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline. spid = {}", context.getSpid());
       this.setStreamHandlers(decoder::onPayloadAvailable);
 
       // ADD BREADCRUMB 2 right before sending the bytes
@@ -392,7 +398,7 @@ public class TdsTransport implements AutoCloseable {
    * Resumes reading from the network.
    */
   public void resumeNetworkRead() {
-    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
+//    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
     networkConnection.resumeRead();
   }
 
@@ -415,6 +421,11 @@ public class TdsTransport implements AutoCloseable {
   public void cancelCurrent() {
     logger.debug("Cancel requested");
   }
+
+  public ConnectionContext getContext() {
+    return context;
+  }
+
 
   @Override
   public void close() throws IOException {
