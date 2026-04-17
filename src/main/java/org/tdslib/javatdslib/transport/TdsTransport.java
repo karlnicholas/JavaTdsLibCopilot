@@ -97,26 +97,28 @@ public class TdsTransport implements AutoCloseable {
         new QueryPacketBuilder());
   }
 
+  // ADD THIS at the top of TdsTransport class
+  public static final java.util.concurrent.ConcurrentHashMap<String, String> queryStates =
+      new java.util.concurrent.ConcurrentHashMap<>();
   /**
    * Executes a TDS Message and returns a reactive stream of segments.
    * Centralizes the building of TDS headers and reactive context extraction.
    * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
-  public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
-
-    // 1. Extract the trace ID from the reactive pipeline once
+// UPDATE the execute method signature to accept the SQL string tracker
+  public Flux<Result.Segment> execute(String sqlTracker, Function<AllHeaders, TdsMessage> messageFactory) {
     return Flux.deferContextual(contextView -> {
       UUID traceId = contextView.getOrDefault("trace-id", null);
 
       return Flux.create(sink -> {
-        // 2. Queue the request, deferring the actual header/message construction
-        // until the background worker polls it from the queue.
-        requestQueue.offer(new PendingRequest(() -> {
+        // BREADCRUMB 1: Query entered the transport queue
+        queryStates.put(sqlTracker, "1_QUEUED");
+
+        requestQueue.offer(new PendingRequest(sqlTracker, () -> {
           AllHeaders headers = buildHeaders(traceId);
           return messageFactory.apply(headers);
         }, sink));
 
-        // Tell the background loop to check the inbox
         drain();
       });
     });
@@ -159,8 +161,9 @@ public class TdsTransport implements AutoCloseable {
     AtomicBoolean isFinished = new AtomicBoolean(false);
 
     try {
+// UPDATE THIS LINE to pass the sqlTracker down to the sink
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
-      AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
+      AsyncWorkerSink workerSink = new AsyncWorkerSink(request.sqlTracker(), tokenQueue, context, Schedulers.parallel());
 
       logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
 
@@ -210,6 +213,9 @@ public class TdsTransport implements AutoCloseable {
       logger.trace(
           "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline.");
       this.setStreamHandlers(decoder::onPayloadAvailable);
+
+      // ADD BREADCRUMB 2 right before sending the bytes
+      queryStates.put(request.sqlTracker(), "2_SENT_TO_DB");
 
       TdsMessage message = request.messageSupplier().get();
       this.sendQueryMessageAsync(message);
@@ -446,6 +452,7 @@ public class TdsTransport implements AutoCloseable {
    * Holds the late-binding message recipe and the reactive sink for a queued request.
    */
   private record PendingRequest(
+      String sqlTracker,
       Supplier<TdsMessage> messageSupplier,
       FluxSink<Result.Segment> sink
   ) {

@@ -179,14 +179,14 @@ public class TdsStatement implements Statement {
       executions = new ArrayList<>(batchParams);
     }
 
-    // Clean, standard Flux execution. Transport handles the headers!
-    return transport.execute(headers -> {
-      if (isSimpleBatch) {
-        return createSqlBatchMessage(query, headers);
-      } else {
-        return createRpcMessage(query, executions, headers);
-      }
-    })
+    // UPDATE THIS to pass 'query' as the first argument
+    return transport.execute(this.query, headers -> {
+          if (isSimpleBatch) {
+            return createSqlBatchMessage(query, headers);
+          } else {
+            return createRpcMessage(query, executions, headers);
+          }
+        })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);

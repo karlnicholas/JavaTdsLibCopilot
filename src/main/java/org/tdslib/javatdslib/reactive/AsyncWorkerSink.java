@@ -39,6 +39,8 @@ import java.util.function.Consumer;
  */
 public class AsyncWorkerSink {
   private static final Logger logger = LoggerFactory.getLogger(AsyncWorkerSink.class);
+  // ADD field near the top
+  private final String sqlTracker;
 
   private final TdsTokenQueue tokenQueue;
   private final ConnectionContext context;
@@ -68,8 +70,10 @@ public class AsyncWorkerSink {
    * @param context         The connection context.
    * @param workerScheduler The scheduler for asynchronous work.
    */
+// UPDATE constructor
   public AsyncWorkerSink(
-      TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
+      String sqlTracker, TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
+    this.sqlTracker = sqlTracker;
     this.tokenQueue = tokenQueue;
     this.context = context;
     this.workerScheduler = workerScheduler;
@@ -110,6 +114,9 @@ public class AsyncWorkerSink {
     // FIX: Do not immediately clear the token queue.
     // We must allow the drain loop to process any fatal ErrorTokens
     // that arrived during the cancellation race condition.
+
+    // commented out for above fix
+    // tokenQueue.clear();
   }
 
   private void scheduleDrain() {
@@ -131,7 +138,10 @@ public class AsyncWorkerSink {
 
         while (emitted != requested) {
           // CRITICAL FIX: Use 'break' to gracefully exit and decrement WIP
-          // FIX: Do not instantly break on cancel. We must drain to look for ErrorTokens.
+          // commented out for below fix
+//          if (isCancelled.get() || isPaused.get()) {
+
+            // FIX: Do not instantly break on cancel. We must drain to look for ErrorTokens.
           if (isPaused.get()) {
             break;
           }
@@ -152,6 +162,7 @@ public class AsyncWorkerSink {
             break; // Break instead of return to close out WIP safely
           } else if (event instanceof TokenEvent te) {
             // ERROR TRAP: If cancelled, drop normal tokens but explicitly catch ErrorTokens
+            // Added for newest FIX
             if (isCancelled.get() && !(te.token() instanceof ErrorToken)) {
               continue;
             }
@@ -197,6 +208,9 @@ public class AsyncWorkerSink {
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
 
     } else if (token instanceof DoneToken done) {
+
+      // BREADCRUMB 3: Network transmission completed and parsed successfully
+      org.tdslib.javatdslib.transport.TdsTransport.queryStates.put(sqlTracker, "3_DONE_TOKEN_PARSED");
 
       if (activeRowDrainer != null) {
         // FIXED: Use the new two-phase lifecycle flags
@@ -300,6 +314,8 @@ public class AsyncWorkerSink {
   }
 
   private void pushComplete() {
+// BREADCRUMB 4: Reactor callback triggered successfully
+    org.tdslib.javatdslib.transport.TdsTransport.queryStates.put(sqlTracker, "4_ON_COMPLETE_FIRED");
     if (onComplete != null) {
       onComplete.run();
     }

@@ -56,8 +56,8 @@ public class TdsBatch implements Batch {
 
     String batchSql = String.join(";\n", statements);
 
-    // Transport injects the headers into our lambda
-    return transport.execute(headers -> createSqlBatchMessage(batchSql, headers))
+    // FIX: Pass the tracking string as the first argument
+    return transport.execute("BATCH: " + batchSql, headers -> createSqlBatchMessage(batchSql, headers))
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);
