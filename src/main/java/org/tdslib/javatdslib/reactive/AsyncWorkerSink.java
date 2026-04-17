@@ -25,6 +25,7 @@ import org.tdslib.javatdslib.tokens.models.ReturnStatusToken;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
+import org.tdslib.javatdslib.transport.TdsTransport;
 import reactor.core.scheduler.Scheduler;
 
 import java.util.List;
@@ -111,12 +112,7 @@ public class AsyncWorkerSink {
    */
   public void cancel() {
     isCancelled.set(true);
-    // FIX: Do not immediately clear the token queue.
-    // We must allow the drain loop to process any fatal ErrorTokens
-    // that arrived during the cancellation race condition.
-
-    // commented out for above fix
-    // tokenQueue.clear();
+    tokenQueue.clear();
   }
 
   private void scheduleDrain() {
@@ -138,16 +134,9 @@ public class AsyncWorkerSink {
 
         while (emitted != requested) {
           // CRITICAL FIX: Use 'break' to gracefully exit and decrement WIP
-          // commented out for below fix
-//          if (isCancelled.get() || isPaused.get()) {
-
-            // FIX: Do not instantly break on cancel. We must drain to look for ErrorTokens.
-          if (isPaused.get()) {
+          if (isCancelled.get() || isPaused.get()) {
             break;
           }
-//          if (isCancelled.get() || isPaused.get()) {
-//            break;
-//          }
 
           int segmentsBefore = receivedSegments.size();
 
@@ -161,17 +150,9 @@ public class AsyncWorkerSink {
             isCancelled.set(true);
             break; // Break instead of return to close out WIP safely
           } else if (event instanceof TokenEvent te) {
-            // ERROR TRAP: If cancelled, drop normal tokens but explicitly catch ErrorTokens
-            // Added for newest FIX
-            if (isCancelled.get() && !(te.token() instanceof ErrorToken)) {
-              continue;
-            }
             processToken(te.token());
           } else if (event instanceof ColumnEvent ce) {
-            // Drop columns if we are cancelled
-            if (!isCancelled.get()) {
-              processColumn(ce.data());
-            }
+            processColumn(ce.data());
           }
 
           if (receivedSegments.size() > segmentsBefore) {
@@ -229,26 +210,17 @@ public class AsyncWorkerSink {
         emitSegment(new TdsUpdateCount(done.getCount()));
       }
 
-//      // --- NEW: Delayed Error Emission ---
-//      if (this.pendingError != null) {
-//        pushError(this.pendingError);
-//        this.pendingError = null; // Clear it to be safe
-//      } else if (!done.getStatus().hasMoreResults()) {
-//        pushComplete();
-//      }
-      // REMOVED the pendingError logic from here.
-      if (!done.getStatus().hasMoreResults()) {
+      // --- NEW: Delayed Error Emission ---
+      if (this.pendingError != null) {
+        pushError(this.pendingError);
+        this.pendingError = null; // Clear it to be safe
+      } else if (!done.getStatus().hasMoreResults()) {
         pushComplete();
       }
     } else if (token instanceof ErrorToken error) {
-      // FIX 1: The Result-Level Error Trap
-      // Immediately construct and push the error. Do not wait for a DoneToken
-      // that might get dropped or trapped due to premature cancellation.
-      TdsServerErrorException sqlError = new TdsServerErrorException(
+      this.pendingError = new TdsServerErrorException(
           error.getMessage(), error.getNumber(), error.getState(),
           error.getSeverity(), error.getServerName(), error.getProcName(), error.getLineNumber());
-      pushError(sqlError);
-      isCancelled.set(true); // Force termination of this sink pipeline
     } else if (token instanceof InfoToken info) {
       emitSegment(new TdsMessageSegment(
           (int) info.getNumber(), String.valueOf(info.getState()), info.getMessage()));
@@ -314,9 +286,8 @@ public class AsyncWorkerSink {
   }
 
   private void pushComplete() {
-// BREADCRUMB 4: Reactor callback triggered successfully
-    org.tdslib.javatdslib.transport.TdsTransport.queryStates.put(sqlTracker, "4_ON_COMPLETE_FIRED");
     if (onComplete != null) {
+      TdsTransport.queryStates.put(sqlTracker, "4_ON_COMPLETE_FIRED");
       onComplete.run();
     }
   }
