@@ -49,7 +49,7 @@ public class AsyncWorkerSink {
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
   private final AtomicBoolean isPaused = new AtomicBoolean(false); // Stream Lock
 
-  private final List<Result.Segment> receivedSegments = new CopyOnWriteArrayList<>();
+  private boolean segmentEmitted = false;
 
   private ColMetaDataToken activeMetaData;
   private RowDrainer activeRowDrainer;
@@ -133,7 +133,8 @@ public class AsyncWorkerSink {
             break;
           }
 
-          int segmentsBefore = receivedSegments.size();
+          // Reset the tracker for this specific loop iteration
+          this.segmentEmitted = false;
 
           TdsStreamEvent event = tokenQueue.poll();
           if (event == null) {
@@ -150,7 +151,7 @@ public class AsyncWorkerSink {
             processColumn(ce.data());
           }
 
-          if (receivedSegments.size() > segmentsBefore) {
+          if (this.segmentEmitted) {
             emitted++;
           }
 
@@ -259,7 +260,9 @@ public class AsyncWorkerSink {
   }
 
   private void emitSegment(Result.Segment segment) {
-    receivedSegments.add(segment);
+    // Flip the flag so the drain loop knows an emission occurred
+    this.segmentEmitted = true;
+
     try {
       if (onNext != null) {
         onNext.accept(segment);
