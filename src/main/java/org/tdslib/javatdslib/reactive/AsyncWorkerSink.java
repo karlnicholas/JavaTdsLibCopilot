@@ -122,13 +122,15 @@ public class AsyncWorkerSink {
 
   private void drain() {
     int missed = 1;
-    try {
-      do {
-        long requested = demand.get();
-        long emitted = 0;
 
+    // The do-while loop now sits OUTSIDE the try-catch.
+    // This guarantees the wip lock is always decremented before the thread exits.
+    do {
+      long requested = demand.get();
+      long emitted = 0;
+
+      try {
         while (emitted != requested) {
-          // CRITICAL FIX: Use 'break' to gracefully exit and decrement WIP
           if (isCancelled.get() || isPaused.get()) {
             break;
           }
@@ -144,7 +146,7 @@ public class AsyncWorkerSink {
           if (event instanceof ErrorEvent err) {
             pushError(err.error());
             isCancelled.set(true);
-            break; // Break instead of return to close out WIP safely
+            break;
           } else if (event instanceof TokenEvent te) {
             processToken(te.token());
           } else if (event instanceof ColumnEvent ce) {
@@ -160,16 +162,22 @@ public class AsyncWorkerSink {
             break;
           }
         }
+      } catch (Throwable t) {
+        // If downstream throws an error or the parser crashes, we catch it here.
+        // We push the error and cancel the stream to stop further processing.
+        pushError(t);
+        isCancelled.set(true);
+      }
 
-        if (emitted != 0 && requested != Long.MAX_VALUE) {
-          demand.addAndGet(-emitted);
-        }
-        missed = wip.addAndGet(-missed);
-      } while (missed != 0);
+      // Because the try-catch is closed, execution ALWAYS reaches these lines
+      if (emitted != 0 && requested != Long.MAX_VALUE) {
+        demand.addAndGet(-emitted);
+      }
 
-    } catch (Throwable t) {
-      pushError(t);
-    }
+      // The lock is safely decremented, preventing the silent deadlock.
+      missed = wip.addAndGet(-missed);
+
+    } while (missed != 0);
   }
 
   private void processToken(Token token) {
