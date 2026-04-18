@@ -180,12 +180,12 @@ public class TdsStatement implements Statement {
     }
 
     return transport.execute(headers -> {
-          if (isSimpleBatch) {
-            return createSqlBatchMessage(query, headers);
-          } else {
-            return createRpcMessage(query, executions, headers);
-          }
-        })
+      if (isSimpleBatch) {
+        return createSqlBatchMessage(query, headers);
+      } else {
+        return createRpcMessage(query, executions, headers);
+      }
+    })
         .windowUntil(this::isBoundarySegment)
         .map(TdsResult::new)
         .onErrorMap(TdsServerErrorException.class, R2dbcErrorTranslator::translateException);

@@ -107,7 +107,6 @@ public class TdsTransport implements AutoCloseable {
    * Centralizes the building of TDS headers and reactive context extraction.
    * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
-// UPDATE the execute method signature to accept the SQL string tracker
   public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
     return Flux.deferContextual(contextView -> {
       UUID traceId = contextView.getOrDefault("trace-id", null);
@@ -182,7 +181,7 @@ public class TdsTransport implements AutoCloseable {
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
       AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
 
-//      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
+      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
 
       // Wire Callbacks - ONLY the first terminal signal triggers the handoff
       workerSink.setCallbacks(
@@ -201,8 +200,8 @@ public class TdsTransport implements AutoCloseable {
           },
           () -> {
             if (isFinished.compareAndSet(false, true)) {
-//              logger.trace(
-//                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
+              logger.trace(
+                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
               request.sink().complete();
@@ -230,8 +229,6 @@ public class TdsTransport implements AutoCloseable {
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
           TokenParserRegistry.DEFAULT, context, tokenQueue);
 
-      logger.trace(
-          "[RACE-TRACE] 🔵 Registering new StatefulTokenDecoder to the network pipeline. spid = {}", context.getSpid());
       this.setStreamHandlers(decoder::onPayloadAvailable);
 
       TdsMessage message = request.messageSupplier().get();
@@ -409,7 +406,7 @@ public class TdsTransport implements AutoCloseable {
    * Resumes reading from the network.
    */
   public void resumeNetworkRead() {
-//    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
+    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
     networkConnection.resumeRead();
   }
 
@@ -432,7 +429,6 @@ public class TdsTransport implements AutoCloseable {
   public void cancelCurrent() {
     logger.debug("Cancel requested");
   }
-
 
   @Override
   public void close() throws IOException {
@@ -479,6 +475,9 @@ public class TdsTransport implements AutoCloseable {
   ) {
   }
 
+  /**
+   * Snapshot of debugging information for the transport layer.
+   */
   public static class DebuggingInformation {
     public int spid;
     public AtomicLong queuedCount = new AtomicLong();

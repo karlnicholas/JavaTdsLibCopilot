@@ -25,7 +25,6 @@ import org.tdslib.javatdslib.tokens.models.ReturnStatusToken;
 import org.tdslib.javatdslib.tokens.models.ReturnValueToken;
 import org.tdslib.javatdslib.tokens.models.RowToken;
 import org.tdslib.javatdslib.transport.ConnectionContext;
-import org.tdslib.javatdslib.transport.TdsTransport;
 import reactor.core.scheduler.Scheduler;
 
 import java.util.List;
@@ -69,7 +68,6 @@ public class AsyncWorkerSink {
    * @param context         The connection context.
    * @param workerScheduler The scheduler for asynchronous work.
    */
-// UPDATE constructor
   public AsyncWorkerSink(
       TdsTokenQueue tokenQueue, ConnectionContext context, Scheduler workerScheduler) {
     this.tokenQueue = tokenQueue;
