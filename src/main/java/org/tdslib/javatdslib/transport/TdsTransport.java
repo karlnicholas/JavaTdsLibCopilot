@@ -437,7 +437,33 @@ public class TdsTransport implements AutoCloseable {
     }
   }
 
-  private void handleFatalConnectionError(Throwable error) {
+//  private void handleFatalConnectionError(Throwable error) {
+//    logger.error("Fatal connection error. Aborting active query and draining queue.", error);
+//
+//    // 1. Close the physical connection so no more bytes arrive
+//    try {
+//      close();
+//    } catch (Exception ignored) {
+//      // Ignored
+//    }
+//
+//    // 2. Send the error directly to the active sink, bypassing standard handlers
+//    if (this.activeSink != null) {
+//      this.activeSink.error(error);
+//      this.activeSink = null;
+//    }
+//
+//    // 3. Flush the queue and fail any pending queries
+//    PendingRequest pending;
+//    while ((pending = requestQueue.poll()) != null) {
+//      pending.sink().error(error);
+//    }
+//
+//    isNetworkBusy.set(false);
+//  }
+
+  // Change this from private to public
+  public void handleFatalConnectionError(Throwable error) {
     logger.error("Fatal connection error. Aborting active query and draining queue.", error);
 
     // 1. Close the physical connection so no more bytes arrive
