@@ -50,6 +50,8 @@ public class AsyncWorkerSink {
   private final AtomicBoolean isPaused = new AtomicBoolean(false); // Stream Lock
 
   private boolean segmentEmitted = false;
+  private volatile boolean isWireClean = false;
+  private volatile boolean isDiscarding = false;
 
   private ColMetaDataToken activeMetaData;
   private RowDrainer activeRowDrainer;
@@ -105,9 +107,23 @@ public class AsyncWorkerSink {
   /**
    * Cancels processing and clears the token queue.
    */
+//  public void cancel() {
+//    isCancelled.set(true);
+//    tokenQueue.clear();
+//  }
+  /**
+   * Cancels processing. If the wire is not clean, enters Discard Mode.
+   */
   public void cancel() {
-    isCancelled.set(true);
-    tokenQueue.clear();
+    if (isCancelled.compareAndSet(false, true)) {
+      if (!isWireClean) {
+        logger.debug("Stream cancelled mid-flight. Entering Graceful Discard Mode.");
+        this.isDiscarding = true;
+        scheduleDrain(); // Wake up the drain loop to vacuum the remaining bytes
+      } else {
+        tokenQueue.clear();
+      }
+    }
   }
 
   private void scheduleDrain() {
@@ -129,15 +145,24 @@ public class AsyncWorkerSink {
       long requested = demand.get();
       long emitted = 0;
 
+//      try {
+//        while (emitted != requested) {
+//          if (isCancelled.get() || isPaused.get()) {
+//            break;
+//          }
+//
+//          // Reset the tracker for this specific loop iteration
+//          this.segmentEmitted = false;
       try {
-        while (emitted != requested) {
-          if (isCancelled.get() || isPaused.get()) {
+        // Keep spinning if we need to emit OR if we are actively vacuuming the wire
+        while (emitted != requested || isDiscarding) {
+          // Only break if we are paused, OR if we are cancelled but NOT discarding
+          if ((isCancelled.get() && !isDiscarding) || isPaused.get()) {
             break;
           }
 
           // Reset the tracker for this specific loop iteration
           this.segmentEmitted = false;
-
           TdsStreamEvent event = tokenQueue.poll();
           if (event == null) {
             break;
@@ -180,19 +205,46 @@ public class AsyncWorkerSink {
     } while (missed != 0);
   }
 
-  private void processToken(Token token) {
-    if (token instanceof ColMetaDataToken meta) {
-      this.activeMetaData = meta;
-    } else if (token instanceof RowToken) {
+//  private void processToken(Token token) {
+//    if (token instanceof ColMetaDataToken meta) {
+//      this.activeMetaData = meta;
+//    } else if (token instanceof RowToken) {
+    private void processToken(Token token) {
+      // THE VACUUM: If discarding, drop everything except the final DONE token
+      if (this.isDiscarding) {
+        if (token instanceof DoneToken done) {
+          if (!done.getStatus().hasMoreResults()) {
+            logger.debug("Graceful Discard complete. Wire is clean.");
+            this.isDiscarding = false;
+            this.isWireClean = true;
+            this.activeRowDrainer = null;
+            this.tokenQueue.clear();
+            pushComplete(); // Safely triggers TdsTransport to release the lock
+          }
+        }
+        return;
+      }
 
-      // FIXED: Use the new two-phase lifecycle flags
+      if (token instanceof ColMetaDataToken meta) {
+        this.activeMetaData = meta;
+      } else if (token instanceof RowToken) {
+          // FIXED: Use the new two-phase lifecycle flags
       if (activeRowDrainer != null && activeRowDrainer.isReadyToYield()
           && !activeRowDrainer.isRowEmitted()) {
         emitSegment(activeRowDrainer.assembleRow());
       }
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
 
-    } else if (token instanceof DoneToken done) {
+//    } else if (token instanceof DoneToken done) {
+//
+//      if (activeRowDrainer != null) {
+      } else if (token instanceof DoneToken done) {
+
+        // MARK WIRE CLEAN
+        boolean noMoreResults = !done.getStatus().hasMoreResults();
+        if (noMoreResults && this.pendingError == null) {
+          this.isWireClean = true;
+        }
 
       if (activeRowDrainer != null) {
         // FIXED: Use the new two-phase lifecycle flags
@@ -237,13 +289,22 @@ public class AsyncWorkerSink {
     }
   }
 
+//  private void processColumn(ColumnData cd) {
+//    if (this.activeRowDrainer == null) {
+//      return;
+//    }
+//
+//    this.activeRowDrainer.processColumn(cd);
+
   private void processColumn(ColumnData cd) {
-    if (this.activeRowDrainer == null) {
+    // Drop LOB chunks immediately if vacuuming
+    if (this.isDiscarding || this.activeRowDrainer == null) {
       return;
     }
 
     this.activeRowDrainer.processColumn(cd);
-
+    // ... (keep rest exactly as is)
+    //
     // PHASE 1: Emit if the row is logically ready, but ONLY ONCE per row
     if (this.activeRowDrainer.isReadyToYield() && !this.activeRowDrainer.isRowEmitted()) {
       TdsRow row = this.activeRowDrainer.assembleRow();

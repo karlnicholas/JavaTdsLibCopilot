@@ -213,17 +213,26 @@ public class TdsTransport implements AutoCloseable {
       );
 
       request.sink().onRequest(workerSink::request);
+//      request.sink().onCancel(() -> {
+//        workerSink.cancel();
+//        if (isFinished.compareAndSet(false, true)) {
+//          logger.trace(
+//              "[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
+//          this.setStreamHandlers(null);
+//          this.resumeNetworkRead();
+//          isNetworkBusy.set(false);
+//          debuggingInformation.cancelCallback.getAndIncrement();
+//          drain();
+//        }
+//      });
       request.sink().onCancel(() -> {
+        // We DO NOT set isFinished to true here, nor do we release the lock.
+        // We delegate to the workerSink, which will enter Graceful Discard mode.
+        // When it finds the final Done token, it will trigger the onComplete()
+        // callback above to cleanly release the network lock.
+        logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Delegating to workerSink for Graceful Discard.");
+        debuggingInformation.cancelCallback.getAndIncrement();
         workerSink.cancel();
-        if (isFinished.compareAndSet(false, true)) {
-          logger.trace(
-              "[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
-          this.setStreamHandlers(null);
-          this.resumeNetworkRead();
-          isNetworkBusy.set(false);
-          debuggingInformation.cancelCallback.getAndIncrement();
-          drain();
-        }
       });
 
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
