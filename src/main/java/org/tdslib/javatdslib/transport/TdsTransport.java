@@ -173,40 +173,42 @@ public class TdsTransport implements AutoCloseable {
     }
 
     this.activeSink = request.sink();
-    // Guarantee exactly-once termination and handoff
+// Guarantee exactly-once termination and handoff
     AtomicBoolean isFinished = new AtomicBoolean(false);
+    AtomicBoolean wasCancelled = new AtomicBoolean(false);
 
     try {
-      // UPDATE THIS LINE to pass the sqlTracker down to the sink
       TdsTokenQueue tokenQueue = new TdsTokenQueue(this);
       AsyncWorkerSink workerSink = new AsyncWorkerSink(tokenQueue, context, Schedulers.parallel());
 
-      logger.trace("[RACE-TRACE] >>> Starting execution for NEW query from queue.");
-
-      // Wire Callbacks - ONLY the first terminal signal triggers the handoff
       workerSink.setCallbacks(
           request.sink()::next,
           error -> {
             if (isFinished.compareAndSet(false, true)) {
-              logger.trace(
-                  "[RACE-TRACE] 🔴 workerSink.onError triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
-              request.sink().error(error);
-              isNetworkBusy.set(false);
+
+              // Increment BEFORE sink.error() prevents audit snapshot races
               debuggingInformation.errorCallback.getAndIncrement();
+              request.sink().error(error);
+
+              isNetworkBusy.set(false);
               drain();
             }
           },
           () -> {
             if (isFinished.compareAndSet(false, true)) {
-              logger.trace(
-                  "[RACE-TRACE] 🟢 workerSink.onComplete triggered. Releasing lock and draining!");
               this.setStreamHandlers(null);
               this.resumeNetworkRead();
-              request.sink().complete();
+
+              // 2. The Cancel Gate
+              if (!wasCancelled.get()) {
+                // 3. FIX: Increment BEFORE sink.complete() prevents audit snapshot races
+                debuggingInformation.completeCallback.getAndIncrement();
+                request.sink().complete();
+              }
+
               isNetworkBusy.set(false);
-              debuggingInformation.completeCallback.getAndIncrement();
               drain();
             }
           }
@@ -214,13 +216,10 @@ public class TdsTransport implements AutoCloseable {
 
       request.sink().onRequest(workerSink::request);
       request.sink().onCancel(() -> {
-        logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Firing Attention and delegating to workerSink.");
+        wasCancelled.set(true); // 4. Set the flag
         debuggingInformation.cancelCallback.getAndIncrement();
 
-        // 1. Fire the physical stop command to the SQL Server CPU
         sendAttentionSignal();
-
-        // 2. Delegate to the sink and strictly register the Attention Debt
         workerSink.cancel(true);
       });
 
