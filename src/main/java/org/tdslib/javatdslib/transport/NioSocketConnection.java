@@ -88,24 +88,51 @@ public class NioSocketConnection implements NetworkConnection {
 
   @Override
   public void writeAsync(ByteBuffer buffer) {
-    // Explode loudly if writing to a dead socket
     if (!socketChannel.isOpen()) {
       throw new IllegalStateException("Cannot write: Socket is closed");
     }
 
-    ByteBuffer copy = buffer.duplicate();
-    boolean wasEmpty = writeQueue.isEmpty();
-    writeQueue.offer(copy);
+    writeQueue.offer(buffer.duplicate());
 
-    if (wasEmpty && pendingWrite.compareAndSet(false, true)) {
+    // We don't care if it was empty. If we successfully transition pendingWrite
+    // from false to true, WE are responsible for waking the selector.
+    if (pendingWrite.compareAndSet(false, true)) {
       SelectionKey key = socketChannel.keyFor(selector);
       if (key != null && key.isValid()) {
         key.interestOpsOr(SelectionKey.OP_WRITE);
         selector.wakeup();
       } else {
-        // Ensure failure cascades if the key was cancelled by a dropped connection
         throw new IllegalStateException("Cannot write: SelectionKey is invalid (socket closed)");
       }
+    }
+  }
+
+  private void onWritable(SelectionKey key) throws IOException {
+    while (true) {
+      ByteBuffer buf = writeQueue.peek();
+      if (buf == null) {
+        // 1. Turn off the write interest and the flag
+        key.interestOpsAnd(~SelectionKey.OP_WRITE);
+        pendingWrite.set(false);
+
+        // 2. THE CRITICAL DOUBLE-CHECK
+        // If a thread sneaked a buffer into the queue while we were turning off the flag,
+        // we must turn it back on and continue the loop to prevent deadlock.
+        if (!writeQueue.isEmpty() && pendingWrite.compareAndSet(false, true)) {
+          key.interestOpsOr(SelectionKey.OP_WRITE);
+          continue;
+        }
+        return;
+      }
+
+      int written = socketChannel.write(buf);
+
+      // If OS buffer is full (written == 0) or we only wrote part of the buffer,
+      // leave pendingWrite=true and OP_WRITE active. We will resume when OS signals us.
+      if (buf.hasRemaining()) {
+        return;
+      }
+      writeQueue.poll();
     }
   }
 
@@ -186,22 +213,6 @@ public class NioSocketConnection implements NetworkConnection {
       // Any unconsumed bytes (e.g., partial headers or suspended streams) are preserved
       readBuffer.compact();
       logger.trace("[NIO] Buffer compacted. Position: {}", readBuffer.position());
-    }
-  }
-
-  private void onWritable(SelectionKey key) throws IOException {
-    while (true) {
-      ByteBuffer buf = writeQueue.peek();
-      if (buf == null) {
-        pendingWrite.set(false);
-        key.interestOpsAnd(~SelectionKey.OP_WRITE);
-        return;
-      }
-      int written = socketChannel.write(buf);
-      if (written == 0 || buf.hasRemaining()) {
-        return;
-      }
-      writeQueue.poll();
     }
   }
 
