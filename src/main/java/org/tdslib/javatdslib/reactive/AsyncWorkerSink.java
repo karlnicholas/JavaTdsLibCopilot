@@ -52,6 +52,7 @@ public class AsyncWorkerSink {
   private boolean segmentEmitted = false;
   private volatile boolean isWireClean = false;
   private volatile boolean isDiscarding = false;
+  private volatile boolean isAttentionPending = false;
 
   private ColMetaDataToken activeMetaData;
   private RowDrainer activeRowDrainer;
@@ -104,21 +105,40 @@ public class AsyncWorkerSink {
     }
   }
 
-  /**
-   * Cancels processing and clears the token queue.
-   */
+//  /**
+//   * Cancels processing. If the wire is not clean, enters Discard Mode.
+//   */
 //  public void cancel() {
-//    isCancelled.set(true);
-//    tokenQueue.clear();
+//    if (isCancelled.compareAndSet(false, true)) {
+//      if (!isWireClean) {
+//        logger.debug("Stream cancelled mid-flight. Entering Graceful Discard Mode.");
+//        this.isDiscarding = true;
+//        scheduleDrain(); // Wake up the drain loop to vacuum the remaining bytes
+//      } else {
+//        tokenQueue.clear();
+//      }
+//    }
 //  }
+
+  public void cancel() {
+    cancel(false);
+  }
+
   /**
    * Cancels processing. If the wire is not clean, enters Discard Mode.
+   * @param expectAttentionAck If true, registers a cryptographic debt requiring a DONE_ATTN token.
    */
-  public void cancel() {
+  public void cancel(boolean expectAttentionAck) {
     if (isCancelled.compareAndSet(false, true)) {
       if (!isWireClean) {
         logger.debug("Stream cancelled mid-flight. Entering Graceful Discard Mode.");
         this.isDiscarding = true;
+
+        if (expectAttentionAck) {
+          this.isAttentionPending = true;
+          logger.debug("Attention debt registered. Lock will hold until DONE_ATTN (0x0020) is received.");
+        }
+
         scheduleDrain(); // Wake up the drain loop to vacuum the remaining bytes
       } else {
         tokenQueue.clear();
@@ -205,17 +225,31 @@ public class AsyncWorkerSink {
     } while (missed != 0);
   }
 
-//  private void processToken(Token token) {
-//    if (token instanceof ColMetaDataToken meta) {
-//      this.activeMetaData = meta;
-//    } else if (token instanceof RowToken) {
     private void processToken(Token token) {
-      // THE VACUUM: If discarding, drop everything except the final DONE token
+// THE VACUUM: If discarding, drop everything until the appropriate DONE token
       if (this.isDiscarding) {
         if (token instanceof DoneToken done) {
-          if (!done.getStatus().hasMoreResults()) {
+          boolean isClean = false;
+
+          if (this.isAttentionPending) {
+            // Cryptographic Debt: MUST wait for the Attention Acknowledgment bit (0x0020)
+            // NOTE: If your DoneToken.Status class doesn't have isAttention(),
+            // implement it by checking if (statusValue & 0x0020) != 0
+            if (done.getStatus().isAttention()) {
+              logger.debug("Attention Acknowledged (DONE_ATTN received). Debt paid.");
+              isClean = true;
+            } else {
+              logger.trace("Ignoring natural DONE token. Attention debt still pending.");
+            }
+          } else if (!done.getStatus().hasMoreResults()) {
+            // Passive Drain: Wait for the natural end of the batch
+            isClean = true;
+          }
+
+          if (isClean) {
             logger.debug("Graceful Discard complete. Wire is clean.");
             this.isDiscarding = false;
+            this.isAttentionPending = false;
             this.isWireClean = true;
             this.activeRowDrainer = null;
             this.tokenQueue.clear();

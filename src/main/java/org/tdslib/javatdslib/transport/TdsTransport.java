@@ -213,26 +213,15 @@ public class TdsTransport implements AutoCloseable {
       );
 
       request.sink().onRequest(workerSink::request);
-//      request.sink().onCancel(() -> {
-//        workerSink.cancel();
-//        if (isFinished.compareAndSet(false, true)) {
-//          logger.trace(
-//              "[RACE-TRACE] 🟡 Downstream onCancel triggered! Releasing lock and draining!");
-//          this.setStreamHandlers(null);
-//          this.resumeNetworkRead();
-//          isNetworkBusy.set(false);
-//          debuggingInformation.cancelCallback.getAndIncrement();
-//          drain();
-//        }
-//      });
       request.sink().onCancel(() -> {
-        // We DO NOT set isFinished to true here, nor do we release the lock.
-        // We delegate to the workerSink, which will enter Graceful Discard mode.
-        // When it finds the final Done token, it will trigger the onComplete()
-        // callback above to cleanly release the network lock.
-        logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Delegating to workerSink for Graceful Discard.");
+        logger.trace("[RACE-TRACE] 🟡 Downstream onCancel triggered! Firing Attention and delegating to workerSink.");
         debuggingInformation.cancelCallback.getAndIncrement();
-        workerSink.cancel();
+
+        // 1. Fire the physical stop command to the SQL Server CPU
+        sendAttentionSignal();
+
+        // 2. Delegate to the sink and strictly register the Attention Debt
+        workerSink.cancel(true);
       });
 
       StatefulTokenDecoder decoder = new StatefulTokenDecoder(
@@ -473,6 +462,32 @@ public class TdsTransport implements AutoCloseable {
 
   public ConnectionContext getContext() {
     return context;
+  }
+
+  /**
+   * Sends the Out-Of-Band Attention Signal (0x06) to SQL Server.
+   * Forces the server to violently halt the current request execution.
+   */
+  private void sendAttentionSignal() {
+    try {
+      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}", debuggingInformation.spid);
+
+      ByteBuffer buffer = ByteBuffer.allocate(8);
+      buffer.order(ByteOrder.BIG_ENDIAN);
+      buffer.put((byte) 0x06); // Byte 0: Type = Attention
+      buffer.put((byte) 0x01); // Byte 1: Status = EOM
+      buffer.putShort((short) 8); // Bytes 2-3: Length = 8
+      buffer.putShort((short) debuggingInformation.spid); // Bytes 4-5: SPID
+      buffer.put((byte) 0x00); // Byte 6: Packet Sequence = 0
+      buffer.put((byte) 0x00); // Byte 7: Window = 0
+      buffer.flip();
+
+      // THE FIX: Use the exact variable name and non-blocking write method from NetworkConnection
+      this.networkConnection.writeAsync(buffer);
+
+    } catch (Exception e) {
+      logger.error("Failed to send Attention Signal", e);
+    }
   }
 
   /**

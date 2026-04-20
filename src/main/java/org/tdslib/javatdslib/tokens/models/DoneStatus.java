@@ -31,6 +31,15 @@ public class DoneStatus {
   }
 
   /**
+   * Indicates whether the DONE token is an acknowledgment of an Attention signal (0x06).
+   *
+   * @return true if the ATTN bit (0x0020) is set.
+   */
+  public boolean isAttention() {
+    return (value & BIT_ATTN) != 0;
+  }
+
+  /**
    * Indicates whether the DONE token signals an error occurred.
    *
    * @return true if the ERROR bit is set
