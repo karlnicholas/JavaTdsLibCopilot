@@ -470,14 +470,14 @@ public class TdsTransport implements AutoCloseable {
    */
   private void sendAttentionSignal() {
     try {
-      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}", debuggingInformation.spid);
+      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}", context.getSpid());
 
       ByteBuffer buffer = ByteBuffer.allocate(8);
       buffer.order(ByteOrder.BIG_ENDIAN);
       buffer.put((byte) 0x06); // Byte 0: Type = Attention
       buffer.put((byte) 0x01); // Byte 1: Status = EOM
       buffer.putShort((short) 8); // Bytes 2-3: Length = 8
-      buffer.putShort((short) debuggingInformation.spid); // Bytes 4-5: SPID
+      buffer.putShort((short) context.getSpid()); // Bytes 4-5: SPID
       buffer.put((byte) 0x00); // Byte 6: Packet Sequence = 0
       buffer.put((byte) 0x00); // Byte 7: Window = 0
       buffer.flip();
