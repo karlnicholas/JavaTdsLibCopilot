@@ -126,27 +126,11 @@ public class TdsTokenQueue implements TdsDecoderSink {
     return queue.peek();
   }
 
-//  /**
-//   * Clears the queue.
-//   */
-//  public void clear() {
-//    queue.clear();
-//    queueByteWeight.set(0);
-//  }
   /**
    * Clears the queue.
    */
   public void clear() {
     queue.clear();
     queueByteWeight.set(0);
-  }
-
-  /**
-   * Instantly poisons the underlying physical connection.
-   */
-  public void forceKillConnection() {
-    transport.handleFatalConnectionError(
-        new IllegalStateException("Stream cancelled mid-flight. Poisoning socket to prevent protocol desync.")
-    );
   }
 }

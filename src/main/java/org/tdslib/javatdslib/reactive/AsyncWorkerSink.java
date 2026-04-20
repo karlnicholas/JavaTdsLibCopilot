@@ -49,9 +49,6 @@ public class AsyncWorkerSink {
   private final AtomicBoolean isCancelled = new AtomicBoolean(false);
   private final AtomicBoolean isPaused = new AtomicBoolean(false); // Stream Lock
 
-  // NEW: Assumes the wire is actively receiving data until the DoneToken arrives
-  private volatile boolean isWireClean = false;
-
   private boolean segmentEmitted = false;
 
   private ColMetaDataToken activeMetaData;
@@ -105,26 +102,12 @@ public class AsyncWorkerSink {
     }
   }
 
-//  /**
-//   * Cancels processing and clears the token queue.
-//   */
-//  public void cancel() {
-//    isCancelled.set(true);
-//    tokenQueue.clear();
-//  }
-
   /**
    * Cancels processing and clears the token queue.
    */
   public void cancel() {
-    if (isCancelled.compareAndSet(false, true)) {
-      if (!isWireClean) {
-        logger.warn("Stream cancelled with active data on the wire. Initiating Socket Kill.");
-        tokenQueue.forceKillConnection();
-      } else {
-        tokenQueue.clear();
-      }
-    }
+    isCancelled.set(true);
+    tokenQueue.clear();
   }
 
   private void scheduleDrain() {
@@ -233,7 +216,6 @@ public class AsyncWorkerSink {
         pushError(this.pendingError);
         this.pendingError = null; // Clear it to be safe
       } else if (!done.getStatus().hasMoreResults()) {
-        this.isWireClean = true;  // <--- ADD THIS LINE
         pushComplete();
       }
     } else if (token instanceof ErrorToken error) {
