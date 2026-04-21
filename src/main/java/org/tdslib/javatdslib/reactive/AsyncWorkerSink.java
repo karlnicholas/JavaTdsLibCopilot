@@ -105,27 +105,16 @@ public class AsyncWorkerSink {
     }
   }
 
-//  /**
-//   * Cancels processing. If the wire is not clean, enters Discard Mode.
-//   */
-//  public void cancel() {
-//    if (isCancelled.compareAndSet(false, true)) {
-//      if (!isWireClean) {
-//        logger.debug("Stream cancelled mid-flight. Entering Graceful Discard Mode.");
-//        this.isDiscarding = true;
-//        scheduleDrain(); // Wake up the drain loop to vacuum the remaining bytes
-//      } else {
-//        tokenQueue.clear();
-//      }
-//    }
-//  }
-
+  /**
+   * Cancels processing without expecting an attention acknowledgment.
+   */
   public void cancel() {
     cancel(false);
   }
 
   /**
    * Cancels processing. If the wire is not clean, enters Discard Mode.
+   *
    * @param expectAttentionAck If true, registers a cryptographic debt requiring a DONE_ATTN token.
    */
   public void cancel(boolean expectAttentionAck) {
@@ -136,7 +125,8 @@ public class AsyncWorkerSink {
 
         if (expectAttentionAck) {
           this.isAttentionPending = true;
-          logger.debug("Attention debt registered. Lock will hold until DONE_ATTN (0x0020) is received.");
+          logger.debug("Attention debt registered. Lock will hold until DONE_ATTN "
+              + "(0x0020) is received.");
         }
 
         scheduleDrain(); // Wake up the drain loop to vacuum the remaining bytes
@@ -165,14 +155,6 @@ public class AsyncWorkerSink {
       long requested = demand.get();
       long emitted = 0;
 
-//      try {
-//        while (emitted != requested) {
-//          if (isCancelled.get() || isPaused.get()) {
-//            break;
-//          }
-//
-//          // Reset the tracker for this specific loop iteration
-//          this.segmentEmitted = false;
       try {
         // Keep spinning if we need to emit OR if we are actively vacuuming the wire
         while (emitted != requested || isDiscarding) {
@@ -225,60 +207,57 @@ public class AsyncWorkerSink {
     } while (missed != 0);
   }
 
-    private void processToken(Token token) {
-// THE VACUUM: If discarding, drop everything until the appropriate DONE token
-      if (this.isDiscarding) {
-        if (token instanceof DoneToken done) {
-          boolean isClean = false;
+  private void processToken(Token token) {
+    // THE VACUUM: If discarding, drop everything until the appropriate DONE token
+    if (this.isDiscarding) {
+      if (token instanceof DoneToken done) {
+        boolean isClean = false;
 
-          if (this.isAttentionPending) {
-            // Cryptographic Debt: MUST wait for the Attention Acknowledgment bit (0x0020)
-            // NOTE: If your DoneToken.Status class doesn't have isAttention(),
-            // implement it by checking if (statusValue & 0x0020) != 0
-            if (done.getStatus().isAttention()) {
-              logger.debug("Attention Acknowledged (DONE_ATTN received). Debt paid.");
-              isClean = true;
-            } else {
-              logger.trace("Ignoring natural DONE token. Attention debt still pending.");
-            }
-          } else if (!done.getStatus().hasMoreResults()) {
-            // Passive Drain: Wait for the natural end of the batch
+        if (this.isAttentionPending) {
+          // Cryptographic Debt: MUST wait for the Attention Acknowledgment bit (0x0020)
+          // NOTE: If your DoneToken.Status class doesn't have isAttention(),
+          // implement it by checking if (statusValue & 0x0020) != 0
+          if (done.getStatus().isAttention()) {
+            logger.debug("Attention Acknowledged (DONE_ATTN received). Debt paid.");
             isClean = true;
+          } else {
+            logger.trace("Ignoring natural DONE token. Attention debt still pending.");
           }
-
-          if (isClean) {
-            logger.debug("Graceful Discard complete. Wire is clean.");
-            this.isDiscarding = false;
-            this.isAttentionPending = false;
-            this.isWireClean = true;
-            this.activeRowDrainer = null;
-            this.tokenQueue.clear();
-            pushComplete(); // Safely triggers TdsTransport to release the lock
-          }
+        } else if (!done.getStatus().hasMoreResults()) {
+          // Passive Drain: Wait for the natural end of the batch
+          isClean = true;
         }
-        return;
-      }
 
-      if (token instanceof ColMetaDataToken meta) {
-        this.activeMetaData = meta;
-      } else if (token instanceof RowToken) {
-          // FIXED: Use the new two-phase lifecycle flags
+        if (isClean) {
+          logger.debug("Graceful Discard complete. Wire is clean.");
+          this.isDiscarding = false;
+          this.isAttentionPending = false;
+          this.isWireClean = true;
+          this.activeRowDrainer = null;
+          this.tokenQueue.clear();
+          pushComplete(); // Safely triggers TdsTransport to release the lock
+        }
+      }
+      return;
+    }
+
+    if (token instanceof ColMetaDataToken meta) {
+      this.activeMetaData = meta;
+    } else if (token instanceof RowToken) {
+      // FIXED: Use the new two-phase lifecycle flags
       if (activeRowDrainer != null && activeRowDrainer.isReadyToYield()
           && !activeRowDrainer.isRowEmitted()) {
         emitSegment(activeRowDrainer.assembleRow());
       }
       this.activeRowDrainer = new RowDrainer(activeMetaData, context, tokenQueue);
 
-//    } else if (token instanceof DoneToken done) {
-//
-//      if (activeRowDrainer != null) {
-      } else if (token instanceof DoneToken done) {
+    } else if (token instanceof DoneToken done) {
 
-        // MARK WIRE CLEAN
-        boolean noMoreResults = !done.getStatus().hasMoreResults();
-        if (noMoreResults && this.pendingError == null) {
-          this.isWireClean = true;
-        }
+      // MARK WIRE CLEAN
+      boolean noMoreResults = !done.getStatus().hasMoreResults();
+      if (noMoreResults && this.pendingError == null) {
+        this.isWireClean = true;
+      }
 
       if (activeRowDrainer != null) {
         // FIXED: Use the new two-phase lifecycle flags
@@ -323,13 +302,6 @@ public class AsyncWorkerSink {
     }
   }
 
-//  private void processColumn(ColumnData cd) {
-//    if (this.activeRowDrainer == null) {
-//      return;
-//    }
-//
-//    this.activeRowDrainer.processColumn(cd);
-
   private void processColumn(ColumnData cd) {
     // Drop LOB chunks immediately if vacuuming
     if (this.isDiscarding || this.activeRowDrainer == null) {
@@ -337,8 +309,6 @@ public class AsyncWorkerSink {
     }
 
     this.activeRowDrainer.processColumn(cd);
-    // ... (keep rest exactly as is)
-    //
     // PHASE 1: Emit if the row is logically ready, but ONLY ONCE per row
     if (this.activeRowDrainer.isReadyToYield() && !this.activeRowDrainer.isRowEmitted()) {
       TdsRow row = this.activeRowDrainer.assembleRow();

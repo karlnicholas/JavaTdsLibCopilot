@@ -173,7 +173,7 @@ public class TdsTransport implements AutoCloseable {
     }
 
     this.activeSink = request.sink();
-// Guarantee exactly-once termination and handoff
+    // Guarantee exactly-once termination and handoff
     AtomicBoolean isFinished = new AtomicBoolean(false);
     AtomicBoolean wasCancelled = new AtomicBoolean(false);
 
@@ -469,7 +469,8 @@ public class TdsTransport implements AutoCloseable {
    */
   private void sendAttentionSignal() {
     try {
-      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}", context.getSpid());
+      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}",
+          context.getSpid());
 
       ByteBuffer buffer = ByteBuffer.allocate(8);
       buffer.order(ByteOrder.BIG_ENDIAN);
