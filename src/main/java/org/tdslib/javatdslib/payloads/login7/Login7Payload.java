@@ -17,6 +17,9 @@ public final class Login7Payload extends Payload {
   private static final byte FeatureExtensionTerminator = (byte) 0xFF;
   private static final int ClientIdSize = 6;
   private static final int FIXED_HEADER_SIZE = 94; // TDS 7.x fixed header size
+  private static final byte FEATURE_ID_UTF8 = 0x0A;
+  private static final byte FEATURE_UTF8_ENABLED = 0x01;
+  private static final byte PASSWORD_SCRAMBLE_MASK = (byte) 0xA5;
 
   public Login7Options options;
   public OptionFlags1 optionFlags1;
@@ -286,9 +289,9 @@ public final class Login7Payload extends Payload {
 
     if (requestUtf8) {
       ByteBuffer utf8Feature = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN);
-      utf8Feature.put((byte) 0x0A); // Feature ID: 10 (UTF-8 Support)
-      utf8Feature.putInt(1);        // Feature Data Length: 1 byte
-      utf8Feature.put((byte) 0x01); // Feature Data: 1 (Enabled)
+      utf8Feature.put(FEATURE_ID_UTF8);        // Feature ID: 10 (UTF-8 Support)
+      utf8Feature.putInt(1);                   // Feature Data Length: 1 byte
+      utf8Feature.put(FEATURE_UTF8_ENABLED);   // Feature Data: 1 (Enabled)
       utf8Feature.flip();
 
       buffers.add(utf8Feature);
@@ -352,8 +355,8 @@ public final class Login7Payload extends Payload {
       //    (b << 4)  moves low nibble to high
       int swapped = (b >>> 4) | (b << 4);
 
-      // 3. XOR with 0xA5 and cast back to byte
-      result[i] = (byte) (swapped ^ 0xA5);
+      // 3. XOR with the MS-TDS magic mask and cast back to byte
+      result[i] = (byte) (swapped ^ PASSWORD_SCRAMBLE_MASK);
     }
     return result;
   }

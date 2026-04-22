@@ -36,6 +36,9 @@ import java.util.function.Supplier;
 public class TdsTransport implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(TdsTransport.class);
   private static final int TDS_HEADER_LENGTH = 8;
+  private static final byte STATUS_EOM = 0x01;
+  private static final byte PACKET_SEQ_DEFAULT = 0x00;
+  private static final byte WINDOW_DEFAULT = 0x00;
 
   private final NetworkConnection networkConnection;
   private final String host;
@@ -469,20 +472,24 @@ public class TdsTransport implements AutoCloseable {
    */
   private void sendAttentionSignal() {
     try {
-      logger.warn("[OOB] Firing Attention Signal (0x06) down the wire on SPID {}",
+      logger.warn("[OOB] Firing Attention Signal down the wire on SPID {}",
           context.getSpid());
 
-      ByteBuffer buffer = ByteBuffer.allocate(8);
+      // Use the existing TDS_HEADER_LENGTH constant instead of '8'
+      ByteBuffer buffer = ByteBuffer.allocate(TDS_HEADER_LENGTH);
       buffer.order(ByteOrder.BIG_ENDIAN);
-      buffer.put((byte) 0x06); // Byte 0: Type = Attention
-      buffer.put((byte) 0x01); // Byte 1: Status = EOM
-      buffer.putShort((short) 8); // Bytes 2-3: Length = 8
-      buffer.putShort((short) context.getSpid()); // Bytes 4-5: SPID
-      buffer.put((byte) 0x00); // Byte 6: Packet Sequence = 0
-      buffer.put((byte) 0x00); // Byte 7: Window = 0
+
+      // Byte 0: Type (Assuming PacketType enum has a way to get the byte, e.g., .getValue().
+      // If not, declare a constant: private static final byte TYPE_ATTENTION = 0x06;)
+      buffer.put((byte) 0x06);
+
+      buffer.put(STATUS_EOM);
+      buffer.putShort((short) TDS_HEADER_LENGTH);
+      buffer.putShort((short) context.getSpid());
+      buffer.put(PACKET_SEQ_DEFAULT);
+      buffer.put(WINDOW_DEFAULT);
       buffer.flip();
 
-      // THE FIX: Use the exact variable name and non-blocking write method from NetworkConnection
       this.networkConnection.writeAsync(buffer);
 
     } catch (Exception e) {

@@ -13,6 +13,16 @@ import java.util.Map;
  * PreLogin payload.
  */
 public class PreLoginPayload extends Payload {
+  // --- PreLogin Option Tags ---
+  private static final byte OPTION_VERSION = 0x00;
+  private static final byte OPTION_ENCRYPTION = 0x01;
+  private static final byte OPTION_INSTANCE = 0x02;
+  private static final byte OPTION_THREAD_ID = 0x03;
+  private static final byte OPTION_MARS = 0x04;
+  private static final byte OPTION_FED_AUTH = 0x06;
+
+  // --- Terminator ---
+  private static final byte OPTION_TERMINATOR = (byte) 0xFF;
   private EncryptionType encryption;
   private SqlVersion version;
   private byte instance;
@@ -113,15 +123,14 @@ public class PreLoginPayload extends Payload {
     byte[] fedAuthBytes = new byte[]{fedAuth};
 
     // 2. Define Options List (Tag, Data)
-    // Using a dynamic list ensures header count matches actual data written
     List<Object[]> options = new ArrayList<>();
 
-    options.add(new Object[]{(byte) 0x00, versionBytes});    // Version
-    options.add(new Object[]{(byte) 0x01, encryptionBytes}); // Encryption
-    //        options.add(new Object[] { (byte) 0x02, instanceBytes });   // Instance
-    //        options.add(new Object[] { (byte) 0x03, threadIdBytes });   // ThreadID
-    //        options.add(new Object[] { (byte) 0x04, marsBytes });       // MARS
-    //        options.add(new Object[] { (byte) 0x06, fedAuthBytes });    // FedAuth
+    options.add(new Object[]{OPTION_VERSION, versionBytes});       // Version
+    options.add(new Object[]{OPTION_ENCRYPTION, encryptionBytes}); // Encryption
+    // options.add(new Object[]{OPTION_INSTANCE, instanceBytes});  // Instance
+    // options.add(new Object[]{OPTION_THREAD_ID, threadIdBytes}); // ThreadID
+    // options.add(new Object[]{OPTION_MARS, marsBytes});          // MARS
+    // options.add(new Object[]{OPTION_FED_AUTH, fedAuthBytes});   // FedAuth
 
     // 3. Calculate Sizes
     // Header is: (5 bytes * count) + 1 byte for Terminator
@@ -150,7 +159,7 @@ public class PreLoginPayload extends Payload {
     }
 
     // Write Terminator
-    buf.put((byte) 0xFF);
+    buf.put(OPTION_TERMINATOR);
 
     // 5. Write Data Bodies
     for (Object[] opt : options) {
@@ -178,7 +187,8 @@ public class PreLoginPayload extends Payload {
       // We cannot rely on buffer.getShort(). We must read bytes manually.
       while (buffer.remaining() >= 5) {
         byte tag = buffer.get();
-        if ((tag & 0xFF) == 0xFF) {
+        // Check for the terminator byte
+        if (tag == OPTION_TERMINATOR) {
           headerEnd = buffer.position();
           break;
         }
@@ -204,7 +214,6 @@ public class PreLoginPayload extends Payload {
       // 2. Read Values
       // For reading the data payload (like ThreadID), we want Little Endian.
       // Packet.getData() returns LE, so we can use standard get methods here.
-
       for (Map.Entry<Byte, Integer> entry : offsets.entrySet()) {
         byte tag = entry.getKey();
         int off = entry.getValue();
@@ -213,35 +222,35 @@ public class PreLoginPayload extends Payload {
         buffer.position(off);
 
         switch (tag) {
-          case 0x00: // Version
+          case OPTION_VERSION:
             if (len == 6) {
               byte[] v = new byte[6];
               buffer.get(v);
               this.version = SqlVersion.fromBytes(v);
             }
             break;
-          case 0x01: // Encryption
+          case OPTION_ENCRYPTION:
             if (len == 1) {
               this.encryption = EncryptionType.fromValue(buffer.get());
             }
             break;
-          case 0x02: // Instance
+          case OPTION_INSTANCE:
             if (len == 1) {
               this.instance = buffer.get();
             }
             break;
-          case 0x03: // ThreadId
+          case OPTION_THREAD_ID:
             if (len == 4) {
               int tid = buffer.getInt();
               this.threadId = tid & 0xFFFFFFFFL;
             }
             break;
-          case 0x04: // Mars
+          case OPTION_MARS:
             if (len == 1) {
               this.mars = buffer.get();
             }
             break;
-          case 0x06: // FedAuth
+          case OPTION_FED_AUTH:
             if (len == 1) {
               this.fedAuth = buffer.get();
             }

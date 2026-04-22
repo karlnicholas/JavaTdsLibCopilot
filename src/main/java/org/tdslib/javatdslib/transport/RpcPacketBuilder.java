@@ -20,6 +20,11 @@ public class RpcPacketBuilder {
   private static final short RPC_PROCID_SPEXECUTESQL = 10;
   private static final byte RPC_PARAM_DEFAULT = 0x00;
 
+  // --- New Protocol Constants ---
+  // TDS 7.2+ Batch Separator
+  private static final byte RPC_BATCH_SEPARATOR = (byte) 0xFF;
+  private static final byte RPC_PARAM_BYREF = 0x01;
+
   // Extracted Magic Numbers
   private static final short RPC_HEADER_MARKER = (short) 0xFFFF;
   private static final short MAX_NVARCHAR_SIZE = 8000;
@@ -54,6 +59,7 @@ public class RpcPacketBuilder {
    * @return the constructed ByteBuffer
    */
   public ByteBuffer buildRpcPacket() {
+    // TODO: hardcode pipeline length
     ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
     buf.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -61,9 +67,9 @@ public class RpcPacketBuilder {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
 
     for (int i = 0; i < batchParams.size(); i++) {
-      // TDS Spec: 0x80 (BatchFlag) separates multiple RPCReqBatch requests
+      // Separates multiple RPCReqBatch requests in TDS 7.2+
       if (i > 0) {
-        buf.put((byte) 0xFF);
+        buf.put(RPC_BATCH_SEPARATOR);
       }
 
       writeRpcHeader(buf);
@@ -138,12 +144,11 @@ public class RpcPacketBuilder {
     writeParamName(buf, param.name());
 
     if (param.isOutParameter()) {
-      buf.put((byte) 0x01);
+      buf.put(RPC_PARAM_BYREF);
     } else {
       buf.put(RPC_PARAM_DEFAULT);
     }
 
-    // Fix: Pass 'param' directly instead of 'param.type()'
     ParameterEncoder codec = encoderRegistry.getCodec(param);
     codec.writeTypeInfo(buf, param, encodingContext);
     codec.writeValue(buf, param, encodingContext);

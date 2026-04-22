@@ -28,6 +28,22 @@ public class TdsConnection implements Connection {
   private final TdsTransport transport;
   private final ConnectionContext context;
 
+  // --- Transaction Manager Operation Codes ---
+  private static final short TM_BEGIN_XACT = 5;
+  private static final short TM_COMMIT_XACT = 7;
+  private static final short TM_ROLLBACK_XACT = 8;
+
+  // --- Transaction Flags & Lengths ---
+  private static final byte ISOLATION_LEVEL_DEFAULT = 0x00;
+  private static final byte TX_NAME_LENGTH_EMPTY = 0x00;
+  private static final byte TM_FLAG_DEFAULT = 0x00;
+
+  // --- SQL Server Isolation Level IDs ---
+  private static final byte ISOLATION_READ_UNCOMMITTED = 0x01;
+  private static final byte ISOLATION_READ_COMMITTED = 0x02;
+  private static final byte ISOLATION_REPEATABLE_READ = 0x03;
+  private static final byte ISOLATION_SERIALIZABLE = 0x04;
+
   /**
    * Create a new TdsConnection backed by a TCP transport to the given host/port.
    *
@@ -41,12 +57,11 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> beginTransaction() {
-    // FIX: Pass "BEGIN_TRANSACTION"
     return Mono.from(transport.execute(headers -> {
       ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-      payload.putShort((short) 5); // TM_BEGIN_XACT
-      payload.put((byte) 0x00);    // Isolation Level: 0x00 (Use session default)
-      payload.put((byte) 0x00);    // Transaction Name Length: 0 (Unnamed)
+      payload.putShort(TM_BEGIN_XACT);
+      payload.put(ISOLATION_LEVEL_DEFAULT);
+      payload.put(TX_NAME_LENGTH_EMPTY);
       payload.flip();
 
       return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
@@ -137,12 +152,11 @@ public class TdsConnection implements Connection {
         return Mono.empty();
       }
 
-      // FIX: Added "COMMIT_TRANSACTION" tracking string
       return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        payload.putShort((short) 7); // TM_COMMIT_XACT
-        payload.put((byte) 0x00);
-        payload.put((byte) 0x00);
+        payload.putShort(TM_COMMIT_XACT);
+        payload.put(TM_FLAG_DEFAULT);
+        payload.put(TX_NAME_LENGTH_EMPTY);
         payload.flip();
 
         return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
@@ -172,21 +186,21 @@ public class TdsConnection implements Connection {
 
   private byte mapIsolationLevel(IsolationLevel level) {
     if (level == null) {
-      return 0x00;
+      return ISOLATION_LEVEL_DEFAULT;
     }
     if (level == IsolationLevel.READ_UNCOMMITTED) {
-      return 0x01;
+      return ISOLATION_READ_UNCOMMITTED;
     }
     if (level == IsolationLevel.READ_COMMITTED) {
-      return 0x02;
+      return ISOLATION_READ_COMMITTED;
     }
     if (level == IsolationLevel.REPEATABLE_READ) {
-      return 0x03;
+      return ISOLATION_REPEATABLE_READ;
     }
     if (level == IsolationLevel.SERIALIZABLE) {
-      return 0x04;
+      return ISOLATION_SERIALIZABLE;
     }
-    return 0x00; // Default fallback
+    return ISOLATION_LEVEL_DEFAULT; // Default fallback
   }
 
   @Override
