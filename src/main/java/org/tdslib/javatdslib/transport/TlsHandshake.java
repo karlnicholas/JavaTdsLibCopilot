@@ -22,6 +22,12 @@ public class TlsHandshake {
 
   private static final int TDS_HEADER_LENGTH = 8;
 
+  // --- Header Constants ---
+  private static final byte STATUS_EOM = 0x01;
+  private static final short SPID_UNASSIGNED = 0x0000;
+  private static final byte PACKET_SEQ_START = 0x01;
+  private static final byte WINDOW_DEFAULT = 0x00;
+
   /**
    * Initiates and performs the TLS handshake.
    *
@@ -101,6 +107,8 @@ public class TlsHandshake {
 
         case NEED_WRAP:
           myNetData.clear();
+
+          // Leave exactly 8 bytes of empty space at the front for the TDS Header
           myNetData.position(TDS_HEADER_LENGTH);
 
           while (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
@@ -114,14 +122,15 @@ public class TlsHandshake {
           myNetData.flip();
           final int totalLength = myNetData.limit();
 
-          myNetData.put(0, PacketType.PRE_LOGIN.getValue());
-          myNetData.put(1, (byte) 0x01);
-          myNetData.putShort(2, (short) totalLength);
-          myNetData.putShort(4, (short) 0x0000);
-          myNetData.put(6, (byte) 0x01);
-          myNetData.put(7, (byte) 0x00);
+          // Retroactively fill in the 8-byte TDS header at the beginning of the buffer
+          myNetData.put(0, PacketType.PRE_LOGIN.getValue()); // Byte 0: Packet Type
+          myNetData.put(1, STATUS_EOM);                      // Byte 1: Status
+          myNetData.putShort(2, (short) totalLength);        // Bytes 2-3: Length
+          myNetData.putShort(4, SPID_UNASSIGNED);            // Bytes 4-5: SPID
+          myNetData.put(6, PACKET_SEQ_START);                // Byte 6: Sequence ID
+          myNetData.put(7, WINDOW_DEFAULT);                  // Byte 7: Window
 
-          connection.writeDirect(myNetData); // Replaced raw socket write loop
+          connection.writeDirect(myNetData);
           break;
 
         case NEED_TASK:
