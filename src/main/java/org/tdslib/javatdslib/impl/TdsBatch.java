@@ -4,8 +4,8 @@ import io.r2dbc.spi.Batch;
 import io.r2dbc.spi.Result;
 import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
 import org.tdslib.javatdslib.transport.ConnectionContext;
@@ -73,9 +73,9 @@ public class TdsBatch implements Batch {
         || segment instanceof Result.OutSegment;
   }
 
-  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
+  private OutboundTdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
+    return OutboundTdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
   }
 }

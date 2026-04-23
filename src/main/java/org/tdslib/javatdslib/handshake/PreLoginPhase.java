@@ -2,8 +2,9 @@ package org.tdslib.javatdslib.handshake;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tdslib.javatdslib.packets.InboundTdsPacket;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.protocol.PreLoginResponse;
 import org.tdslib.javatdslib.transport.TdsTransport;
@@ -33,17 +34,17 @@ public class PreLoginPhase {
     logger.debug("Starting Pre-Login phase");
     PreLoginPayload preLoginPayload = new PreLoginPayload(false);
 
-    TdsMessage preLoginMsg = TdsMessage.createRequest(
+    OutboundTdsMessage preLoginMsg = OutboundTdsMessage.createRequest(
         PacketType.PRE_LOGIN,
         Mono.just(preLoginPayload.buildBuffer())
     );
     transport.sendMessageDirect(preLoginMsg);
 
-    List<TdsMessage> preLoginResponses = transport.receiveFullResponse();
+    List<InboundTdsPacket> preLoginResponses = transport.receiveFullResponse();
     return processPreLoginResponse(preLoginResponses);
   }
 
-  private PreLoginResponse processPreLoginResponse(List<TdsMessage> packets) {
+  private PreLoginResponse processPreLoginResponse(List<InboundTdsPacket> packets) {
     ByteBuffer combined = combinePayloads(packets);
     PreLoginResponse response = new PreLoginResponse();
 
@@ -111,23 +112,13 @@ public class PreLoginPhase {
     return response;
   }
 
-  private ByteBuffer combinePayloads(List<TdsMessage> packets) {
-    // FIX: Use the getPayloadSync() bridge to access the underlying ByteBuffer
-    int total = packets.stream().mapToInt(m -> m.getPayloadSync().remaining()).sum();
+  private ByteBuffer combinePayloads(List<InboundTdsPacket> packets) {
+    int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
     ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
-    for (TdsMessage m : packets) {
-      combined.put(m.getPayloadSync().duplicate());
+    for (InboundTdsPacket m : packets) {
+      combined.put(m.getPayload().duplicate());
     }
     combined.flip();
     return combined;
   }
-//  private ByteBuffer combinePayloads(List<TdsMessage> packets) {
-//    int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
-//    ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
-//    for (TdsMessage m : packets) {
-//      combined.put(m.getPayload().duplicate());
-//    }
-//    combined.flip();
-//    return combined;
-//  }
 }

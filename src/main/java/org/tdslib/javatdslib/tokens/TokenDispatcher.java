@@ -2,7 +2,7 @@ package org.tdslib.javatdslib.tokens;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.packets.InboundTdsPacket;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 
 import java.nio.ByteBuffer;
@@ -10,7 +10,7 @@ import java.nio.ByteOrder;
 
 /**
  * Dispatches parsing of individual TDS tokens from a single message payload. Processes one
- * TdsMessage (one packet) at a time — no stream across packets.
+ * InboundTdsPacket at a time — no stream across packets.
  */
 public class TokenDispatcher {
   private static final Logger logger = LoggerFactory.getLogger(TokenDispatcher.class);
@@ -27,18 +27,18 @@ public class TokenDispatcher {
   }
 
   /**
-   * Processes all tokens in a single TDS tdsMessage (one packet's payload). Calls the visitor for
+   * Processes all tokens in a single TDS packet's payload. Calls the visitor for
    * each successfully parsed token.
    *
-   * @param tdsMessage The TDS packet/tdsMessage to parse
+   * @param tdsPacket The TDS packet to parse
    * @param connectionContext Connection context for state updates
    * @param visitor Callback to handle each parsed token
    */
   public void processMessage(
-      final TdsMessage tdsMessage,
+      final InboundTdsPacket tdsPacket,
       final ConnectionContext connectionContext,
       final TokenVisitor visitor) {
-    final ByteBuffer payload = tdsMessage.getPayloadSync();
+    final ByteBuffer payload = tdsPacket.getPayload();
     payload.order(ByteOrder.LITTLE_ENDIAN);
 
     while (payload.hasRemaining()) {
@@ -55,10 +55,6 @@ public class TokenDispatcher {
 
       final Token token = parser.parse(payload, tokenTypeByte, connectionContext);
       visitor.onToken(token);
-    }
-
-    if (tdsMessage.isResetConnection()) {
-      connectionContext.resetToDefaults();
     }
   }
 }

@@ -8,8 +8,8 @@ import io.r2dbc.spi.Statement;
 import io.r2dbc.spi.TransactionDefinition;
 import io.r2dbc.spi.ValidationDepth;
 import org.reactivestreams.Publisher;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 import reactor.core.publisher.Mono;
@@ -64,7 +64,7 @@ public class TdsConnection implements Connection {
       payload.put(TX_NAME_LENGTH_EMPTY);
       payload.flip();
 
-      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
+      return OutboundTdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
     })).then();
   }
 
@@ -93,7 +93,7 @@ public class TdsConnection implements Connection {
       }
       payload.flip();
 
-      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
+      return OutboundTdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
     })).then();
   }
 
@@ -159,7 +159,7 @@ public class TdsConnection implements Connection {
         payload.put(TX_NAME_LENGTH_EMPTY);
         payload.flip();
 
-        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
+        return OutboundTdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
       })).then();
     });
   }
@@ -179,7 +179,7 @@ public class TdsConnection implements Connection {
         payload.put((byte) 0x00);
         payload.flip();
 
-        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
+        return OutboundTdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
       })).then();
     });
   }

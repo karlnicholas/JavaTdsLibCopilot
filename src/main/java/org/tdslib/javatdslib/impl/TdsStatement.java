@@ -9,8 +9,8 @@ import io.r2dbc.spi.Type;
 import org.reactivestreams.Publisher;
 import org.tdslib.javatdslib.codec.EncoderRegistry;
 import org.tdslib.javatdslib.headers.AllHeaders;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.TdsServerErrorException;
 import org.tdslib.javatdslib.protocol.TdsType;
@@ -205,14 +205,14 @@ public class TdsStatement implements Statement {
    * Creates a TDS SQL Batch message for simple, non-parameterized execution.
    *
    * @param sql The SQL query string.
-   * @return A {@link TdsMessage} ready for transport.
+   * @return A {@link OutboundTdsMessage} ready for transport.
    */
-  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
+  private OutboundTdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
 
     // Wrap in Mono.just()
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
+    return OutboundTdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
   }
 
 //  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
@@ -226,9 +226,9 @@ public class TdsStatement implements Statement {
    *
    * @param sql        The SQL query string.
    * @param executions The list of parameter sets to execute.
-   * @return A {@link TdsMessage} ready for transport.
+   * @return A {@link OutboundTdsMessage} ready for transport.
    */
-  private TdsMessage createRpcMessage(
+  private OutboundTdsMessage createRpcMessage(
       String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
     RpcEncodingContext encodingContext =
@@ -239,7 +239,7 @@ public class TdsStatement implements Statement {
     ByteBuffer payload = builder.buildRpcPacket();
 
     // Wrap in Mono.just()
-    return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, Mono.just(payload));
+    return OutboundTdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, Mono.just(payload));
   }
 
 //  private TdsMessage createRpcMessage(

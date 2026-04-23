@@ -2,7 +2,7 @@ package org.tdslib.javatdslib.transport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tdslib.javatdslib.packets.TdsMessage;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -18,12 +18,12 @@ public class QueryPacketBuilder implements PacketEncoder {
   private static final Logger LOGGER = LoggerFactory.getLogger(QueryPacketBuilder.class);
 
   @Override
-  public List<ByteBuffer> encodeMessage(TdsMessage message, int spid, int maxPacketSize) {
+  public List<ByteBuffer> encodeMessage(OutboundTdsMessage message, int spid, int maxPacketSize) {
     return buildPackets(
         message.getPacketType().getValue(),
         message.getStatusFlags(),
         spid,
-        message.getPayloadSync(),
+        message.getPayloadSync(), // Still safely bridging the publisher for now
         (short) 1, // startingPacketId
         maxPacketSize);
   }

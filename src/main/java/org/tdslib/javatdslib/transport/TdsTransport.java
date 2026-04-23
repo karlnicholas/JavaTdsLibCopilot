@@ -6,8 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.tdslib.javatdslib.headers.AllHeaders;
 import org.tdslib.javatdslib.headers.TraceActivityHeader;
 import org.tdslib.javatdslib.headers.TransactionDescriptorHeader;
+import org.tdslib.javatdslib.packets.InboundTdsPacket;
+import org.tdslib.javatdslib.packets.OutboundTdsMessage;
 import org.tdslib.javatdslib.packets.PacketType;
-import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.reactive.AsyncWorkerSink;
 import org.tdslib.javatdslib.reactive.TdsTokenQueue;
 import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
@@ -111,7 +112,7 @@ public class TdsTransport implements AutoCloseable {
    * Centralizes the building of TDS headers and reactive context extraction.
    * * @param messageFactory A function that takes the constructed headers and returns a TdsMessage
    */
-  public Flux<Result.Segment> execute(Function<AllHeaders, TdsMessage> messageFactory) {
+  public Flux<Result.Segment> execute(Function<AllHeaders, OutboundTdsMessage> messageFactory) {
     return Flux.deferContextual(contextView -> {
       UUID traceId = contextView.getOrDefault("trace-id", null);
 
@@ -232,7 +233,8 @@ public class TdsTransport implements AutoCloseable {
 
       this.setStreamHandlers(decoder::onPayloadAvailable);
 
-      TdsMessage message = request.messageSupplier().get();
+      // Change TdsMessage to OutboundTdsMessage
+      OutboundTdsMessage message = request.messageSupplier().get();
       this.sendQueryMessageAsync(message);
 
     } catch (Exception e) {
@@ -282,7 +284,7 @@ public class TdsTransport implements AutoCloseable {
    * @param tdsMessage The message to send.
    * @throws IOException If an I/O error occurs.
    */
-  public void sendMessageDirect(TdsMessage tdsMessage) throws IOException {
+  public void sendMessageDirect(OutboundTdsMessage tdsMessage) throws IOException {
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
         tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
@@ -297,7 +299,7 @@ public class TdsTransport implements AutoCloseable {
    * @param tdsMessage The message to send.
    * @throws IOException If an I/O error occurs.
    */
-  public void sendMessageEncrypted(TdsMessage tdsMessage) throws IOException {
+  public void sendMessageEncrypted(OutboundTdsMessage tdsMessage) throws IOException {
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
         tdsMessage, context.getSpid(), context.getCurrentPacketSize());
 
@@ -316,9 +318,9 @@ public class TdsTransport implements AutoCloseable {
    * @return A list of TDS messages received.
    * @throws IOException If an I/O error occurs.
    */
-  public List<TdsMessage> receiveFullResponse() throws IOException {
-    List<TdsMessage> messages = new ArrayList<>();
-    TdsMessage msg;
+  public List<InboundTdsPacket> receiveFullResponse() throws Exception {
+    List<InboundTdsPacket> packets = new ArrayList<>();
+    InboundTdsPacket packet;
     do {
       ByteBuffer header = ByteBuffer.allocate(TDS_HEADER_LENGTH).order(ByteOrder.BIG_ENDIAN);
       networkConnection.readFullySync(header);
@@ -335,15 +337,15 @@ public class TdsTransport implements AutoCloseable {
       fullPacket.put(payload.array());
       fullPacket.flip();
 
-      msg = buildMessageFromPacket(fullPacket);
-      messages.add(msg);
+      packet = buildMessageFromPacket(fullPacket);
+      packets.add(packet);
 
-    } while (!msg.isLastPacket());
+    } while (!packet.isLastPacket());
 
-    return messages;
+    return packets;
   }
 
-  private TdsMessage buildMessageFromPacket(ByteBuffer packet) {
+  private InboundTdsPacket buildMessageFromPacket(ByteBuffer packet) {
     packet.position(0);
     PacketType type = PacketType.valueOf(packet.get());
     byte status = packet.get();
@@ -352,7 +354,7 @@ public class TdsTransport implements AutoCloseable {
     byte packetId = packet.get();
     packet.position(TDS_HEADER_LENGTH);
     ByteBuffer payload = packet.slice();
-    return new TdsMessage(type, status, length, spid, packetId, Mono.just(payload), System.nanoTime(), null);
+    return new InboundTdsPacket(type, status, length, spid, packetId, payload, System.nanoTime(), null);
   }
 
   // --- Asynchronous Methods (Query Phase) ---
@@ -414,11 +416,11 @@ public class TdsTransport implements AutoCloseable {
   /**
    * Sends a query message asynchronously.
    *
-   * @param tdsMessage The message to send.
+   * @param message The message to send.
    */
-  public void sendQueryMessageAsync(TdsMessage tdsMessage) {
+  public void sendQueryMessageAsync(OutboundTdsMessage message) {
     List<ByteBuffer> packetBuffers = packetEncoder.encodeMessage(
-        tdsMessage, context.getSpid(), context.getCurrentPacketSize());
+        message, context.getSpid(), context.getCurrentPacketSize());
     for (ByteBuffer buf : packetBuffers) {
       networkConnection.writeAsync(buf);
     }
@@ -502,7 +504,7 @@ public class TdsTransport implements AutoCloseable {
    * Holds the late-binding message recipe and the reactive sink for a queued request.
    */
   private record PendingRequest(
-      Supplier<TdsMessage> messageSupplier,
+      Supplier<OutboundTdsMessage> messageSupplier,
       FluxSink<Result.Segment> sink
   ) {
   }
