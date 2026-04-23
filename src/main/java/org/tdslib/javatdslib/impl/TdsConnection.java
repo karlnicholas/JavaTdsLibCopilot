@@ -64,7 +64,7 @@ public class TdsConnection implements Connection {
       payload.put(TX_NAME_LENGTH_EMPTY);
       payload.flip();
 
-      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
+      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
     })).then();
   }
 
@@ -93,7 +93,7 @@ public class TdsConnection implements Connection {
       }
       payload.flip();
 
-      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
+      return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
     })).then();
   }
 
@@ -159,7 +159,7 @@ public class TdsConnection implements Connection {
         payload.put(TX_NAME_LENGTH_EMPTY);
         payload.flip();
 
-        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
+        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
       })).then();
     });
   }
@@ -179,7 +179,7 @@ public class TdsConnection implements Connection {
         payload.put((byte) 0x00);
         payload.flip();
 
-        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, payload);
+        return TdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
       })).then();
     });
   }

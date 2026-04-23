@@ -14,6 +14,7 @@ import org.tdslib.javatdslib.tokens.StatefulTokenDecoder;
 import org.tdslib.javatdslib.tokens.TokenParserRegistry;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
@@ -351,7 +352,7 @@ public class TdsTransport implements AutoCloseable {
     byte packetId = packet.get();
     packet.position(TDS_HEADER_LENGTH);
     ByteBuffer payload = packet.slice();
-    return new TdsMessage(type, status, length, spid, packetId, payload, System.nanoTime(), null);
+    return new TdsMessage(type, status, length, spid, packetId, Mono.just(payload), System.nanoTime(), null);
   }
 
   // --- Asynchronous Methods (Query Phase) ---

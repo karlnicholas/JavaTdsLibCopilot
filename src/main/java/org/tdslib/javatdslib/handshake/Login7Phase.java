@@ -14,6 +14,7 @@ import org.tdslib.javatdslib.tokens.visitors.LoginVisitor;
 import org.tdslib.javatdslib.tokens.visitors.MessageVisitor;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -48,7 +49,7 @@ public class Login7Phase {
     login7Payload.password = password;
 
     TdsMessage login7Msg = TdsMessage.createRequest(PacketType.LOGIN7,
-        login7Payload.buildBuffer());
+        Mono.just(login7Payload.buildBuffer()));
 
     if (transport.isTlsActive()) {
       transport.sendMessageEncrypted(login7Msg);

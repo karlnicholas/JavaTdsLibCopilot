@@ -23,7 +23,7 @@ public class QueryPacketBuilder implements PacketEncoder {
         message.getPacketType().getValue(),
         message.getStatusFlags(),
         spid,
-        message.getPayload(),
+        message.getPayloadSync(),
         (short) 1, // startingPacketId
         maxPacketSize);
   }

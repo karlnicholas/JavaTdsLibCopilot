@@ -38,7 +38,7 @@ public class TokenDispatcher {
       final TdsMessage tdsMessage,
       final ConnectionContext connectionContext,
       final TokenVisitor visitor) {
-    final ByteBuffer payload = tdsMessage.getPayload();
+    final ByteBuffer payload = tdsMessage.getPayloadSync();
     payload.order(ByteOrder.LITTLE_ENDIAN);
 
     while (payload.hasRemaining()) {

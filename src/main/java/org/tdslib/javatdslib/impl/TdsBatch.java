@@ -11,6 +11,7 @@ import org.tdslib.javatdslib.reactive.R2dbcErrorTranslator;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.TdsTransport;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +76,6 @@ public class TdsBatch implements Batch {
   private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
+    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
   }
 }

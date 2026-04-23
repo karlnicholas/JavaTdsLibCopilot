@@ -20,6 +20,7 @@ import org.tdslib.javatdslib.reactive.R2dbcTypeMapper;
 import org.tdslib.javatdslib.transport.ConnectionContext;
 import org.tdslib.javatdslib.transport.RpcPacketBuilder;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Mono;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -209,8 +210,16 @@ public class TdsStatement implements Statement {
   private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
     byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
     ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
-    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
+
+    // Wrap in Mono.just()
+    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, Mono.just(payload));
   }
+
+//  private TdsMessage createSqlBatchMessage(String sql, AllHeaders headers) {
+//    byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
+//    ByteBuffer payload = ByteBuffer.wrap(sqlBytes);
+//    return TdsMessage.createWithHeaders(PacketType.SQL_BATCH, headers, payload);
+//  }
 
   /**
    * Creates a TDS RPC Request message for parameterized or batched execution.
@@ -219,7 +228,6 @@ public class TdsStatement implements Statement {
    * @param executions The list of parameter sets to execute.
    * @return A {@link TdsMessage} ready for transport.
    */
-  // Modified in TdsStatement.java
   private TdsMessage createRpcMessage(
       String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
     EncoderRegistry registry = EncoderRegistry.DEFAULT;
@@ -229,8 +237,22 @@ public class TdsStatement implements Statement {
     RpcPacketBuilder builder =
         new RpcPacketBuilder(sql, executions, registry, encodingContext);
     ByteBuffer payload = builder.buildRpcPacket();
-    return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, payload);
+
+    // Wrap in Mono.just()
+    return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, Mono.just(payload));
   }
+
+//  private TdsMessage createRpcMessage(
+//      String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
+//    EncoderRegistry registry = EncoderRegistry.DEFAULT;
+//    RpcEncodingContext encodingContext =
+//        new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
+//
+//    RpcPacketBuilder builder =
+//        new RpcPacketBuilder(sql, executions, registry, encodingContext);
+//    ByteBuffer payload = builder.buildRpcPacket();
+//    return TdsMessage.createWithHeaders(PacketType.RPC_REQUEST, headers, payload);
+//  }
 
   /**
    * Configures the fetch size for the statement.

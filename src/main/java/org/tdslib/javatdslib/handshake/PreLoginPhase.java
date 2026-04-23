@@ -7,6 +7,7 @@ import org.tdslib.javatdslib.packets.TdsMessage;
 import org.tdslib.javatdslib.payloads.prelogin.PreLoginPayload;
 import org.tdslib.javatdslib.protocol.PreLoginResponse;
 import org.tdslib.javatdslib.transport.TdsTransport;
+import reactor.core.publisher.Mono;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -34,7 +35,7 @@ public class PreLoginPhase {
 
     TdsMessage preLoginMsg = TdsMessage.createRequest(
         PacketType.PRE_LOGIN,
-        preLoginPayload.buildBuffer()
+        Mono.just(preLoginPayload.buildBuffer())
     );
     transport.sendMessageDirect(preLoginMsg);
 
@@ -111,12 +112,22 @@ public class PreLoginPhase {
   }
 
   private ByteBuffer combinePayloads(List<TdsMessage> packets) {
-    int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
+    // FIX: Use the getPayloadSync() bridge to access the underlying ByteBuffer
+    int total = packets.stream().mapToInt(m -> m.getPayloadSync().remaining()).sum();
     ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
     for (TdsMessage m : packets) {
-      combined.put(m.getPayload().duplicate());
+      combined.put(m.getPayloadSync().duplicate());
     }
     combined.flip();
     return combined;
   }
+//  private ByteBuffer combinePayloads(List<TdsMessage> packets) {
+//    int total = packets.stream().mapToInt(m -> m.getPayload().remaining()).sum();
+//    ByteBuffer combined = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN);
+//    for (TdsMessage m : packets) {
+//      combined.put(m.getPayload().duplicate());
+//    }
+//    combined.flip();
+//    return combined;
+//  }
 }
