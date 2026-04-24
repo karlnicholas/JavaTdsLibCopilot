@@ -37,8 +37,8 @@ public class Login7Phase {
    * @return the LoginVisitor containing the login response details
    */
   public LoginVisitor execute(TdsTransport transport, ConnectionContext context,
-                              String hostname, String database, String username, String password)
-  throws Exception {
+      String hostname, String database, String username, String password)
+      throws Exception {
     logger.debug("Starting Login7 phase");
 
     Login7Options l7Opts = new Login7Options();
@@ -78,15 +78,11 @@ public class Login7Phase {
       context.setSpid(msg.getSpid());
       tokenDispatcher.processMessage(msg, context, pipeline);
 
-      //TODO: was context.resetToDefaults();
+      // TODO: was context.resetToDefaults();
       if (msg.isResetConnection()) {
         logger.debug("Received reset connection flag during login");
       }
     }
-
-//    if (!loginVisitor.isLoginSuccessful()) {
-//      throw new IllegalStateException("Login failed: " + loginVisitor.getErrorMessage());
-//    }
 
     logger.debug("Login7 phase completed successfully");
     return loginVisitor;

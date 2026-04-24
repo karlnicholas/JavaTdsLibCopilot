@@ -354,7 +354,9 @@ public class TdsTransport implements AutoCloseable {
     byte packetId = packet.get();
     packet.position(TDS_HEADER_LENGTH);
     ByteBuffer payload = packet.slice();
-    return new InboundTdsPacket(type, status, length, spid, packetId, payload, System.nanoTime(), null);
+    return new InboundTdsPacket(
+        type, status, length, spid, packetId,
+        payload, System.nanoTime(), null);
   }
 
   // --- Asynchronous Methods (Query Phase) ---

@@ -18,16 +18,40 @@ public final class OutboundTdsMessage {
   private final byte statusFlags;
   private final Publisher<ByteBuffer> payload;
 
-  public OutboundTdsMessage(PacketType packetType, byte statusFlags, Publisher<ByteBuffer> payload) {
+  /**
+   * Constructs a new OutboundTdsMessage.
+   *
+   * @param packetType  The type of the packet.
+   * @param statusFlags The status flags for the packet.
+   * @param payload     A reactive publisher for the message payload.
+   */
+  public OutboundTdsMessage(
+      PacketType packetType, byte statusFlags, Publisher<ByteBuffer> payload) {
     this.packetType = packetType;
     this.statusFlags = statusFlags;
     this.payload = payload;
   }
 
-  public static OutboundTdsMessage createRequest(PacketType packetType, Publisher<ByteBuffer> payload) {
+  /**
+   * Creates a simple request message with the EOM (End of Message) flag set.
+   *
+   * @param packetType The type of the packet.
+   * @param payload    A reactive publisher for the message payload.
+   * @return A new OutboundTdsMessage.
+   */
+  public static OutboundTdsMessage createRequest(
+      PacketType packetType, Publisher<ByteBuffer> payload) {
     return new OutboundTdsMessage(packetType, PacketStatus.EOM, payload);
   }
 
+  /**
+   * Creates a request message, prepending any TDS headers to the payload stream.
+   *
+   * @param packetType The type of the packet.
+   * @param headers    The TDS headers to prepend.
+   * @param payload    A reactive publisher for the message payload.
+   * @return A new OutboundTdsMessage with a combined header and payload stream.
+   */
   public static OutboundTdsMessage createWithHeaders(
       PacketType packetType, AllHeaders headers, Publisher<ByteBuffer> payload) {
 
@@ -73,7 +97,8 @@ public final class OutboundTdsMessage {
         .subscribe(b -> captured[0] = b);
 
     if (captured[0] == null) {
-      throw new IllegalStateException("Temporary bridge failed: Publisher did not execute synchronously.");
+      throw new IllegalStateException(
+          "Temporary bridge failed: Publisher did not execute synchronously.");
     }
 
     return captured[0];

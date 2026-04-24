@@ -21,6 +21,18 @@ public final class InboundTdsPacket {
   private final long receivedAt;
   private final String traceContext;
 
+  /**
+   * Constructs a new InboundTdsPacket.
+   *
+   * @param packetType The type of the packet.
+   * @param statusFlags The status flags from the packet header.
+   * @param packetLength The total length of the packet.
+   * @param spid The server process ID.
+   * @param packetNumber The packet sequence number.
+   * @param payload The raw payload of the packet.
+   * @param receivedAt The timestamp (in nanos) when the packet was received.
+   * @param traceContext The tracing context associated with this packet.
+   */
   public InboundTdsPacket(
       PacketType packetType,
       byte statusFlags,
@@ -48,13 +60,33 @@ public final class InboundTdsPacket {
     this.traceContext = traceContext;
   }
 
-  public PacketType getPacketType() { return packetType; }
-  public byte getStatusFlags() { return statusFlags; }
-  public int getPacketLength() { return packetLength; }
-  public short getSpid() { return spid; }
-  public short getPacketNumber() { return packetNumber; }
-  public ByteBuffer getPayload() { return payload; }
-  public boolean isLastPacket() { return isLastPacket; }
+  public PacketType getPacketType() {
+    return packetType;
+  }
+
+  public byte getStatusFlags() {
+    return statusFlags;
+  }
+
+  public int getPacketLength() {
+    return packetLength;
+  }
+
+  public short getSpid() {
+    return spid;
+  }
+
+  public short getPacketNumber() {
+    return packetNumber;
+  }
+
+  public ByteBuffer getPayload() {
+    return payload;
+  }
+
+  public boolean isLastPacket() {
+    return isLastPacket;
+  }
 
   public boolean isResetConnection() {
     return (statusFlags & PacketStatus.RESET_CONNECTION) != 0;
@@ -68,10 +100,24 @@ public final class InboundTdsPacket {
     return (statusFlags & 0x04) != 0;
   }
 
+  /**
+   * Gets the raw nanosecond timestamp when the packet was received.
+   *
+   * @return The value of {@link System#nanoTime()} at the time of receipt.
+   */
   public long getReceivedAt() {
     return receivedAt;
   }
 
+  /**
+   * Calculates an approximate {@link Instant} representing when the packet was received.
+   * This is an approximation and should not be used for high-precision timing.
+   * It works by taking the current system time and subtracting the elapsed time
+   * since the packet was received.
+   *
+   * @return an approximate {@link Instant} of receipt, or {@code null} if the receive time
+   *         was not recorded.
+   */
   public Instant getReceivedInstant() {
     if (receivedAt <= 0) {
       return null;

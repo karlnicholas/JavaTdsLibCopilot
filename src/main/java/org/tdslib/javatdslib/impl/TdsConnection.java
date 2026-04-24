@@ -70,7 +70,6 @@ public class TdsConnection implements Connection {
 
   @Override
   public Publisher<Void> beginTransaction(TransactionDefinition definition) {
-    // FIX: Pass "BEGIN_TRANSACTION"
     return Mono.from(transport.execute(headers -> {
       IsolationLevel level = definition.getAttribute(TransactionDefinition.ISOLATION_LEVEL);
       String txName = definition.getAttribute(TransactionDefinition.NAME);
@@ -85,7 +84,7 @@ public class TdsConnection implements Connection {
       int nameLenBytes = nameBytes.length;
 
       ByteBuffer payload = ByteBuffer.allocate(4 + nameBytes.length).order(ByteOrder.LITTLE_ENDIAN);
-      payload.putShort((short) 5);
+      payload.putShort(TM_BEGIN_XACT);
       payload.put(tdsIsolationLevel);
       payload.put((byte) nameLenBytes);
       if (nameLenBytes > 0) {
@@ -171,12 +170,11 @@ public class TdsConnection implements Connection {
         return Mono.empty();
       }
 
-      // FIX: Added "ROLLBACK_TRANSACTION" tracking string
       return Mono.from(transport.execute(headers -> {
         ByteBuffer payload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        payload.putShort((short) 8); // TM_ROLLBACK_XACT
-        payload.put((byte) 0x00);
-        payload.put((byte) 0x00);
+        payload.putShort(TM_ROLLBACK_XACT);
+        payload.put(TM_FLAG_DEFAULT);
+        payload.put(TX_NAME_LENGTH_EMPTY);
         payload.flip();
 
         return OutboundTdsMessage.createWithHeaders(PacketType.TRANSACTION_MANAGER, headers, Mono.just(payload));
