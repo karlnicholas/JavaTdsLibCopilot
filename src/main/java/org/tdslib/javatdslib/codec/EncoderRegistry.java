@@ -2,6 +2,7 @@ package org.tdslib.javatdslib.codec;
 
 import org.tdslib.javatdslib.protocol.TdsParameter;
 import org.tdslib.javatdslib.protocol.rpc.ParameterEncoder;
+import org.tdslib.javatdslib.protocol.rpc.StreamingParameterEncoder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,9 +23,26 @@ public class EncoderRegistry {
     DEFAULT.register(new DateTimeEncoder());
     DEFAULT.register(new BinaryEncoder());
     DEFAULT.register(new GuidEncoder());
+
+    DEFAULT.registerStreaming(new ClobStreamingEncoder());
   }
 
   private final List<ParameterEncoder> codecs = new ArrayList<>();
+  // Add this to EncoderRegistry.java
+  private final List<StreamingParameterEncoder> streamingCodecs = new ArrayList<>();
+
+  public void registerStreaming(StreamingParameterEncoder codec) {
+    streamingCodecs.add(codec);
+  }
+
+  public StreamingParameterEncoder getStreamingCodec(TdsParameter entry) {
+    for (StreamingParameterEncoder codec : streamingCodecs) {
+      if (codec.canEncode(entry)) {
+        return codec;
+      }
+    }
+    return null; // Return null to fall back to standard codecs
+  }
 
   /**
    * Registers a new codec.

@@ -1,5 +1,7 @@
 package org.tdslib.javatdslib.impl;
 
+import io.r2dbc.spi.Blob;
+import io.r2dbc.spi.Clob;
 import io.r2dbc.spi.Parameter;
 import io.r2dbc.spi.Parameters;
 import io.r2dbc.spi.R2dbcType;
@@ -230,12 +232,28 @@ public class TdsStatement implements Statement {
 
     RpcPacketBuilder builder =
         new RpcPacketBuilder(sql, executions, registry, encodingContext);
-    ByteBuffer payload = builder.buildRpcPacket();
 
-    // Wrap in Mono.just()
+    // Capture the Publisher directly from the builder
+    Publisher<ByteBuffer> payloadStream = builder.buildRpcPacket();
+
+    // Pass the stream directly; no Mono.just() wrapper needed
     return OutboundTdsMessage.createWithHeaders(
-        PacketType.RPC_REQUEST, headers, Mono.just(payload));
+        PacketType.RPC_REQUEST, headers, payloadStream);
   }
+//  private OutboundTdsMessage createRpcMessage(
+//      String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
+//    EncoderRegistry registry = EncoderRegistry.DEFAULT;
+//    RpcEncodingContext encodingContext =
+//        new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
+//
+//    RpcPacketBuilder builder =
+//        new RpcPacketBuilder(sql, executions, registry, encodingContext);
+//    ByteBuffer payload = builder.buildRpcPacket();
+//
+//    // Wrap in Mono.just()
+//    return OutboundTdsMessage.createWithHeaders(
+//        PacketType.RPC_REQUEST, headers, Mono.just(payload));
+//  }
 
   /**
    * Configures the fetch size for the statement.
@@ -260,12 +278,41 @@ public class TdsStatement implements Statement {
     if (t instanceof R2dbcType rdbcType) {
       return R2dbcTypeMapper.toTdsType(rdbcType);
     }
-    if (t instanceof Type.InferredType inferredType) {
-      return TdsType.inferFromJavaType(inferredType.getJavaType());
+
+    // --- MOVE LOB INTERCEPT HERE ---
+    // Check the actual instance interfaces before strict class inference
+    // attempts to map anonymous inner classes (like Clob$1).
+    Object value = p.getValue();
+    if (value != null) {
+      if (value instanceof Clob) {
+        return TdsType.NVARCHAR;
+      }
+      if (value instanceof Blob) {
+        return TdsType.BIGVARBIN;
+      }
     }
-    if (p.getValue() != null) {
-      return TdsType.inferFromJavaType(p.getValue().getClass());
+
+    if (t instanceof Type.InferredType inferredType) {
+      TdsType inferred = TdsType.inferFromJavaType(inferredType.getJavaType());
+      if (inferred != null) return inferred;
+    }
+
+    if (value != null) {
+      return TdsType.inferFromJavaType(value.getClass());
     }
     return null;
   }
+//  private TdsType resolveTdsType(Parameter p) {
+//    Type t = p.getType();
+//    if (t instanceof R2dbcType rdbcType) {
+//      return R2dbcTypeMapper.toTdsType(rdbcType);
+//    }
+//    if (t instanceof Type.InferredType inferredType) {
+//      return TdsType.inferFromJavaType(inferredType.getJavaType());
+//    }
+//    if (p.getValue() != null) {
+//      return TdsType.inferFromJavaType(p.getValue().getClass());
+//    }
+//    return null;
+//  }
 }
