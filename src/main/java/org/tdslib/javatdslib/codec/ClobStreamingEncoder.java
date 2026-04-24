@@ -31,7 +31,7 @@ public class ClobStreamingEncoder implements StreamingParameterEncoder {
 
   @Override
   public void writeTypeInfo(ByteBuffer buf, TdsParameter entry, RpcEncodingContext context) {
-    logger.trace("[ClobStreamingEncoder] Writing TypeInfo for nvarchar(max) PLP");
+    logger.trace("Writing TypeInfo for nvarchar(max) PLP");
     buf.put((byte) TdsType.NVARCHAR.byteVal);
     buf.putShort((short) -1); // 0xFFFF signals a max-length/PLP type
     buf.put(context.collationBytes());
@@ -39,7 +39,7 @@ public class ClobStreamingEncoder implements StreamingParameterEncoder {
 
   @Override
   public Publisher<ByteBuffer> streamValue(TdsParameter entry, RpcEncodingContext context) {
-    logger.trace("[ClobStreamingEncoder] Initiating reactive streamValue mapping for Clob");
+    logger.trace("Initiating reactive streamValue mapping for Clob");
     Clob clob = (Clob) entry.value();
 
     // 1. PLP Header: 0xFFFFFFFFFFFFFFFE (-2L) signals an unknown total length
@@ -59,14 +59,14 @@ public class ClobStreamingEncoder implements StreamingParameterEncoder {
 
           return chunk;
         })
-        .doOnNext(b -> logger.trace("[ClobStreamingEncoder] Emitting PLP Chunk buffer (Total Size: {} bytes)", b.remaining()));
+        .doOnNext(b -> logger.trace("Emitting PLP Chunk buffer (Total Size: {} bytes)", b.remaining()));
 
     // 3. Assemble the pipeline: Header -> Chunks -> Terminator
     return Flux.concat(
-        Mono.just(header).doOnNext(b -> logger.trace("[ClobStreamingEncoder] Emitting PLP Header: 0xFFFFFFFFFFFFFFFE ({} bytes)", b.remaining())),
+        Mono.just(header).doOnNext(b -> logger.trace("Emitting PLP Header: 0xFFFFFFFFFFFFFFFE ({} bytes)", b.remaining())),
         chunkStream,
-        Mono.just(createPlpTerminator()).doOnNext(b -> logger.trace("[ClobStreamingEncoder] Emitting PLP Terminator: 0x00000000 ({} bytes)", b.remaining()))
-    ).doOnComplete(() -> logger.trace("[ClobStreamingEncoder] PLP stream completely emitted to transport."));
+        Mono.just(createPlpTerminator()).doOnNext(b -> logger.trace("Emitting PLP Terminator: 0x00000000 ({} bytes)", b.remaining()))
+    ).doOnComplete(() -> logger.trace("PLP stream completely emitted to transport."));
   }
 
   private ByteBuffer createPlpTerminator() {
