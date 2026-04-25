@@ -69,7 +69,7 @@ public class RowDrainer {
         || (tdsType != null && tdsType.strategy == TdsType.LengthStrategy.PLP);
 
     if (isPlp) {
-      logger.trace("[RowDrainer] PLP/LOB detected at index {}. Yielding early.", colIndex);
+      logger.trace("PLP/LOB detected at index {}. Yielding early.", colIndex);
       // FIX: Do not drop the chunk! Save it in the array for TdsRow to process.
       assemblingRow[colIndex] = cd;
       isReadyToYield = true;

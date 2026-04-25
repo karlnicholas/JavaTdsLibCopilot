@@ -77,7 +77,7 @@ public class TdsOutSegment implements Result.OutSegment, OutParameters {
           : context.getVarcharCharset();
     }
 
-    logger.trace("[TdsOutSegment] Decoding param '{}': Type={}, Target={}, Bytes={}",
+    logger.trace("Decoding param '{}': Type={}, Target={}, Bytes={}",
         token.getParamName(), tdsType, type.getSimpleName(), token.getValue().length);
 
     return DecoderRegistry.DEFAULT.decode(token.getValue(), tdsType, type, 0, charset);

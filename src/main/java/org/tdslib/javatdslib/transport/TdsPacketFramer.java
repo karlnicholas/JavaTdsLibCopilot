@@ -32,7 +32,7 @@ public class TdsPacketFramer {
    * @param networkBuffer The buffer to decode.
    */
   public void decode(ByteBuffer networkBuffer) {
-    logger.trace(">>> [Framer] ENTER: Analyzing {} bytes", networkBuffer.remaining());
+    logger.trace("ENTER: Analyzing {} bytes", networkBuffer.remaining());
 
     while (networkBuffer.hasRemaining()) {
 
@@ -53,14 +53,14 @@ public class TdsPacketFramer {
 
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
-        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}",
+        logger.trace("WAIT: Need {} bytes for full packet, but only have {}",
             packetLength, networkBuffer.remaining());
         return;
       }
 
       // 2. Check if the ENTIRE packet has arrived from the network
       if (networkBuffer.remaining() < packetLength) {
-        logger.trace(">>> [Framer] WAIT: Need {} bytes for full packet, but only have {}",
+        logger.trace("WAIT: Need {} bytes for full packet, but only have {}",
             packetLength, networkBuffer.remaining());
         return;
       }
@@ -78,12 +78,12 @@ public class TdsPacketFramer {
       networkBuffer.limit(networkBuffer.position() + payloadLength);
       ByteBuffer payloadSlice = networkBuffer.slice();
 
-      logger.trace(">>> [Framer] HANDOFF: Sliced {} byte payload. (isEom: {})",
+      logger.trace("HANDOFF: Sliced {} byte payload. (isEom: {})",
           payloadLength, isEom);
 
       // 5. Fire and forget. We assume the handler fully processes this discrete frame.
       if (isEom) {
-        logger.debug(">>> [Framer] EOM: Reached End of Message for the current TDS response.");
+        logger.debug("EOM: Reached End of Message for the current TDS response.");
       }
       streamHandler.onPayloadAvailable(payloadSlice, isEom);
 
@@ -92,6 +92,6 @@ public class TdsPacketFramer {
       networkBuffer.position(networkBuffer.position() + payloadLength);
     }
 
-    logger.trace(">>> [Framer] EXIT: networkBuffer fully processed.");
+    logger.trace("EXIT: networkBuffer fully processed.");
   }
 }

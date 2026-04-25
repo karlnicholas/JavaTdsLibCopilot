@@ -95,7 +95,7 @@ public class TdsRow implements Row, Result.RowSegment {
         return get(i, type);
       }
     }
-    logger.debug("[TdsRow] Column name '{}' not found in row metadata.", name);
+    logger.debug("Column name '{}' not found in row metadata.", name);
     throw new IllegalArgumentException("Column not found: " + name);
   }
 
@@ -137,7 +137,7 @@ public class TdsRow implements Row, Result.RowSegment {
 
       Runnable mediatedResumeCallback = () -> {
         if (pendingLobCount.decrementAndGet() == 0) {
-          logger.trace("[TdsRow] All pending LOBs completed. Resuming network sink.");
+          logger.trace("All pending LOBs completed. Resuming network sink.");
           if (this.resumeSinkCallback != null) {
             this.resumeSinkCallback.run();
           }
@@ -240,7 +240,7 @@ public class TdsRow implements Row, Result.RowSegment {
 
   private Object drainLobSynchronously(
       int index, Class<?> type, TdsType tdsType, ColumnMeta colMeta, ColumnData firstChunk) {
-    logger.trace("[TdsRow] Initiating Synchronous LOB Drain for column {}", index);
+    logger.trace("Initiating Synchronous LOB Drain for column {}", index);
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     boolean isNullData = false;
 

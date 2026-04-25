@@ -403,7 +403,7 @@ public class TdsTransport implements AutoCloseable {
    * Suspends reading from the network.
    */
   public void suspendNetworkRead() {
-    logger.trace("[TdsTransport] Propagating suspendNetworkRead() to NioSocketConnection.");
+    logger.trace("Propagating suspendNetworkRead() to NioSocketConnection.");
     networkConnection.suspendRead();
   }
 
@@ -411,7 +411,7 @@ public class TdsTransport implements AutoCloseable {
    * Resumes reading from the network.
    */
   public void resumeNetworkRead() {
-    logger.trace("[TdsTransport] Propagating resumeNetworkRead() to NioSocketConnection.");
+    logger.trace("Propagating resumeNetworkRead() to NioSocketConnection.");
     networkConnection.resumeRead();
   }
 

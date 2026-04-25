@@ -200,7 +200,7 @@ public class NioSocketConnection implements NetworkConnection {
       return;
     }
 
-    logger.trace("[NIO] Read {} bytes. Buffer capacity: {}", read, readBuffer.capacity());
+    logger.trace("Read {} bytes. Buffer capacity: {}", read, readBuffer.capacity());
 
     readBuffer.flip();
     try {
@@ -212,7 +212,7 @@ public class NioSocketConnection implements NetworkConnection {
     } finally {
       // Any unconsumed bytes (e.g., partial headers or suspended streams) are preserved
       readBuffer.compact();
-      logger.trace("[NIO] Buffer compacted. Position: {}", readBuffer.position());
+      logger.trace("Buffer compacted. Position: {}", readBuffer.position());
     }
   }
 
