@@ -59,11 +59,6 @@ public class RpcPacketBuilder {
   }
 
   /**
-   * Builds the RPC packet buffer.
-   *
-   * @return the constructed ByteBuffer
-   */
-  /**
    * Builds the RPC packet buffer stream.
    *
    * @return A Publisher emitting the constructed ByteBuffer(s)
@@ -129,89 +124,6 @@ public class RpcPacketBuilder {
     return Flux.concat(segments);
   }
 
-//  public Publisher<ByteBuffer> buildRpcPacket() {
-//    return Mono.fromSupplier(() -> {
-//      // TODO: hardcode pipeline length
-//      ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
-//      buf.order(ByteOrder.LITTLE_ENDIAN);
-//
-//      byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
-//
-//      for (int i = 0; i < batchParams.size(); i++) {
-//        if (i > 0) {
-//          buf.put(RPC_BATCH_SEPARATOR);
-//        }
-//
-//        writeRpcHeader(buf);
-//        writeFrameworkParamHeader(buf, "@stmt");
-//
-//        buf.putShort((short) sqlBytes.length);
-//        buf.put(sqlBytes);
-//
-//        List<TdsParameter> params = batchParams.get(i);
-//
-//        if (!params.isEmpty()) {
-//          writeFrameworkParamHeader(buf, "@params");
-//
-//          String paramDecl = buildParamDecl(params);
-//          byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
-//          buf.putShort((short) declBytes.length);
-//          buf.put(declBytes);
-//
-//          for (TdsParameter param : params) {
-//            writeParam(buf, param);
-//          }
-//        }
-//      }
-//
-//      buf.flip();
-//      return buf;
-//    });
-//  }
-//  public ByteBuffer buildRpcPacket() {
-//    // TODO: hardcode pipeline length
-//    ByteBuffer buf = ByteBuffer.allocate(1024 * 1024); // Large buffer for pipelining
-//    buf.order(ByteOrder.LITTLE_ENDIAN);
-//
-//    // Hoisted Loop Invariant: Encode the SQL string exactly once
-//    byte[] sqlBytes = sql.getBytes(StandardCharsets.UTF_16LE);
-//
-//    for (int i = 0; i < batchParams.size(); i++) {
-//      // Separates multiple RPCReqBatch requests in TDS 7.2+
-//      if (i > 0) {
-//        buf.put(RPC_BATCH_SEPARATOR);
-//      }
-//
-//      writeRpcHeader(buf);
-//
-//      // 1. Framework @stmt header (Hardcoded as nvarchar for protocol framing)
-//      writeFrameworkParamHeader(buf, "@stmt");
-//
-//      buf.putShort((short) sqlBytes.length);
-//      buf.put(sqlBytes);
-//
-//      List<TdsParameter> params = batchParams.get(i);
-//
-//      // 2. Framework @params header
-//      if (!params.isEmpty()) {
-//        writeFrameworkParamHeader(buf, "@params");
-//
-//        String paramDecl = buildParamDecl(params);
-//        byte[] declBytes = paramDecl.getBytes(StandardCharsets.UTF_16LE);
-//        buf.putShort((short) declBytes.length);
-//        buf.put(declBytes);
-//
-//        // 3. User Values (Delegated to EncoderRegistry)
-//        for (TdsParameter param : params) {
-//          writeParam(buf, param);
-//        }
-//      }
-//    }
-//
-//    buf.flip();
-//    return buf;
-//  }
-
   private void writeRpcHeader(ByteBuffer buf) {
     buf.putShort(RPC_HEADER_MARKER);
     buf.putShort(RPC_PROCID_SPEXECUTESQL);
@@ -226,29 +138,6 @@ public class RpcPacketBuilder {
     buf.putShort(MAX_NVARCHAR_SIZE);
     writeFrameworkCollation(buf);
   }
-
-//  private String buildParamDecl(List<TdsParameter> params) {
-//    if (params.isEmpty()) {
-//      return "";
-//    }
-//    StringBuilder sb = new StringBuilder();
-//    for (int i = 0; i < params.size(); i++) {
-//      TdsParameter p = params.get(i);
-//      if (i > 0) {
-//        sb.append(",");
-//      }
-//
-//      // Fix: Pass 'p' directly instead of 'p.type()'
-//      ParameterEncoder codec = encoderRegistry.getCodec(p);
-//      String decl = codec.getSqlTypeDeclaration(p);
-//
-//      sb.append(p.name()).append(" ").append(decl);
-//      if (p.isOutParameter()) {
-//        sb.append(" output");
-//      }
-//    }
-//    return sb.toString();
-//  }
 
   private String buildParamDecl(List<TdsParameter> params) {
     if (params.isEmpty()) {

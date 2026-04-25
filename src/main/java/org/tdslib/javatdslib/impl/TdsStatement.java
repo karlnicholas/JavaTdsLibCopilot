@@ -240,20 +240,6 @@ public class TdsStatement implements Statement {
     return OutboundTdsMessage.createWithHeaders(
         PacketType.RPC_REQUEST, headers, payloadStream);
   }
-//  private OutboundTdsMessage createRpcMessage(
-//      String sql, List<List<TdsParameter>> executions, AllHeaders headers) {
-//    EncoderRegistry registry = EncoderRegistry.DEFAULT;
-//    RpcEncodingContext encodingContext =
-//        new RpcEncodingContext(context.getVarcharCharset(), context.getCurrentCollationBytes());
-//
-//    RpcPacketBuilder builder =
-//        new RpcPacketBuilder(sql, executions, registry, encodingContext);
-//    ByteBuffer payload = builder.buildRpcPacket();
-//
-//    // Wrap in Mono.just()
-//    return OutboundTdsMessage.createWithHeaders(
-//        PacketType.RPC_REQUEST, headers, Mono.just(payload));
-//  }
 
   /**
    * Configures the fetch size for the statement.
@@ -294,7 +280,9 @@ public class TdsStatement implements Statement {
 
     if (t instanceof Type.InferredType inferredType) {
       TdsType inferred = TdsType.inferFromJavaType(inferredType.getJavaType());
-      if (inferred != null) return inferred;
+      if (inferred != null) {
+        return inferred;
+      }
     }
 
     if (value != null) {
@@ -302,17 +290,4 @@ public class TdsStatement implements Statement {
     }
     return null;
   }
-//  private TdsType resolveTdsType(Parameter p) {
-//    Type t = p.getType();
-//    if (t instanceof R2dbcType rdbcType) {
-//      return R2dbcTypeMapper.toTdsType(rdbcType);
-//    }
-//    if (t instanceof Type.InferredType inferredType) {
-//      return TdsType.inferFromJavaType(inferredType.getJavaType());
-//    }
-//    if (p.getValue() != null) {
-//      return TdsType.inferFromJavaType(p.getValue().getClass());
-//    }
-//    return null;
-//  }
 }

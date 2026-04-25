@@ -15,6 +15,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * A streaming encoder for {@link Clob} values, which are mapped to the TDS `nvarchar(max)` type
+ * using the Partially-Length-Prefixed (PLP) format.
+ */
 public class ClobStreamingEncoder implements StreamingParameterEncoder {
 
   private static final Logger logger = LoggerFactory.getLogger(ClobStreamingEncoder.class);
@@ -52,20 +56,27 @@ public class ClobStreamingEncoder implements StreamingParameterEncoder {
         .map(charSequence -> {
           byte[] stringBytes = charSequence.toString().getBytes(StandardCharsets.UTF_16LE);
 
-          ByteBuffer chunk = ByteBuffer.allocate(4 + stringBytes.length).order(ByteOrder.LITTLE_ENDIAN);
+          ByteBuffer chunk = ByteBuffer
+              .allocate(4 + stringBytes.length)
+              .order(ByteOrder.LITTLE_ENDIAN);
           chunk.putInt(stringBytes.length);
           chunk.put(stringBytes);
           chunk.flip();
 
           return chunk;
         })
-        .doOnNext(b -> logger.trace("Emitting PLP Chunk buffer (Total Size: {} bytes)", b.remaining()));
+        .doOnNext(b -> logger.trace("Emitting PLP Chunk buffer (Total Size: {} bytes)",
+            b.remaining()));
 
     // 3. Assemble the pipeline: Header -> Chunks -> Terminator
     return Flux.concat(
-        Mono.just(header).doOnNext(b -> logger.trace("Emitting PLP Header: 0xFFFFFFFFFFFFFFFE ({} bytes)", b.remaining())),
+        Mono.just(header)
+            .doOnNext(b -> logger.trace("Emitting PLP Header: 0xFFFFFFFFFFFFFFFE ({} bytes)",
+                b.remaining())),
         chunkStream,
-        Mono.just(createPlpTerminator()).doOnNext(b -> logger.trace("Emitting PLP Terminator: 0x00000000 ({} bytes)", b.remaining()))
+        Mono.just(createPlpTerminator())
+            .doOnNext(b -> logger.trace("Emitting PLP Terminator: 0x00000000 ({} bytes)",
+                b.remaining()))
     ).doOnComplete(() -> logger.trace("PLP stream completely emitted to transport."));
   }
 

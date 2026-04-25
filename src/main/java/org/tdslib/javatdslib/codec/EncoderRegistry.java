@@ -31,10 +31,21 @@ public class EncoderRegistry {
   // Add this to EncoderRegistry.java
   private final List<StreamingParameterEncoder> streamingCodecs = new ArrayList<>();
 
+  /**
+   * Registers a new streaming codec.
+   *
+   * @param codec the streaming codec to register
+   */
   public void registerStreaming(StreamingParameterEncoder codec) {
     streamingCodecs.add(codec);
   }
 
+  /**
+   * Retrieves a streaming codec capable of encoding the given parameter entry.
+   *
+   * @param entry the parameter entry to encode
+   * @return a suitable StreamingParameterEncoder, or null if none is found.
+   */
   public StreamingParameterEncoder getStreamingCodec(TdsParameter entry) {
     for (StreamingParameterEncoder codec : streamingCodecs) {
       if (codec.canEncode(entry)) {
